@@ -281,9 +281,33 @@ Result]` and a sticky Run button. Monaco is configured for touch on this breakpo
 - **Run** — transpile, execute, render per-test pass/fail with structured diffs.
 - **Clear** — resets the editor to `starterCode` and deletes the progress record,
   behind a confirm dialog.
-- **Reveal solution** — confirm-gated; opens a tabbed panel, one tab per `Solution`,
-  each showing code, why it is correct, and its tradeoffs.
+- **Solutions panel** — one tab per `Solution`, each showing code, why it is correct,
+  and its tradeoffs. One component, two gates (§8.1).
 - **Dashboard** — per-category completion, difficulty breakdown, revealed count.
+
+### 8.1 Solution visibility
+
+Alternative approaches are a **reward for solving**, not only a hint for the stuck.
+The same panel is reached by two different paths:
+
+| Progress state | Gate | Framing |
+|----------------|------|---------|
+| `unattempted` / `attempted` | "Reveal solution", confirm dialog, stamps `revealedAt` | spoiler |
+| `solved`, `revealedAt === null` | none — unlocks automatically on the passing run | "Other approaches" — earned |
+| `solved`, `revealedAt !== null` | already open | badged "revealed" |
+
+Derived in one place:
+
+```ts
+const solutionsUnlocked = record.status === 'solved' || record.revealedAt !== null;
+const wasEarned = record.status === 'solved' && record.revealedAt === null;
+```
+
+`wasEarned` drives the framing only — heading copy and the absence of a confirm
+dialog. It never changes which solutions are shown; a user who reveals sees exactly
+the same alternatives and tradeoff analysis as a user who solved it unaided. The
+distinction is motivational, not informational, and withholding teaching material
+from someone who struggled would invert the point of the app.
 
 Monaco loads as a lazy chunk so the dashboard and browse routes are not burdened by
 it. Prompts and explanations render through `react-markdown`; code blocks inside them
