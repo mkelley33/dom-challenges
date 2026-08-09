@@ -11,13 +11,14 @@
 ## Global Constraints
 
 - **No `any`.** Not in src, not in tests, not in config. Use `unknown` plus narrowing.
-- **No ESLint disable comments.** If a rule fires, fix the code or change the rule in `eslint.config.js` with a comment explaining why.
+- **No lint disable comments** (`oxlint-disable`, `eslint-disable`, or any variant). If a rule fires, fix the code or change the rule in `.oxlintrc.json` with a comment explaining why.
 - **Conventional Commits**, atomic, one per task minimum. **No AI attribution and no `Co-authored-by` lines.**
 - **Prettier:** 120 print width, single quotes, trailing commas (`all`), semicolons.
 - **Node 24** (`.nvmrc` pins `v24.18.0`), **pnpm 11** via corepack — already pinned in `package.json`.
 - **TDD:** every task writes the failing test first, runs it to watch it fail, then implements.
 - Each task ends green on `pnpm typecheck && pnpm lint && pnpm test` before its commit.
-- **ESLint 9, not 10.** ESLint 10 is `latest` on npm, but the plugin set below (`eslint-plugin-import`, `eslint-plugin-perfectionist`, `eslint-plugin-jsx-a11y`) has uneven v10 peer support. Pin `eslint@^9`. Revisit when the plugins declare v10.
+- **oxlint, not ESLint.** `typescript-eslint@8` declares `typescript: >=4.8.4 <6.1.0`, so ESLint's type-aware rules are incompatible with TypeScript 7 and no `typescript-eslint@9` exists yet. oxlint has its own parser and no TypeScript peer dependency, so it lints TS 7 sources directly. Type-aware rules come from `oxlint-tsgolint`, which is built on tsgo — the same native compiler as TS 7 — via `oxlint --type-aware`. Verified working: `typescript/no-explicit-any`, `typescript/no-floating-promises`, `react-hooks/exhaustive-deps`, `jsx-a11y/alt-text`, and `import/no-duplicates` all fire correctly.
+- **Import sorting** comes from `@ianvs/prettier-plugin-sort-imports` (Prettier does it on format), replacing `eslint-plugin-perfectionist`.
 - **Monaco must not load from a CDN.** `@monaco-editor/react` defaults to jsDelivr; Task 12 overrides this with `loader.config({ monaco })` and local workers. An app that breaks without network access is a bug here.
 
 ---
@@ -25,7 +26,7 @@
 ## File Structure
 
 ```
-eslint.config.js  .prettierrc.json  .prettierignore
+.oxlintrc.json  .prettierrc.json  .prettierignore
 vite.config.ts  vitest.config.ts  components.json
 tsconfig.json  tsconfig.app.json  tsconfig.node.json
 index.html
@@ -74,7 +75,7 @@ Content authoring note: engine tasks (1–6, 8–16, 18) carry complete code in 
 ### Task 1: Project scaffolding and tooling
 
 **Files:**
-- Create: `vite.config.ts`, `vitest.config.ts`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`, `eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/test/setup.ts`
+- Create: `vite.config.ts`, `vitest.config.ts`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`, `.oxlintrc.json`, `.prettierrc.json`, `.prettierignore`, `index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/test/setup.ts`
 - Modify: `package.json`
 - Test: `src/App.test.tsx`
 
@@ -88,14 +89,15 @@ Content authoring note: engine tasks (1–6, 8–16, 18) carry complete code in 
 corepack enable
 pnpm add react react-dom react-router @tanstack/react-query react-hook-form zustand \
   sucrase react-markdown remark-gfm shiki monaco-editor @monaco-editor/react
-pnpm add -D typescript vite @vitejs/plugin-react vitest happy-dom \
+pnpm add -D typescript@^7 vite @vitejs/plugin-react vitest happy-dom \
   @testing-library/react @testing-library/user-event @testing-library/jest-dom \
-  @types/react @types/react-dom \
-  eslint@^9 typescript-eslint eslint-plugin-react eslint-plugin-react-hooks \
-  eslint-plugin-jsx-a11y eslint-plugin-import eslint-plugin-perfectionist \
-  prettier eslint-config-prettier \
+  @types/react @types/react-dom @types/node \
+  oxlint oxlint-tsgolint \
+  prettier @ianvs/prettier-plugin-sort-imports \
   tailwindcss @tailwindcss/vite json-server @faker-js/faker concurrently
 ```
+
+No ESLint packages. See Global Constraints for why.
 
 - [ ] **Step 2: Write `tsconfig.json` and its project references**
 
@@ -154,6 +156,8 @@ pnpm add -D typescript vite @vitejs/plugin-react vitest happy-dom \
 }
 ```
 
+`tsconfig.node.json` covers `server/`, which stays empty until Task 8 creates `server/seed.ts`. TypeScript errors with TS18003 when an `include` matches no files, so **`pnpm typecheck` targets `tsconfig.app.json` directly** (`tsc --noEmit -p tsconfig.app.json`) rather than building the reference graph. Task 8 extends the script to cover `server` once a real file exists there. Do **not** create a placeholder file to work around this — an empty `server/` is the honest state until Task 8.
+
 `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are deliberate: this codebase indexes into challenge and result arrays constantly, and those two flags are what turn "no `any`" from a slogan into something the compiler enforces.
 
 - [ ] **Step 3: Write `vite.config.ts` and `vitest.config.ts`**
@@ -201,56 +205,51 @@ export default defineConfig({
 import '@testing-library/jest-dom/vitest';
 ```
 
-- [ ] **Step 4: Write `eslint.config.js` and Prettier config**
+- [ ] **Step 4: Write `.oxlintrc.json` and Prettier config**
 
-`eslint.config.js`:
+`.oxlintrc.json`:
 
-```js
-import js from '@eslint/js';
-import importPlugin from 'eslint-plugin-import';
-import jsxA11y from 'eslint-plugin-jsx-a11y';
-import perfectionist from 'eslint-plugin-perfectionist';
-import react from 'eslint-plugin-react';
-import reactHooks from 'eslint-plugin-react-hooks';
-import globals from 'globals';
-import tseslint from 'typescript-eslint';
-
-export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'server/db.json'] },
-  js.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
-  {
-    files: ['**/*.{ts,tsx}'],
-    languageOptions: {
-      globals: globals.browser,
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
-    },
-    plugins: {
-      import: importPlugin,
-      'jsx-a11y': jsxA11y,
-      perfectionist,
-      react,
-      'react-hooks': reactHooks,
-    },
-    settings: { react: { version: 'detect' } },
-    rules: {
-      ...react.configs.flat.recommended.rules,
-      ...reactHooks.configs.recommended.rules,
-      ...jsxA11y.flatConfigs.recommended.rules,
-      'react/react-in-jsx-scope': 'off',
-      '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/consistent-type-imports': 'error',
-      'perfectionist/sort-imports': ['error', { newlinesBetween: 'always' }],
-      'perfectionist/sort-named-imports': 'error',
-    },
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["dist", "coverage", "node_modules", "**/node_modules/**", "server/db.json"],
+  "plugins": ["typescript", "react", "react-perf", "jsx-a11y", "import", "unicorn", "oxc", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
   },
-  // The harness deliberately constructs functions from user source; that is the product.
-  {
-    files: ['src/runner/**/*.ts'],
-    rules: { '@typescript-eslint/no-implied-eval': 'off' },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+    "react/react-in-jsx-scope": "off"
   },
-);
+  "overrides": [
+    {
+      "files": ["src/runner/**/*.ts"],
+      "rules": {
+        "no-new-func": "off"
+      }
+    }
+  ]
+}
 ```
+
+`react/react-in-jsx-scope` is off because React 19's automatic JSX runtime needs no import. The `src/runner` override exists because the harness deliberately constructs functions from user-supplied source — that is the product, not a mistake.
+
+`node_modules` is in `ignorePatterns` for a non-obvious reason: under `--type-aware`, oxlint otherwise reports hundreds of `no-unnecessary-type-arguments` errors **from TypeScript's own bundled `lib.dom.d.ts`**, which would make `pnpm lint` fail on a clean checkout. This was reproduced and confirmed. Do not remove that entry.
+
+Verify the type-aware rules actually engage:
+
+```bash
+pnpm lint
+```
+
+`no-floating-promises` and `no-misused-promises` only fire when `--type-aware` is passed (see the `lint` script in Step 5). If `pnpm lint` reports nothing on code you know has a floating promise, type-aware mode is not active — fix that before moving on rather than assuming it works.
 
 `.prettierrc.json`:
 
@@ -260,9 +259,15 @@ export default tseslint.config(
   "singleQuote": true,
   "trailingComma": "all",
   "semi": true,
-  "arrowParens": "always"
+  "arrowParens": "always",
+  "plugins": ["@ianvs/prettier-plugin-sort-imports"],
+  "importOrder": ["<BUILTIN_MODULES>", "<THIRD_PARTY_MODULES>", "^@/(.*)$", "^[./]"],
+  "importOrderSeparation": true,
+  "importOrderSortSpecifiers": true
 }
 ```
+
+Import ordering is Prettier's job now, applied by `pnpm format`, replacing `eslint-plugin-perfectionist`.
 
 `.prettierignore`:
 
@@ -293,14 +298,17 @@ Merge into the existing `package.json` (keep the `packageManager` field):
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --build --force",
-    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "lint": "oxlint --type-aware",
     "format": "prettier --write ."
   }
 }
 ```
 
 `node server/seed.ts` works without `tsx` because Node 24 strips types natively.
+
+Task 8, which creates the first file under `server/`, must also widen `typecheck` to
+`tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json`.
 
 - [ ] **Step 6: Write the failing smoke test**
 
@@ -386,7 +394,7 @@ Expected: typecheck clean, lint clean, 1 test passing.
 
 ```bash
 git add -A
-git commit -m "chore: scaffold vite react typescript project with eslint prettier and vitest"
+git commit -m "chore: scaffold vite react typescript project with oxlint prettier and vitest"
 ```
 
 ---
@@ -3788,7 +3796,7 @@ Sections: what the project is; prerequisites (Node 24 via `.nvmrc`, corepack, pn
 
 - [ ] **Step 3: Write `AGENTS.md`**
 
-The stack-neutral project rules: no `any`, no ESLint disable comments, TDD, Conventional Commits with no AI attribution, Prettier settings, the harness's host-agnostic contract and why it must stay that way, and the rule that every new challenge needs at least one documented alternative solution with tradeoffs.
+The stack-neutral project rules: no `any`, no lint disable comments, TDD, Conventional Commits with no AI attribution, Prettier settings, the harness's host-agnostic contract and why it must stay that way, and the rule that every new challenge needs at least one documented alternative solution with tradeoffs.
 
 - [ ] **Step 4: Write `CLAUDE.md`**
 
