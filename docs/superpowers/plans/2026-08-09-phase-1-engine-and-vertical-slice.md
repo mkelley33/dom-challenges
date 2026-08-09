@@ -1439,11 +1439,8 @@ describe('the real registry', () => {
     expect(validateRegistry(allChallenges)).toEqual([]);
   });
 
-  it('looks up by slug', () => {
-    const first = allChallenges[0];
-    expect(first).toBeDefined();
-    if (!first) return;
-    expect(challengeBySlug(first.slug)?.id).toBe(first.id);
+  it('returns undefined for an unknown slug', () => {
+    expect(challengeBySlug('no-such-slug')).toBeUndefined();
   });
 
   it('filters by category', () => {
@@ -1537,7 +1534,9 @@ export function validateRegistry(challenges: readonly Challenge[]): string[] {
 - [ ] **Step 5: Run the tests and verify they pass**
 
 Run: `pnpm vitest run src/challenges/registry.test.ts`
-Expected: PASS — 9 tests. The "looks up by slug" test short-circuits while `allChallenges` is empty; Task 7 fills it.
+Expected: PASS — 9 tests.
+
+Every assertion here holds against an empty registry: `validateRegistry([])` returns no problems, `challengesInCategory` returns an empty array whose `.every()` is vacuously true, and the unknown-slug lookup returns `undefined`. A positive slug-lookup test would fail until Task 7 registers a challenge, so it belongs there, not here.
 
 - [ ] **Step 6: Commit**
 
@@ -1907,14 +1906,24 @@ import { queryBasics } from './queryBasics';
 export const selectionChallenges: Challenge[] = [queryBasics, closestRow, liveVsStatic];
 ```
 
-- [ ] **Step 7: Run the suite and verify it passes**
+- [ ] **Step 7: Add the positive slug lookup to the registry test**
+
+Now that the registry is non-empty, add to the `the real registry` block in `src/challenges/registry.test.ts`:
+
+```ts
+it('looks up a registered challenge by slug', () => {
+  expect(challengeBySlug('query-basics')?.id).toBe('selection-query-basics');
+});
+```
+
+- [ ] **Step 8: Run the suite and verify it passes**
 
 Run: `pnpm vitest run src/challenges`
 Expected: PASS — registry validation green, and for each of the three challenges: every solution passes, the starter fails, and all solutions are documented.
 
 If a starter accidentally passes, the failure message names the slug. Fix the starter, not the test.
 
-- [ ] **Step 8: Verify green and commit**
+- [ ] **Step 9: Verify green and commit**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test
