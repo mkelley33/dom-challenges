@@ -56,6 +56,34 @@ describe('routing', () => {
     expect(await screen.findByRole('heading', { name: /find one element and mark it/i })).toBeInTheDocument();
   });
 
+  it('keeps the shell on screen while the split challenge route loads', async () => {
+    // A fresh module registry first: `lazy` resolves its payload once and then hands the component
+    // back synchronously forever, so any earlier test that already visited the challenge route
+    // would hide the boundary this asserts. Resetting reproduces a cold load.
+    vi.resetModules();
+    const { routeDefinitions: coldRoutes } = await import('./routes');
+    const router = createMemoryRouter(coldRoutes, { initialEntries: ['/challenge/query-basics'] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    // Asserted before any `await`: the challenge route's module is still loading on the first
+    // paint, so the shell's boundary fills the main area while the header stays put. A statically
+    // imported route would have rendered its heading here instead.
+    //
+    // Matched exactly, never as /loading/i: the editor panel has a "Loading editor…" fallback of
+    // its own, and a loose matcher would find that one and call the route split proven.
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /dom challenges/i })).toBeInTheDocument();
+
+    expect(await screen.findByRole('heading', { name: /find one element and mark it/i })).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+  });
+
   it('renders a not-found page for an unknown slug', async () => {
     renderAt('/challenge/does-not-exist');
     expect(await screen.findByText(/couldn't find that challenge/i)).toBeInTheDocument();
