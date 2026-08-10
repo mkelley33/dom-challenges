@@ -62,9 +62,12 @@ describe('createIframeHost', () => {
     const frame = container.querySelector('iframe');
     const context = await pending;
 
-    // The frame is in the DOM before the promise settles, so a `reset` that resolved eagerly
-    // would be indistinguishable from one that waited unless the content is checked at resolve
-    // time -- which is what makes the assertion below meaningful rather than decorative.
+    // These assertions describe the resolved context; they do not, on their own, prove the wait.
+    // happy-dom applies `srcdoc` synchronously during `append`, so the seeded markup is already
+    // in the frame's document by the time `reset` returns and a `reset` that resolved eagerly --
+    // without ever awaiting `load` -- would satisfy every assertion below. The test that
+    // discriminates is `does not resolve while the frame never loads`, further down; this one
+    // pins the *shape* of what a successful load hands back.
     expect(frame).not.toBeNull();
     expect(context.document).toBe(frame?.contentDocument);
     // Not `toBe('complete')`: a browser fires `load` once the document is complete, happy-dom
@@ -72,6 +75,34 @@ describe('createIframeHost', () => {
     // agree on, and it is the one that matters here -- parsing is over, so the markup exists.
     expect(context.document.readyState).not.toBe('loading');
     expect(context.document.getElementById('hello')).not.toBeNull();
+  });
+
+  it('does not resolve while the frame never loads', async () => {
+    // The falsifiable half of the load-wait guarantee. A frame inside a detached subtree never
+    // navigates, so it never fires `load` -- which makes this the one arrangement where an eager
+    // `reset` is distinguishable from a waiting one under happy-dom, whose synchronous `srcdoc`
+    // hides the difference everywhere else. An implementation that resolves without awaiting
+    // `load` settles here; the real one stays pending until the timer below wins the race.
+    const detached = document.createElement('div');
+    const host = createIframeHost(detached);
+
+    // Both outcomes are folded into one label so that a rejection cannot pass as "pending", and
+    // so that disposing below -- which settles the in-flight reset -- has a handler waiting.
+    const settled = host.reset('<p id="hello">hi</p>').then(
+      () => 'settled',
+      () => 'settled',
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      settled,
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve('pending'), 50);
+      }),
+    ]);
+    clearTimeout(timer);
+
+    expect(outcome).toBe('pending');
+    host.dispose();
   });
 
   it('does not sandbox the frame, so the harness can reach into it', async () => {
