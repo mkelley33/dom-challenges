@@ -60,8 +60,8 @@ export function useSaveProgress(): UseMutationResult<
  * constructed by hand. json-server assigns its own `id` on POST and discards any client-supplied
  * one (see the docblock on `saveProgress` in `src/api/progress.ts`), so a value like
  * `emptyProgress(challengeId).id` -- which is just `challengeId` -- will not match any row's real
- * id. The DELETE then 404s (json-server returns no body for an unknown id, which `apiFetch`
- * surfaces as a rejected mutation), instead of clearing the record the caller intended.
+ * id. The DELETE then 404s, and `apiFetch` throws on the status before it reads the body, so the
+ * mutation rejects and rolls back instead of clearing the record the caller intended.
  */
 export function useClearProgress(): UseMutationResult<unknown, Error, string, { previous: ProgressRecord[] }> {
   const queryClient = useQueryClient();
