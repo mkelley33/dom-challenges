@@ -20,6 +20,16 @@
 - **oxlint, not ESLint.** `typescript-eslint@8` declares `typescript: >=4.8.4 <6.1.0`, so ESLint's type-aware rules are incompatible with TypeScript 7 and no `typescript-eslint@9` exists yet. oxlint has its own parser and no TypeScript peer dependency, so it lints TS 7 sources directly. Type-aware rules come from `oxlint-tsgolint`, which is built on tsgo — the same native compiler as TS 7 — via `oxlint --type-aware`. Verified working: `typescript/no-explicit-any`, `typescript/no-floating-promises`, `react-hooks/exhaustive-deps`, `jsx-a11y/alt-text`, and `import/no-duplicates` all fire correctly.
 - **Import sorting** comes from `@ianvs/prettier-plugin-sort-imports` (Prettier does it on format), replacing `eslint-plugin-perfectionist`.
 - **Monaco must not load from a CDN.** `@monaco-editor/react` defaults to jsDelivr; Task 12 overrides this with `loader.config({ monaco })` and local workers. An app that breaks without network access is a bug here.
+- **Lint overrides list files, never glob a directory.** `.oxlintrc.json` overrides name the exact files their justification covers. A glob over a growing directory — `src/challenges/*/*.ts` most of all — silently disables a check across every file added later.
+
+## Authoring rules for challenge content
+
+Every challenge module and every task that writes one inherits these.
+
+- **Never write `toBeInstanceOf(SomeBareGlobalConstructor)` in challenge test code.** `toBeInstanceOf` resolves the constructor from the realm it is named in. happy-dom shares one class table across windows, so a bare global passes under Vitest — but Task 11 runs challenges inside a real same-origin iframe with its own constructors, where the same assertion fails on correct learner output, and the content suite cannot see it. Take the constructor from the challenge's realm (`ctx.win.HTMLInputElement`), or prefer the structural matchers (`toHaveClass`, `toHaveAttribute`, `toHaveTextContent`, `toHaveLength`), which were made realm-independent for this reason.
+- **Read learner exports through `ctx.fn<T>(name)`, never by asserting a type onto `ctx.exports`.** The accessor concentrates the one unavoidable unsound assertion in `harness.ts` and throws a named, useful error when the export is missing.
+- **A challenge's tests must make the wrong mental model impossible, not merely undesirable.** If the learner's function owns both the setup and the mutation, no assertion on its return value can tell a correct technique from a lucky one — invert control so the test performs the mutation. The live-vs-static challenge in Task 7 is the worked example.
+- **Every `starterCode` must run cleanly and fail a named assertion.** A starter that fails to transpile also "fails a test", which is why the content suite asserts `error === null` and `results.length === tests.length` before it looks at failures.
 
 ---
 
@@ -450,6 +460,18 @@ export interface TestContext {
   win: Window & typeof globalThis;
   expect: (actual: unknown) => Matchers;
   exports: Readonly<Record<string, unknown>>;
+  /**
+   * Reads a named export from the submitted code as `T`.
+   *
+   * This is how a challenge test reaches the function the prompt asked for. The alternative --
+   * asserting a type onto `exports` in the challenge file -- is an unsafe assertion repeated in
+   * every one of ~100 challenge modules; here the one unavoidable assertion lives in the harness,
+   * at the seam that already owns the boundary with the submitted code.
+   *
+   * Throws with a message naming the missing export when the code does not export `name`, so a
+   * typo fails the test as "you did not export this" rather than as "undefined is not a function".
+   */
+  fn: <T>(name: string) => T;
   tick: () => Promise<void>;
   fire: EventHelpers;
 }
@@ -1609,8 +1631,23 @@ import { createMemoryHost } from '@/test/createMemoryHost';
 
 import { allChallenges } from './registry';
 
+/**
+ * The correctness suite for challenge *content*, driven straight off the registry so that every
+ * challenge added from here on is covered without any per-challenge wiring.
+ *
+ * Two invariants, both of which rot silently without a test:
+ *  1. every reference solution still passes every test of its own challenge;
+ *  2. every `starterCode` fails at least one test -- otherwise a challenge ships pre-solved and
+ *     reads as complete before the learner types anything.
+ *
+ * Each host is disposed in a `finally`: `runChallenge` leaves host lifecycle to its caller, and
+ * `createMemoryHost`'s `reset` only closes the *previous* window, so an undisposed host leaks one
+ * happy-dom window (and any timers inside it) per challenge.
+ */
 describe('challenge content', () => {
   it('has at least one challenge registered', () => {
+    // Everything below is generated from `allChallenges`; on an empty registry the `.each` blocks
+    // expand to nothing at all and the suite would pass while testing no content whatsoever.
     expect(allChallenges.length).toBeGreaterThan(0);
   });
 
@@ -1622,6 +1659,10 @@ describe('challenge content', () => {
         try {
           const result = await runChallenge(challenge, solution.code, host);
           expect(result.error).toBeNull();
+          // A `filter(...)` over an empty `results` is an empty array, so the emptiness check below
+          // is vacuously true for a run that never reached a single test. Pinning the count to the
+          // number of tests is what separates "passed everything" from "ran nothing".
+          expect(result.results).toHaveLength(challenge.tests.length);
           expect(result.results.filter((r) => !r.passed).map((r) => `${r.name}: ${r.message ?? ''}`)).toEqual([]);
         } finally {
           host.dispose();
@@ -1633,14 +1674,24 @@ describe('challenge content', () => {
       const host = createMemoryHost();
       try {
         const result = await runChallenge(challenge, challenge.starterCode, host);
-        const alreadySolved = result.error === null && result.results.every((r) => r.passed);
-        expect(alreadySolved, `${challenge.slug}: starterCode already passes every test`).toBe(false);
+        // The starter has to fail *as an unsolved challenge*, not as broken input. A starter that
+        // fails to transpile, or throws while loading, produces zero results -- which would satisfy
+        // "does not pass" by accident and hide a starter that is genuinely pre-solved.
+        expect(result.error, `${challenge.slug}: starterCode did not run cleanly`).toBeNull();
+        expect(result.results).toHaveLength(challenge.tests.length);
+        const failed = result.results.filter((r) => !r.passed);
+        expect(failed.length, `${challenge.slug}: starterCode already passes every test`).toBeGreaterThan(0);
       } finally {
         host.dispose();
       }
     });
 
     it('documents every solution', () => {
+      // Both loops below iterate content that a malformed challenge could leave empty, and an
+      // assertion that never runs is an assertion that never fails.
+      expect(challenge.tests.length, `${challenge.slug}: ships no tests`).toBeGreaterThan(0);
+      expect(challenge.solutions.length, `${challenge.slug}: ships no solutions`).toBeGreaterThan(0);
+
       for (const solution of challenge.solutions) {
         expect(solution.label.length, `${challenge.slug}: a solution is missing a label`).toBeGreaterThan(0);
         expect(solution.explanation.length, `${challenge.slug}/${solution.label}: no explanation`).toBeGreaterThan(0);
@@ -1650,6 +1701,13 @@ describe('challenge content', () => {
   });
 });
 ```
+
+The starter half is the load-bearing invariant here, and it is easy to get wrong. `result.error !== null`
+for a starter that fails to *transpile*, so the naive check — `error === null && results.every(passed)` —
+is `false` for a starter of `const = = =;` and reports success while proving nothing. Assert the starter
+ran cleanly first (`error` is null, `results.length === tests.length`), and only then that at least one
+test failed. Every iteration is length-guarded for the same reason: `.every()` and an empty
+`filter(...).toEqual([])` are both vacuously true over an empty array.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -1847,82 +1905,177 @@ Explanation and tradeoff points each solution must make:
 - `id: 'selection-live-vs-static'`, `slug: 'live-vs-static'`, `difficulty: 'advanced'`
 - `title: 'Live collections versus static lists'`
 - `concepts: ['HTMLCollection', 'NodeList', 'getElementsByClassName', 'querySelectorAll']`
-- `prompt`: asks the learner to export `measure()` returning counts taken **before** and **after** appending one `.row`, using a live collection for `live*` and a static list for `static*`, capturing both collections **once, before** the append.
 - `html`: `<ul id="list"><li class="row">1</li><li class="row">2</li></ul>`
-- `starterCode`:
+
+**Control is inverted deliberately: the learner exports `capture()` and the *test* appends the row.**
+An earlier draft had the learner export a `measure()` that captured the collections, appended the row,
+and returned four counts. It was solvable without ever calling `getElementsByClassName` — re-querying
+the document for `liveAfter` passed every test, so the challenge's entire subject was skippable and the
+content suite could not tell. When the learner's function owns both the capture and the mutation, no
+assertion on its return value can distinguish a standing live query from a re-query. Appending in the
+test means the third row does not exist until `capture()` has already returned, so the only way `live`
+can count it is by being live.
+
+Write the file exactly as follows:
 
 ```ts
-export interface Counts {
-  liveBefore: number;
-  staticBefore: number;
-  liveAfter: number;
-  staticAfter: number;
+import type { Challenge } from '@/types/challenge';
+
+/**
+ * The shape `capture()` hands back.
+ *
+ * Deliberately `ArrayLike` rather than `HTMLCollection`/`NodeList`: the tests distinguish the two
+ * by behaviour, never by type or by `instanceof`. A learner who returns `list.children` and a
+ * spread copy has understood the same thing, and typing the contract by what it does rather than
+ * by which API produced it is also what keeps the assertions realm-safe.
+ */
+interface Captured {
+  live: ArrayLike<Element>;
+  snapshot: ArrayLike<Element>;
 }
 
-export function measure(): Counts {
-  return { liveBefore: 0, staticBefore: 0, liveAfter: 0, staticAfter: 0 };
-}
-```
-
-- `tests`:
-
-```ts
-tests: [
-  {
-    name: 'both collections agree before the append',
-    run: ({ exports, expect }) => {
-      const measure = exports['measure'] as () => Record<string, number>;
-      const counts = measure();
-      expect(counts['liveBefore']).toBe(2);
-      expect(counts['staticBefore']).toBe(2);
-    },
-  },
-  {
-    name: 'the live collection sees the new row',
-    run: ({ exports, expect }) => {
-      const measure = exports['measure'] as () => Record<string, number>;
-      expect(measure()['liveAfter']).toBe(3);
-    },
-  },
-  {
-    name: 'the static list does not see the new row',
-    run: ({ exports, expect }) => {
-      const measure = exports['measure'] as () => Record<string, number>;
-      expect(measure()['staticAfter']).toBe(2);
-    },
-  },
-],
-```
-
-- `solutions` — one canonical:
-
-```ts
-export interface Counts {
-  liveBefore: number;
-  staticBefore: number;
-  liveAfter: number;
-  staticAfter: number;
-}
-
-export function measure(): Counts {
-  const list = document.getElementById('list');
-  if (!list) throw new Error('#list is missing');
-
-  const live = document.getElementsByClassName('row');
-  const staticList = document.querySelectorAll('.row');
-
-  const liveBefore = live.length;
-  const staticBefore = staticList.length;
-
-  const row = document.createElement('li');
+/**
+ * The mutation belongs to the test, not to the learner.
+ *
+ * If `capture()` owned both the capture and the append, no assertion on its return value could
+ * tell a standing live query from a re-query performed afterwards -- the challenge's whole subject
+ * would be skippable. Appending here means the row does not exist until `capture()` has already
+ * returned, so the only way `live` can count it is by being live.
+ */
+function appendRow(doc: Document): void {
+  const list = doc.getElementById('list');
+  if (!list) throw new Error('#list is missing from the challenge markup');
+  const row = doc.createElement('li');
   row.className = 'row';
   list.append(row);
-
-  return { liveBefore, staticBefore, liveAfter: live.length, staticAfter: staticList.length };
 }
-```
 
-`explanation` must cover: `getElementsByClassName` returns a live `HTMLCollection` that re-reflects the document on every access, while `querySelectorAll` returns a static `NodeList` snapshotted at call time. `tradeoffs` must cover the classic infinite loop — `for (let i = 0; i < live.length; i++)` while appending matching elements never terminates — the surprise that removing elements during a live-collection loop skips entries, and that `NodeList` has `forEach` while `HTMLCollection` has neither `forEach` nor array methods, so `Array.from` is required.
+export const liveVsStatic: Challenge = {
+  id: 'selection-live-vs-static',
+  slug: 'live-vs-static',
+  title: 'Live collections versus static lists',
+  category: 'selection',
+  difficulty: 'advanced',
+  concepts: ['HTMLCollection', 'NodeList', 'getElementsByClassName', 'querySelectorAll'],
+  relatedIds: ['selection-query-basics'],
+  prompt: [
+    'The list below holds two `.row` items. Not every DOM query hands back the same kind of result:',
+    'one kind keeps tracking the document as it changes, the other is a snapshot of the instant it',
+    'was taken.',
+    '',
+    'Export a function `capture()` that returns both kinds of `.row` collection, and changes nothing:',
+    '',
+    '- `live` — a collection that keeps tracking the document, so a `.row` added *after* `capture()`',
+    '  has returned is counted by it;',
+    '- `snapshot` — a collection fixed at the moment `capture()` ran, which later changes leave alone.',
+    '',
+    'Return `{ live, snapshot }`.',
+    '',
+    'The test does the mutating: it calls `capture()`, appends one more `<li class="row">` to `#list`,',
+    'and only then reads `length` from the two collections you handed back. Re-querying the document',
+    'is not available to you — by the time the third row exists, your function has already returned.',
+  ].join('\n'),
+  html: '<ul id="list"><li class="row">1</li><li class="row">2</li></ul>',
+  starterCode: [
+    'export interface Captured {',
+    '  live: ArrayLike<Element>;',
+    '  snapshot: ArrayLike<Element>;',
+    '}',
+    '',
+    'export function capture(): Captured {',
+    '  return { live: [], snapshot: [] };',
+    '}',
+    '',
+  ].join('\n'),
+  tests: [
+    {
+      name: 'both collections start with the two rows already in the list',
+      run: ({ fn, expect }) => {
+        const { live, snapshot } = fn<() => Captured>('capture')();
+        expect(live).toHaveLength(2);
+        expect(snapshot).toHaveLength(2);
+      },
+    },
+    {
+      name: 'the live collection counts a row appended after capture() returned',
+      run: ({ doc, fn, expect }) => {
+        const { live } = fn<() => Captured>('capture')();
+        appendRow(doc);
+        expect(live).toHaveLength(3);
+      },
+    },
+    {
+      name: 'the snapshot ignores a row appended after capture() returned',
+      run: ({ doc, fn, expect }) => {
+        const { snapshot } = fn<() => Captured>('capture')();
+        appendRow(doc);
+        expect(snapshot).toHaveLength(2);
+      },
+    },
+  ],
+  solutions: [
+    {
+      label: 'Live HTMLCollection versus static NodeList',
+      code: [
+        'export interface Captured {',
+        '  live: HTMLCollectionOf<Element>;',
+        '  snapshot: NodeListOf<Element>;',
+        '}',
+        '',
+        'export function capture(): Captured {',
+        '  return {',
+        "    live: document.getElementsByClassName('row'),",
+        "    snapshot: document.querySelectorAll('.row'),",
+        '  };',
+        '}',
+        '',
+      ].join('\n'),
+      explanation: [
+        'Both queries run at the same instant, against the same two-row document, and `capture()`',
+        'returns before the third row exists. Yet one of the two values notices it and the other never',
+        'does. The difference is in what each query returns.',
+        '',
+        '`getElementsByClassName` returns a live `HTMLCollection`. It is not an array of the elements',
+        'that matched; it is a standing query against the document. Every property access re-consults',
+        'the tree, so `live.length` answers "how many `.row` elements are in the document *right now*"',
+        'and reports 3 once the test has appended — even though nothing re-ran your function. The same',
+        'is true of `getElementsByTagName`, `document.forms`, `document.images`, and `element.children`;',
+        "returning `document.getElementById('list')!.children` here would pass the same tests.",
+        '',
+        '`querySelectorAll` returns a static `NodeList` — the matches are resolved once, at call time,',
+        'and the list never changes again. It reports 2 both times because it is a snapshot of a',
+        'document that had two rows. (`element.childNodes` is the exception that spoils the neat rule:',
+        'it is a `NodeList`, but a live one.)',
+        '',
+        'Neither is more correct. The bug is holding one while thinking you hold the other — which is',
+        'why the test, not your code, appends the row: a value you can only re-query is a value whose',
+        'liveness you never actually tested.',
+      ].join('\n'),
+      tradeoffs: [
+        'Reach for the live collection when you genuinely want a standing answer — a count you read',
+        'occasionally and want current, without re-querying — exactly what the test does with `live`.',
+        'Reach for `querySelectorAll` for anything you are about to iterate, which is nearly always.',
+        '',
+        'The reason is that iterating a live collection while mutating the document is a trap:',
+        '',
+        '- `for (let i = 0; i < live.length; i++)` that appends a matching element in the body never',
+        '  terminates. Each append grows `live.length`, and the bound is re-read on every iteration, so',
+        '  the loop chases a finish line it keeps moving.',
+        '- Removing elements in the same loop is the quieter bug: `live[0]` is dropped from the',
+        '  collection the moment it leaves the document, every later element shifts down one index, and',
+        '  `i++` then steps past the element that moved into the slot. You silently process half of',
+        '  them. Iterating backwards, or snapshotting first, avoids it.',
+        '',
+        'Ergonomics push the same way. `NodeList` has `forEach`. `HTMLCollection` has no `forEach` and',
+        'no array methods at all — indexing and `length` are the whole API. Both are spreadable, so',
+        '`Array.from(live)` or `[...live]` gets you to `map` and `filter`; note that the conversion is',
+        'also what turns a live collection into a snapshot, which is usually what the code wanted in',
+        'the first place.',
+      ].join('\n'),
+    },
+  ],
+};
+```
 
 - [ ] **Step 6: Register the three challenges**
 
