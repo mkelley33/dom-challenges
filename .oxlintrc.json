@@ -66,6 +66,18 @@
       "rules": {
         "typescript/no-unnecessary-type-parameters": "off"
       }
+    },
+    {
+      // Enabled implicitly by the "suspicious" category. `apiFetch<T>` is the one HTTP boundary
+      // every API call in src/api goes through: `response.json()` resolves to `any` by the DOM
+      // lib's own typing, and asserting it to the caller-supplied `T` is the unavoidable unsound
+      // step at that boundary -- the same trade already made for src/runner/harness.ts's seam
+      // with submitted code. Listed rather than globbed, and limited to the one function that
+      // owns the assertion.
+      "files": ["src/api/client.ts"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
+      }
     }
   ]
 }

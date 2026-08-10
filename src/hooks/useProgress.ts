@@ -1,0 +1,79 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
+
+import { deleteProgress, fetchAllProgress, saveProgress } from '@/api/progress';
+import type { ProgressRecord } from '@/types/progress';
+
+export const PROGRESS_QUERY_KEY = ['progress'] as const;
+
+export function emptyProgress(challengeId: string): ProgressRecord {
+  return {
+    id: challengeId,
+    challengeId,
+    status: 'unattempted',
+    attempts: 0,
+    solvedAt: null,
+    revealedAt: null,
+    lastCode: null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function useProgressQuery(): UseQueryResult<ProgressRecord[]> {
+  return useQuery({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress, staleTime: 30_000 });
+}
+
+/** Always returns a record. "No row yet" and "unattempted" are the same thing to the UI. */
+export function useChallengeProgress(challengeId: string): ProgressRecord {
+  const { data } = useProgressQuery();
+  return data?.find((record) => record.challengeId === challengeId) ?? emptyProgress(challengeId);
+}
+
+export function useSaveProgress(): UseMutationResult<
+  ProgressRecord,
+  Error,
+  ProgressRecord,
+  { previous: ProgressRecord[] }
+> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: saveProgress,
+    onMutate: async (next) => {
+      await queryClient.cancelQueries({ queryKey: PROGRESS_QUERY_KEY });
+      const previous = queryClient.getQueryData<ProgressRecord[]>(PROGRESS_QUERY_KEY) ?? [];
+      const others = previous.filter((record) => record.challengeId !== next.challengeId);
+      queryClient.setQueryData<ProgressRecord[]>(PROGRESS_QUERY_KEY, [...others, next]);
+      return { previous };
+    },
+    onError: (_error, _next, context) => {
+      if (context) queryClient.setQueryData(PROGRESS_QUERY_KEY, context.previous);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY });
+    },
+  });
+}
+
+export function useClearProgress(): UseMutationResult<unknown, Error, string, { previous: ProgressRecord[] }> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (recordId: string) => deleteProgress(recordId),
+    onMutate: async (recordId) => {
+      await queryClient.cancelQueries({ queryKey: PROGRESS_QUERY_KEY });
+      const previous = queryClient.getQueryData<ProgressRecord[]>(PROGRESS_QUERY_KEY) ?? [];
+      queryClient.setQueryData<ProgressRecord[]>(
+        PROGRESS_QUERY_KEY,
+        previous.filter((record) => record.id !== recordId),
+      );
+      return { previous };
+    },
+    onError: (_error, _recordId, context) => {
+      if (context) queryClient.setQueryData(PROGRESS_QUERY_KEY, context.previous);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY });
+    },
+  });
+}
