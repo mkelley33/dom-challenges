@@ -3804,8 +3804,46 @@ git commit -m "feat: add solutions panel gated by earned versus revealed"
 - Test: `src/components/challenge/ClearButton.test.tsx`
 
 **Interfaces:**
-- Consumes: `useClearProgress` (Task 8), `useEditorStore.clearDraft` (Task 9).
-- Produces: `ClearButton` — `{ challengeId: string; recordId: string; onCleared: () => void }`.
+- Consumes: `useClearProgress` (Task 8), `useEditorStore.clearDraft` (Task 9), `useStoredProgress`
+  (Task 14).
+- Produces: `ClearButton` — `{ challengeId: string; onCleared: () => void }`.
+
+**AMENDED — `recordId` cannot be a prop, and this is the third appearance of the same hazard.**
+The original signature took `recordId: string`, which `ChallengePage` would source from
+`useChallengeProgress(challenge.id)`. That returns `emptyProgress(challengeId)` whenever the
+progress query has not settled, and `emptyProgress` sets `id` to the **challenge** id — not a real
+json-server row id. json-server assigns its own `id` on POST and discards the client's; the
+docblock on `useClearProgress` in `src/hooks/useProgress.ts` exists specifically to warn about
+this. A Clear on a cold deep-link would therefore DELETE a row that does not exist, 404, and
+silently roll back, leaving the learner staring at an unchanged page after confirming a
+destructive action.
+
+Resolve the record at click time, the way Tasks 13 and 14 do: `useStoredProgress(challengeId)`
+returns `Promise<ProgressRecord | null>` off the settled query. Then:
+
+- `stored === null` (query unresolvable) — do not delete. Surface the failure rather than
+  reporting success.
+- `stored.status === 'unattempted'` with `attempts === 0` — there is no row to delete. Clear the
+  draft and the on-screen result, skip the mutation entirely, and do not treat the absent DELETE
+  as an error.
+- Otherwise DELETE `stored.id`, which is now the id the server actually assigned.
+
+Test the cold-deep-link shape directly: hold `GET /progress` pending, click Clear, release the
+read, and assert the DELETE went to the server's id rather than the challenge id.
+
+**Two inherited decisions to settle here rather than inherit by default:**
+
+- `useClearProgress`'s `onSettled` runs on React Query's `'active'` default while `useSaveProgress`
+  uses `refetchType: 'all'`. The asymmetry is correct — a delete has no server-assigned field to
+  read back — and is commented at both sites. This is the first task to exercise the delete path,
+  so confirm it here rather than leaving it as an assumption.
+- `useChallengeRun`'s `reset` silently no-ops when `hostRef.current` is null, which is every call
+  before the first run. Decide what clearing before a first run should render, and cover it.
+
+**Restore the Task 14 dialog copy.** `SolutionsPanel`'s reveal dialog was reworded during the Task
+14 fix wave to stop promising a Clear control that did not exist yet. It exists as of this task —
+put the "clearing your progress is the way back" sentence back, and make sure it is true: clearing
+deletes the record, which drops `revealedAt` along with it, so the panel returns to locked.
 
 Clearing must reset **three** things or the app lies to the learner: the editor draft, the progress record, and the on-screen result. Missing the third leaves stale passing results next to freshly reset starter code.
 
