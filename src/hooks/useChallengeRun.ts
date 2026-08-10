@@ -1,12 +1,15 @@
+import { useQueryClient } from '@tanstack/react-query';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { fetchAllProgress } from '@/api/progress';
 import type { HostHandle, RunResult } from '@/runner/harness';
 import { renderPreview, runChallenge } from '@/runner/harness';
 import { createIframeHost, HostDisposedError } from '@/runner/iframeHost';
 import type { Challenge } from '@/types/challenge';
+import type { ProgressRecord } from '@/types/progress';
 
-import { useChallengeProgress, useSaveProgress } from './useProgress';
+import { findChallengeProgress, PROGRESS_QUERY_KEY, useSaveProgress } from './useProgress';
 
 export interface ChallengeRun {
   result: RunResult | null;
@@ -44,6 +47,9 @@ function describeError(error: unknown): string {
  * rejecting it with `HostDisposedError`, which surfaces as a rejection out of `runChallenge`.
  * That is not a failed attempt -- it is the learner navigating away, or React's StrictMode
  * remount -- so it is swallowed: nothing is shown and nothing is recorded.
+ *
+ * *Losing a solve.* A progress write sends the whole record, not a delta, so it is only safe once
+ * the record it is built from is known. See `readStoredProgress`.
  */
 export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HTMLDivElement | null>): ChallengeRun {
   const [result, setResult] = useState<RunResult | null>(null);
@@ -51,7 +57,7 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
   const hostRef = useRef<HostHandle | null>(null);
   const runIdRef = useRef(0);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
-  const progress = useChallengeProgress(challenge.id);
+  const queryClient = useQueryClient();
   const { mutate: writeProgress } = useSaveProgress();
 
   useEffect(() => {
@@ -66,6 +72,27 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
       hostRef.current = null;
     };
   }, [challenge.id]);
+
+  /**
+   * The stored record for this challenge, read once the progress query has settled, or `null` when
+   * it cannot be established.
+   *
+   * Reading it out of a render-time closure is what made a cold deep-link destructive: on
+   * `/challenge/:slug` the `GET /progress` is still in flight when a quick first run finishes, so
+   * the closure still holds `emptyProgress(...)` -- and because `useSaveProgress` sends the whole
+   * record body rather than a delta, writing that placeholder erases a real solve.
+   * `ensureQueryData` serves the cache when it has data and joins the fetch already in flight when
+   * it does not.
+   */
+  const readStoredProgress = useCallback(async (): Promise<ProgressRecord | null> => {
+    try {
+      const records = await queryClient.ensureQueryData({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress });
+      return findChallengeProgress(records, challenge.id);
+    } catch {
+      // Skipping the write costs one attempt count; writing over an unknown record costs the solve.
+      return null;
+    }
+  }, [challenge.id, queryClient]);
 
   const execute = useCallback(
     async (code: string, runId: number): Promise<void> => {
@@ -96,13 +123,19 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
         await renderPreview(challenge, code, host);
         if (!isCurrent()) return;
 
+        const stored = await readStoredProgress();
+        if (!isCurrent()) return;
+        // A run whose prior record never arrived records nothing at all, and says nothing about it:
+        // the result the learner is looking at was real, and a progress fetch is not their problem.
+        if (stored === null) return;
+
         const now = new Date().toISOString();
         writeProgress({
-          ...progress,
+          ...stored,
           status: next.passed ? 'solved' : 'attempted',
-          attempts: progress.attempts + 1,
+          attempts: stored.attempts + 1,
           // Keep the original solve date: re-running a solved challenge is not a new solve.
-          solvedAt: next.passed ? (progress.solvedAt ?? now) : progress.solvedAt,
+          solvedAt: next.passed ? (stored.solvedAt ?? now) : stored.solvedAt,
           lastCode: code,
           updatedAt: now,
         });
@@ -116,7 +149,7 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
         stopRunning();
       }
     },
-    [challenge, containerRef, progress, writeProgress],
+    [challenge, containerRef, readStoredProgress, writeProgress],
   );
 
   /** Appends `work` to the serial queue and keeps the queue itself un-rejectable. */

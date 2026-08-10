@@ -23,10 +23,19 @@ export function useProgressQuery(): UseQueryResult<ProgressRecord[]> {
   return useQuery({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress, staleTime: 30_000 });
 }
 
-/** Always returns a record. "No row yet" and "unattempted" are the same thing to the UI. */
+/**
+ * Always returns a record. "No row yet" and "unattempted" are the same thing to the UI.
+ *
+ * Shared with the run flow, which reads the record straight off a settled fetch rather than out of
+ * a render, so both sides resolve "which row is this challenge's" the same way.
+ */
+export function findChallengeProgress(records: ProgressRecord[] | undefined, challengeId: string): ProgressRecord {
+  return records?.find((record) => record.challengeId === challengeId) ?? emptyProgress(challengeId);
+}
+
 export function useChallengeProgress(challengeId: string): ProgressRecord {
   const { data } = useProgressQuery();
-  return data?.find((record) => record.challengeId === challengeId) ?? emptyProgress(challengeId);
+  return findChallengeProgress(data, challengeId);
 }
 
 export function useSaveProgress(): UseMutationResult<

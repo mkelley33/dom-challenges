@@ -58,6 +58,18 @@ const challenge: Challenge = {
   relatedIds: [],
 };
 
+/** A row the learner solved on an earlier visit, in the shape the server hands it back. */
+const solvedRecord: ProgressRecord = {
+  id: 'stored-row',
+  challengeId: challenge.id,
+  status: 'solved',
+  attempts: 4,
+  solvedAt: '2026-01-02T03:04:05.000Z',
+  revealedAt: null,
+  lastCode: PASSING,
+  updatedAt: '2026-01-02T03:04:05.000Z',
+};
+
 type FetchMock = ReturnType<typeof vi.fn<typeof fetch>>;
 
 /**
@@ -109,6 +121,32 @@ function stubEchoingProgressServer(): FetchMock {
 
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+/**
+ * A progress server whose reads stay pending until the test releases them.
+ *
+ * The hazard being reproduced is a race -- a cold deep-link where the learner's first run finishes
+ * before `GET /progress` answers -- and a test that lets the read settle first cannot see it. Only
+ * reads are gated: by the time the flow issues a write, the test has already released them.
+ */
+function stubGatedProgressServer(records: ProgressRecord[]): { fetchMock: FetchMock; releaseReads: () => void } {
+  // Definitely assigned: a promise executor runs synchronously, so `reads` cannot exist unresolved.
+  let releaseReads!: () => void;
+  const reads = new Promise<void>((resolve) => {
+    releaseReads = resolve;
+  });
+
+  const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+    const method = init?.method ?? 'GET';
+    if (method === 'GET') {
+      return reads.then(() => new Response(JSON.stringify(records), { status: 200 }));
+    }
+    return Promise.resolve(new Response(typeof init?.body === 'string' ? init.body : '{}', { status: 200 }));
+  });
+
+  vi.stubGlobal('fetch', fetchMock);
+  return { fetchMock, releaseReads };
 }
 
 const containers: HTMLDivElement[] = [];
@@ -358,6 +396,37 @@ describe('useChallengeRun', () => {
     expect(firstSolvedAt).toBeDefined();
     // Re-running something already solved is not a new solve.
     expect(secondWrite).toContain(`"solvedAt":"${String(firstSolvedAt)}"`);
+  });
+
+  it('writes against the stored record even when the run beats the progress fetch', async () => {
+    const { fetchMock, releaseReads } = stubGatedProgressServer([solvedRecord]);
+    const ref = attachedRef();
+    const { result } = renderRun(ref);
+
+    let running: Promise<void> = Promise.resolve();
+    act(() => {
+      running = result.current.run(FAILING);
+    });
+
+    // The verdict is on screen while `GET /progress` is still pending -- a cold deep-link where the
+    // learner runs before the fetch answers. Waiting the race out here is exactly what would hide
+    // the bug: the write must not be built from a placeholder captured at render time.
+    await waitFor(() => {
+      expect(result.current.result?.passed).toBe(false);
+    });
+
+    await act(async () => {
+      releaseReads();
+      await running;
+    });
+
+    await waitFor(() => {
+      expect(writtenProgress(fetchMock)).toHaveLength(1);
+    });
+    const [write = ''] = writtenProgress(fetchMock);
+    // Not `attempts: 1` and not `solvedAt: null`: overwriting those is silent destruction of a solve.
+    expect(write).toContain('"attempts":5');
+    expect(write).toContain(`"solvedAt":"${String(solvedRecord.solvedAt)}"`);
   });
 
   it('hands the runner the code it was given, against the current challenge', async () => {
