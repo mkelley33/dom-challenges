@@ -124,11 +124,29 @@ function stubEchoingProgressServer(): FetchMock {
 }
 
 /**
- * A progress server whose reads stay pending until the test releases them.
+ * A progress server that answers every read with `records` and echoes every write back.
  *
- * The hazard being reproduced is a race -- a cold deep-link where the learner's first run finishes
- * before `GET /progress` answers -- and a test that lets the read settle first cannot see it. Only
- * reads are gated: by the time the flow issues a write, the test has already released them.
+ * `gate` delays the reads only. Writes are never gated, because by the time the flow issues one
+ * the test that opened the gate has already opened it.
+ */
+function stubProgressServer(records: ProgressRecord[], gate: Promise<void> = Promise.resolve()): FetchMock {
+  const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+    const method = init?.method ?? 'GET';
+    if (method === 'GET') {
+      return gate.then(() => new Response(JSON.stringify(records), { status: 200 }));
+    }
+    return Promise.resolve(new Response(typeof init?.body === 'string' ? init.body : '{}', { status: 200 }));
+  });
+
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+/**
+ * The same server with its reads held until the test releases them.
+ *
+ * The hazard this exists for is a race -- a cold deep-link where the learner's first run finishes
+ * before `GET /progress` answers -- and a test that lets the read settle first cannot see it.
  */
 function stubGatedProgressServer(records: ProgressRecord[]): { fetchMock: FetchMock; releaseReads: () => void } {
   // Definitely assigned: a promise executor runs synchronously, so `reads` cannot exist unresolved.
@@ -137,16 +155,7 @@ function stubGatedProgressServer(records: ProgressRecord[]): { fetchMock: FetchM
     releaseReads = resolve;
   });
 
-  const fetchMock = vi.fn<typeof fetch>((_input, init) => {
-    const method = init?.method ?? 'GET';
-    if (method === 'GET') {
-      return reads.then(() => new Response(JSON.stringify(records), { status: 200 }));
-    }
-    return Promise.resolve(new Response(typeof init?.body === 'string' ? init.body : '{}', { status: 200 }));
-  });
-
-  vi.stubGlobal('fetch', fetchMock);
-  return { fetchMock, releaseReads };
+  return { fetchMock: stubProgressServer(records, reads), releaseReads };
 }
 
 const containers: HTMLDivElement[] = [];
@@ -427,6 +436,29 @@ describe('useChallengeRun', () => {
     // Not `attempts: 1` and not `solvedAt: null`: overwriting those is silent destruction of a solve.
     expect(write).toContain('"attempts":5');
     expect(write).toContain(`"solvedAt":"${String(solvedRecord.solvedAt)}"`);
+  });
+
+  it('keeps a solved challenge solved when a later run fails', async () => {
+    const fetchMock = stubProgressServer([solvedRecord]);
+    const ref = attachedRef();
+    const { result } = renderRun(ref);
+
+    // Reads are ungated here, so the write-time read has the solved row in hand: what this test
+    // pins is the status the write then chooses, not the race the previous test covers.
+    await act(async () => {
+      await result.current.run(FAILING);
+    });
+
+    await waitFor(() => {
+      expect(writtenProgress(fetchMock)).toHaveLength(1);
+    });
+    const [write = ''] = writtenProgress(fetchMock);
+    // Solved is sticky: only an explicit clear un-solves a challenge. The attempt and the code the
+    // learner last ran are still recorded.
+    expect(write).toContain('"status":"solved"');
+    expect(write).toContain('"attempts":5');
+    expect(write).toContain(`"solvedAt":"${String(solvedRecord.solvedAt)}"`);
+    expect(write).toContain(`"lastCode":${JSON.stringify(FAILING)}`);
   });
 
   it('hands the runner the code it was given, against the current challenge', async () => {

@@ -132,7 +132,9 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
         const now = new Date().toISOString();
         writeProgress({
           ...stored,
-          status: next.passed ? 'solved' : 'attempted',
+          // Solved is sticky. A failing re-run is an attempt at an already-solved challenge, not a
+          // regression of it -- clearing progress is the only thing that un-solves.
+          status: next.passed || stored.solvedAt !== null ? 'solved' : 'attempted',
           attempts: stored.attempts + 1,
           // Keep the original solve date: re-running a solved challenge is not a new solve.
           solvedAt: next.passed ? (stored.solvedAt ?? now) : stored.solvedAt,
