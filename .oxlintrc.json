@@ -27,6 +27,29 @@
       "rules": {
         "no-new-func": "off"
       }
+    },
+    {
+      // Enabled implicitly by the "perf" category, which suggests collecting the promises and
+      // awaiting them with `Promise.all`. That is exactly what the harness must not do: every
+      // iteration of the loop resets the one shared host, so running tests concurrently would
+      // destroy the per-test DOM isolation the harness exists to provide. Sequential await is
+      // the requirement, not an oversight.
+      "files": ["src/runner/harness.ts"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    },
+    {
+      // Enabled implicitly by the "suspicious" category. These files are the seam between the
+      // app's realm and the sandbox's, and every value crossing it arrives untyped: happy-dom's
+      // `Window` is structurally distinct from lib.dom's, `new win.Function(...)` is typed only
+      // as `Function`, and a learner's `exports` bag is `Record<string, unknown>`. A narrowing
+      // assertion is the only way to cross those seams, so here the rule reports nothing but
+      // false positives. It stays on everywhere else, including the rest of src/runner.
+      "files": ["src/runner/harness.ts", "src/runner/harness.test.ts", "src/test/**/*.ts"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
+      }
     }
   ]
 }
