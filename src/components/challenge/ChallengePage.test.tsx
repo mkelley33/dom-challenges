@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { challengeBySlug } from '@/challenges/registry';
 import { useEditorStore } from '@/store/editorStore';
 import type { Challenge } from '@/types/challenge';
+import type { ProgressRecord } from '@/types/progress';
 
 import { ChallengePage } from './ChallengePage';
 
@@ -19,6 +20,12 @@ vi.mock('@/lib/monaco', async () => {
   const { createMonacoLibMock } = await import('@/test/monacoMock');
   return createMonacoLibMock();
 });
+
+// Stood in for so that loading shiki -- which the solutions panel does through a dynamic import --
+// is not a race this file has to wait out. `src/lib/highlighter.test.ts` covers the real one.
+vi.mock('@/lib/highlighter', () => ({
+  highlightTypeScript: (code: string) => Promise.resolve(`<pre><code>${code}</code></pre>`),
+}));
 
 function requireChallenge(slug: string): Challenge {
   const challenge = challengeBySlug(slug);
@@ -57,6 +64,72 @@ function testResultItems(): HTMLElement[] {
   return within(screen.getByRole('region', { name: 'Test results' })).getAllByRole('listitem');
 }
 
+interface RecordedCall {
+  url: string;
+  method: string;
+  body: unknown;
+}
+
+const SOLVED: ProgressRecord = {
+  id: 'server-assigned-id',
+  challengeId: first.id,
+  status: 'solved',
+  attempts: 7,
+  solvedAt: '2026-08-08T12:00:00.000Z',
+  revealedAt: null,
+  lastCode: '// the code that solved it',
+  updatedAt: '2026-08-08T12:00:00.000Z',
+};
+
+function jsonResponse(payload: unknown): Response {
+  return new Response(JSON.stringify(payload), { status: 200 });
+}
+
+/** Exhaustive over `RequestInfo | URL`: a bare `String(input)` would stringify a `Request` to junk. */
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  return input instanceof URL ? input.href : input.url;
+}
+
+/** Named so that `release`'s placeholder is not a closure recreated on every stub. */
+const NOT_YET_SETTLED = (): void => {};
+
+/**
+ * Serves `stored` for every progress request, but holds the initial `GET /progress` open until
+ * `settleProgress()` is called -- which is the state a cold deep-link to `/challenge/:slug` is in
+ * for as long as that request is in flight.
+ */
+function stubProgressApi(stored: ProgressRecord[]) {
+  const calls: RecordedCall[] = [];
+  let release = NOT_YET_SETTLED;
+  const settled = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async (input, init) => {
+      const url = requestUrl(input);
+      const method = init?.method ?? 'GET';
+      const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+      calls.push({ url, method, body });
+
+      // Only the unfiltered list read: the `?challengeId=` lookup belongs to a write that has
+      // already resolved its record, so gating it would prove nothing.
+      if (method === 'GET' && url.endsWith('/progress')) await settled;
+
+      return method === 'GET' ? jsonResponse(stored) : jsonResponse(body);
+    }),
+  );
+
+  return {
+    calls,
+    settleProgress: (): void => {
+      release();
+    },
+  };
+}
+
 beforeEach(() => {
   useEditorStore.setState({ drafts: {} });
   vi.stubGlobal(
@@ -77,8 +150,8 @@ describe('ChallengePage', () => {
     expect(await screen.findByRole('heading', { level: 1, name: first.title })).toBeInTheDocument();
 
     const names = screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'));
-    expect(names).toHaveLength(4);
-    expect(names).toEqual(expect.arrayContaining(['Problem', 'Code editor', 'Preview', 'Test results']));
+    expect(names).toHaveLength(5);
+    expect(names).toEqual(expect.arrayContaining(['Problem', 'Code editor', 'Preview', 'Test results', 'Solutions']));
     // EditorPanel already labels itself; a wrapper labelled "Code" around it would nest two
     // differently-named regions over the same content.
     expect(names.filter((name) => name === 'Code')).toHaveLength(0);
@@ -178,5 +251,43 @@ describe('ChallengePage', () => {
     const items = testResultItems();
     expect(items).toHaveLength(first.tests.length);
     expect(items.filter((item) => /failed/i.test(item.textContent ?? '')).length).toBeGreaterThan(0);
+  });
+
+  it('hands the solutions panel the stored record, so an earlier solve needs no reveal', async () => {
+    const { settleProgress } = stubProgressApi([SOLVED]);
+    settleProgress();
+
+    renderChallengePage(first.slug);
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Other approaches' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reveal solution' })).not.toBeInTheDocument();
+  });
+
+  it('reveals onto the stored record rather than the placeholder when the progress read is still in flight', async () => {
+    const user = userEvent.setup();
+    const { calls, settleProgress } = stubProgressApi([SOLVED]);
+
+    renderChallengePage(first.slug);
+
+    // The page has no record yet -- only `emptyProgress` -- so the panel is locked and the reveal
+    // is offered. This is exactly the window in which a render-time spread would be destructive.
+    await user.click(await screen.findByRole('button', { name: 'Reveal solution' }));
+    await user.click(await screen.findByRole('button', { name: 'Yes, reveal it' }));
+
+    settleProgress();
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'PATCH')).toBe(true);
+    });
+
+    const patch = calls.find((call) => call.method === 'PATCH');
+    expect(patch?.url).toContain(`/progress/${SOLVED.id}`);
+    // Everything the learner had earned survives the reveal. A write built from the placeholder
+    // would send `attempts: 0`, `status: 'unattempted'` and `solvedAt: null` instead.
+    expect(patch?.body).toEqual({
+      ...SOLVED,
+      revealedAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
   });
 });
