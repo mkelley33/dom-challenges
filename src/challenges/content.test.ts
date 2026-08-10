@@ -72,5 +72,15 @@ describe('challenge content', () => {
         expect(solution.tradeoffs.length, `${challenge.slug}/${solution.label}: no tradeoffs`).toBeGreaterThan(0);
       }
     });
+
+    it('gives every solution a distinct label', () => {
+      const labels = challenge.solutions.map((solution) => solution.label);
+      // Not a style rule: `SolutionsPanel` keys both the React list and the Tabs `value` on the
+      // label, so a duplicate collides twice over -- one tab silently swallows the other's panel,
+      // and the solution behind it becomes unreachable. Content is what has to hold this line,
+      // because the panel cannot tell a duplicate from a repeat visit to the same tab.
+      expect(labels.length, `${challenge.slug}: ships no solutions`).toBeGreaterThan(0);
+      expect(new Set(labels).size, `${challenge.slug}: two solutions share a label`).toBe(labels.length);
+    });
   });
 });
