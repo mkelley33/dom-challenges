@@ -143,6 +143,38 @@ function stubProgressServer(records: ProgressRecord[], gate: Promise<void> = Pro
 }
 
 /**
+ * `apiFetch` always calls `fetch` with a string; the other two forms exist only because `fetch`'s
+ * own type allows them. Narrowed on a property rather than with `instanceof`, which is unreliable
+ * under happy-dom's shared class table.
+ */
+function requestUrl(input: Parameters<typeof fetch>[0]): string {
+  if (typeof input === 'string') return input;
+  return 'url' in input ? input.url : input.href;
+}
+
+/**
+ * A progress server whose collection read fails, and whose every other request works.
+ *
+ * Only `GET /progress` -- the read the flow builds its write from -- answers 500. `saveProgress`'s
+ * own `?challengeId=` lookup and the write itself still succeed, deliberately: a stub that broke
+ * every request would make "nothing was written" hold because the write *failed*, not because it
+ * was skipped, and would pass just as happily against a flow that writes a placeholder.
+ */
+function stubFailingProgressRead(): FetchMock {
+  const fetchMock = vi.fn<typeof fetch>((input, init) => {
+    const method = init?.method ?? 'GET';
+    const isCollectionRead = method === 'GET' && !requestUrl(input).includes('?');
+    if (isCollectionRead) {
+      return Promise.resolve(new Response('{}', { status: 500 }));
+    }
+    return Promise.resolve(new Response(typeof init?.body === 'string' ? init.body : '[]', { status: 200 }));
+  });
+
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+/**
  * The same server with its reads held until the test releases them.
  *
  * The hazard this exists for is a race -- a cold deep-link where the learner's first run finishes
@@ -476,6 +508,29 @@ describe('useChallengeRun', () => {
     // Not `attempts: 1` and not `solvedAt: null`: overwriting those is silent destruction of a solve.
     expect(write).toContain('"attempts":5');
     expect(write).toContain(`"solvedAt":"${String(solvedRecord.solvedAt)}"`);
+  });
+
+  it('records nothing, and reports nothing, when the prior record cannot be read', async () => {
+    const fetchMock = stubFailingProgressRead();
+    const ref = attachedRef();
+    const { result } = renderRun(ref);
+
+    await act(async () => {
+      await result.current.run(FAILING);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isRunning).toBe(false);
+    });
+
+    // Nothing is written at all. A record that cannot be read cannot be safely rewritten, and the
+    // placeholder a friendlier fallback would reach for is exactly what destroys a solve.
+    expect(writtenProgress(fetchMock)).toHaveLength(0);
+    // The read failure stays invisible: the run itself really did produce this verdict, and a
+    // progress fetch the learner never asked for must not be reported as their code failing.
+    expect(result.current.result?.passed).toBe(false);
+    expect(result.current.result?.results).toHaveLength(1);
+    expect(result.current.result?.error).toBeNull();
   });
 
   it('keeps a solved challenge solved when a later run fails', async () => {
