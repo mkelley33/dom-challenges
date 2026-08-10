@@ -152,7 +152,7 @@ describe('expect', () => {
         caught = error;
       }
       if (!(caught instanceof AssertionError)) throw caught;
-      vitestExpect(caught.message).toBe('Expected <p> to benull null');
+      vitestExpect(caught.message).toBe('Expected <p> to be null null');
     });
   });
 
@@ -173,6 +173,21 @@ describe('expect', () => {
         expect(el).toHaveTextContent('hi');
       }).not.toThrow();
     });
+  });
+
+  it('reads a multi-word matcher name back as words', () => {
+    // The learner reads this sentence when their code is wrong, so it has to be a sentence:
+    // lowercasing the matcher name whole turned `toHaveClass` into `haveclass`.
+    document.body.innerHTML = '<p id="t" class="a"></p>';
+    let caught: unknown;
+    try {
+      expect(document.getElementById('t')).toHaveClass('missing');
+      throw new Error('should have thrown');
+    } catch (error) {
+      caught = error;
+    }
+    if (!(caught instanceof AssertionError)) throw caught;
+    vitestExpect(caught.message).toBe('Expected <p> to have class "missing"');
   });
 
   it('describes function values using their source text, not [object Function]', () => {

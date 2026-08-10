@@ -99,13 +99,25 @@ function lengthOf(value: unknown): number | null {
   return null;
 }
 
+/**
+ * Reads a matcher name back as the words of the sentence a learner sees: `toHaveClass` becomes
+ * `have class`. The split on capitals has to come before lowercasing -- doing it the other way
+ * round is what produced `Expected <p> to haveclass "x"`.
+ */
+function matcherPhrase(name: string): string {
+  return name
+    .replace(/^to/, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase();
+}
+
 function createMatchers(actual: unknown, negated: boolean): Matchers {
   const check = (name: string, passed: boolean, expected: unknown): void => {
     if (passed !== negated) return;
     const matcher = negated ? `not.${name}` : name;
     const verb = negated ? 'not to' : 'to';
     throw new AssertionError(
-      `Expected ${describeValue(actual)} ${verb} ${name.replace(/^to/, '').toLowerCase()} ${describeValue(expected)}`,
+      `Expected ${describeValue(actual)} ${verb} ${matcherPhrase(name)} ${describeValue(expected)}`,
       { matcher, expected, actual },
     );
   };
