@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMemoryHost } from '@/test/createMemoryHost';
 import type { Challenge } from '@/types/challenge';
 
-import type { HostHandle } from './harness';
-import { runChallenge } from './harness';
+import type { HostContext, HostHandle } from './harness';
+import { renderPreview, runChallenge } from './harness';
 
 /**
  * `runChallenge` leaves host lifecycle to its caller on purpose -- Task 11 keeps the DOM alive to
@@ -24,6 +24,42 @@ afterEach(() => {
   for (const host of openHosts) host.dispose();
   openHosts.length = 0;
 });
+
+interface RecordedHost {
+  host: HostHandle;
+  /** The context handed back by the most recent `reset`, or null if there has not been one. */
+  current: () => HostContext | null;
+  resetCount: () => number;
+}
+
+/**
+ * A host that remembers the context its last `reset` produced.
+ *
+ * `HostHandle` deliberately exposes no way to read the live document back -- the harness only ever
+ * needs the context `reset` returns -- but `renderPreview`'s entire contract is about what it
+ * *leaves behind* in that document. Calling `reset` again to look would rebuild the document and
+ * destroy the very evidence, which is why the assertions below read through this recorder instead.
+ */
+function recordingHost(): RecordedHost {
+  const inner = memoryHost();
+  let current: HostContext | null = null;
+  let resetCount = 0;
+
+  return {
+    host: {
+      async reset(html: string): Promise<HostContext> {
+        resetCount += 1;
+        current = await inner.reset(html);
+        return current;
+      },
+      dispose: () => {
+        inner.dispose();
+      },
+    },
+    current: () => current,
+    resetCount: () => resetCount,
+  };
+}
 
 function makeChallenge(overrides: Partial<Challenge> = {}): Challenge {
   return {
@@ -263,5 +299,79 @@ describe('runChallenge', () => {
       { modules: { 'fake-mod': { seven: 7 } } },
     );
     expect(result.passed).toBe(true);
+  });
+});
+
+describe('renderPreview', () => {
+  it('leaves the dom the submitted code produced in the host', async () => {
+    const { host, current } = recordingHost();
+
+    const error = await renderPreview(
+      makeChallenge(),
+      'document.getElementById("target")?.classList.add("found");',
+      host,
+    );
+
+    expect(error).toBeNull();
+    const context = current();
+    // Without this the assertion below would read through `?.` on a null context and pass
+    // vacuously against a `renderPreview` that never reset the host at all.
+    expect(context).not.toBeNull();
+    expect(context?.document.getElementById('target')?.classList.contains('found')).toBe(true);
+  });
+
+  it('renders into a document rebuilt from the challenge html, not whatever the last run left', async () => {
+    const { host, current } = recordingHost();
+
+    const first = await host.reset(makeChallenge().html);
+    first.document.body.append(first.document.createElement('span'));
+
+    await renderPreview(makeChallenge(), '// does nothing', host);
+
+    const context = current();
+    expect(context).not.toBeNull();
+    expect(context).not.toBe(first);
+    expect(context?.document.querySelectorAll('span')).toHaveLength(0);
+    expect(context?.document.getElementById('target')).not.toBeNull();
+  });
+
+  it('reports a transpile error without disturbing the preview already on screen', async () => {
+    const { host, current, resetCount } = recordingHost();
+
+    const seeded = await host.reset(makeChallenge().html);
+    seeded.document.getElementById('target')?.classList.add('found');
+
+    const error = await renderPreview(makeChallenge(), 'const = = =;', host);
+
+    expect(error?.phase).toBe('transpile');
+    // A syntax error mid-typing must not blank the preview the learner is looking at.
+    expect(resetCount()).toBe(1);
+    expect(current()?.document.getElementById('target')?.classList.contains('found')).toBe(true);
+  });
+
+  it('reports an execute error and still leaves the seeded document in the host', async () => {
+    const { host, current } = recordingHost();
+
+    const error = await renderPreview(makeChallenge(), 'throw new Error("boom");', host);
+
+    expect(error?.phase).toBe('execute');
+    // Read off the thrown object rather than through `String(error)`, which would report
+    // "Error: boom" here and a bare "boom" for a same-realm throw.
+    expect(error?.message).toBe('boom');
+    expect(current()?.document.getElementById('target')).not.toBeNull();
+  });
+
+  it('supplies injected modules to the previewed code', async () => {
+    const { host, current } = recordingHost();
+
+    const error = await renderPreview(
+      makeChallenge(),
+      'import { label } from "fake-mod";\ndocument.getElementById("target")!.textContent = label;',
+      host,
+      { modules: { 'fake-mod': { label: 'from the module' } } },
+    );
+
+    expect(error).toBeNull();
+    expect(current()?.document.getElementById('target')?.textContent).toBe('from the module');
   });
 });

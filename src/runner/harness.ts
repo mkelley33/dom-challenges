@@ -201,3 +201,32 @@ export async function runChallenge(
 
   return { passed: results.length > 0 && results.every((result) => result.passed), results, error: null };
 }
+
+/**
+ * Renders the submitted code once into a clean host, for display rather than assertion.
+ *
+ * `runChallenge` rebuilds the document before every test, so when it returns the frame holds
+ * whatever the *last* test left behind -- a half-mutated DOM that is a confusing thing to show a
+ * learner. One final reset-and-execute afterwards leaves the preview showing the DOM their code
+ * actually produces.
+ *
+ * A transpile failure returns before touching the host on purpose: a syntax error mid-edit must
+ * not blank the preview that is already on screen.
+ */
+export async function renderPreview(
+  challenge: Challenge,
+  code: string,
+  host: HostHandle,
+  options: RunOptions = {},
+): Promise<RunError | null> {
+  const transpiled = transpile(code);
+  if (!transpiled.ok) return { phase: 'transpile', message: transpiled.message };
+
+  const context = await host.reset(challenge.html);
+  try {
+    evaluate(context.window, transpiled.code, options.modules ?? {});
+    return null;
+  } catch (error) {
+    return { phase: 'execute', message: messageOf(error) };
+  }
+}
