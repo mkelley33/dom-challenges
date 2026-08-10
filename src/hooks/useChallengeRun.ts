@@ -1,15 +1,12 @@
-import { useQueryClient } from '@tanstack/react-query';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { fetchAllProgress } from '@/api/progress';
 import type { HostHandle, RunResult } from '@/runner/harness';
 import { renderPreview, runChallenge } from '@/runner/harness';
 import { createIframeHost, HostDisposedError } from '@/runner/iframeHost';
 import type { Challenge } from '@/types/challenge';
-import type { ProgressRecord } from '@/types/progress';
 
-import { findChallengeProgress, PROGRESS_QUERY_KEY, useSaveProgress } from './useProgress';
+import { useSaveProgress, useStoredProgress } from './useProgress';
 
 export interface ChallengeRun {
   result: RunResult | null;
@@ -49,7 +46,7 @@ function describeError(error: unknown): string {
  * remount -- so it is swallowed: nothing is shown and nothing is recorded.
  *
  * *Losing a solve.* A progress write sends the whole record, not a delta, so it is only safe once
- * the record it is built from is known. See `readStoredProgress`.
+ * the record it is built from is known. See `useStoredProgress`.
  */
 export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HTMLDivElement | null>): ChallengeRun {
   const [result, setResult] = useState<RunResult | null>(null);
@@ -57,7 +54,7 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
   const hostRef = useRef<HostHandle | null>(null);
   const runIdRef = useRef(0);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
-  const queryClient = useQueryClient();
+  const readStoredProgress = useStoredProgress(challenge.id);
   const { mutate: writeProgress } = useSaveProgress();
 
   useEffect(() => {
@@ -72,27 +69,6 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
       hostRef.current = null;
     };
   }, [challenge.id]);
-
-  /**
-   * The stored record for this challenge, read once the progress query has settled, or `null` when
-   * it cannot be established.
-   *
-   * Reading it out of a render-time closure is what made a cold deep-link destructive: on
-   * `/challenge/:slug` the `GET /progress` is still in flight when a quick first run finishes, so
-   * the closure still holds `emptyProgress(...)` -- and because `useSaveProgress` sends the whole
-   * record body rather than a delta, writing that placeholder erases a real solve.
-   * `ensureQueryData` serves the cache when it has data and joins the fetch already in flight when
-   * it does not.
-   */
-  const readStoredProgress = useCallback(async (): Promise<ProgressRecord | null> => {
-    try {
-      const records = await queryClient.ensureQueryData({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress });
-      return findChallengeProgress(records, challenge.id);
-    } catch {
-      // Skipping the write costs one attempt count; writing over an unknown record costs the solve.
-      return null;
-    }
-  }, [challenge.id, queryClient]);
 
   const execute = useCallback(
     async (code: string, runId: number): Promise<void> => {

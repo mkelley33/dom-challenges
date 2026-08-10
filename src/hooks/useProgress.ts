@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { deleteProgress, fetchAllProgress, saveProgress } from '@/api/progress';
 import type { ProgressRecord } from '@/types/progress';
@@ -36,6 +37,34 @@ export function findChallengeProgress(records: ProgressRecord[] | undefined, cha
 export function useChallengeProgress(challengeId: string): ProgressRecord {
   const { data } = useProgressQuery();
   return findChallengeProgress(data, challengeId);
+}
+
+/**
+ * Returns a reader for this challenge's stored record: the settled record, or `null` when it cannot
+ * be established.
+ *
+ * Every write sends a whole record rather than a delta, so a write is only safe once the record it
+ * is built on is known. Reading that record out of a render-time closure is what made a cold
+ * deep-link destructive: on `/challenge/:slug` the `GET /progress` is still in flight when a quick
+ * first interaction lands, so the closure still holds `emptyProgress(...)` -- and writing that
+ * placeholder erases a real solve. `ensureQueryData` serves the cache when it has data and joins
+ * the fetch already in flight when it does not.
+ *
+ * Shared by every writer (the run flow, the reveal) rather than reimplemented per call site: two
+ * copies of this would be two chances to drift back into the destructive version.
+ */
+export function useStoredProgress(challengeId: string): () => Promise<ProgressRecord | null> {
+  const queryClient = useQueryClient();
+
+  return useCallback(async (): Promise<ProgressRecord | null> => {
+    try {
+      const records = await queryClient.ensureQueryData({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress });
+      return findChallengeProgress(records, challengeId);
+    } catch {
+      // Skipping the write costs one interaction; writing over an unknown record costs the solve.
+      return null;
+    }
+  }, [challengeId, queryClient]);
 }
 
 export function useSaveProgress(): UseMutationResult<
