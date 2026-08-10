@@ -44,7 +44,7 @@ export const queryBasics: Challenge = {
   solutions: [
     {
       label: 'getElementById',
-      code: ['const target = document.getElementById("target");', 'target?.classList.add("found");'].join('\n'),
+      code: ["const target = document.getElementById('target');", "target?.classList.add('found');"].join('\n'),
       explanation: [
         '`getElementById` is the most direct route to a unique element. It returns',
         '`HTMLElement | null`, so the optional chain is not defensive noise — it is the',
@@ -61,7 +61,7 @@ export const queryBasics: Challenge = {
     },
     {
       label: 'querySelector',
-      code: ['const target = document.querySelector("#target");', 'target?.classList.add("found");'].join('\n'),
+      code: ["const target = document.querySelector('#target');", "target?.classList.add('found');"].join('\n'),
       explanation: [
         '`querySelector` takes any CSS selector and returns the first match. Using one API',
         'for ids, classes, attributes, and structural selectors keeps calling code uniform.',
