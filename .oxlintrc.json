@@ -54,6 +54,20 @@
       }
     },
     {
+      // Enabled implicitly by the "suspicious" category, and correct about the mechanics: a type
+      // parameter used only in return position is `as T` written as a function, which is exactly
+      // what `TestContext.fn` is. That is the point of it. Submitted code is typed `unknown` by
+      // construction -- nothing is known about it until it runs -- so the unsound step has to
+      // happen somewhere, and the choice is between one occurrence here and one in every challenge
+      // module that calls an export. The rule's own remedy (return `unknown`, let the caller
+      // assert) *is* the ~100-file pattern this accessor exists to delete. Listed rather than
+      // globbed, and limited to the declaration and its single implementation.
+      "files": ["src/types/challenge.ts", "src/runner/harness.ts"],
+      "rules": {
+        "typescript/no-unnecessary-type-parameters": "off"
+      }
+    },
+    {
       // The same `exports`-bag seam as above, on the content side. A challenge test receives the
       // learner's exports as `Readonly<Record<string, unknown>>`, and the challenge is the only
       // place that knows the signature the prompt asked for, so asserting it is how the test calls

@@ -84,6 +84,35 @@ function evaluate(
   return moduleObject.exports;
 }
 
+/**
+ * Builds the `ctx.fn` accessor: the single seam where a learner's untyped exports become the
+ * typed value a challenge test calls.
+ *
+ * The assertion is unavoidable -- `exports` is `Record<string, unknown>` because nothing about
+ * submitted code is known until it runs -- but it belongs here rather than in the challenge
+ * files. Narrowing with `typeof value === 'function'` instead would not help: that widens to
+ * `Function`, whose call returns `any`.
+ *
+ * A missing export throws rather than handing back `undefined`, for the same reason the `require`
+ * shim above names the module it cannot supply. `undefined` would surface several frames later as
+ * "undefined is not a function" inside a challenge test, pointing the learner at the harness
+ * instead of at the `export` keyword they left off.
+ */
+function createExportAccessor(exports: Record<string, unknown>): <T>(name: string) => T {
+  return <T>(name: string): T => {
+    const value = exports[name];
+    if (value === undefined) {
+      const exported = Object.keys(exports);
+      const detail =
+        exported.length > 0
+          ? `It exports: ${exported.join(', ')}.`
+          : 'It exports nothing yet — did you forget the `export` keyword?';
+      throw new Error(`Your code does not export "${name}". ${detail}`);
+    }
+    return value as T;
+  };
+}
+
 async function withTimeout(work: Promise<void>, ms: number, name: string): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -139,6 +168,7 @@ export async function runChallenge(
             win: context.window,
             expect,
             exports,
+            fn: createExportAccessor(exports),
             tick: createTick(context.window),
             fire: createEventHelpers(context.window),
           }),

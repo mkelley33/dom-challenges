@@ -107,6 +107,63 @@ describe('runChallenge', () => {
     expect(result.passed).toBe(true);
   });
 
+  it('hands a named export to a test through the typed accessor', async () => {
+    const challenge = makeChallenge({
+      tests: [
+        {
+          name: 'calls double',
+          run: ({ fn, expect: assert }) => {
+            assert(fn<(n: number) => number>('double')(4)).toBe(8);
+          },
+        },
+      ],
+    });
+    const result = await runChallenge(challenge, 'export const double = (n: number): number => n * 2;', memoryHost());
+    expect(result.results[0]?.message).toBeNull();
+    expect(result.passed).toBe(true);
+  });
+
+  it('fails the test by name when the code does not export what the challenge asked for', async () => {
+    const challenge = makeChallenge({
+      tests: [
+        {
+          name: 'calls measure',
+          run: ({ fn }) => {
+            fn<() => number>('measure')();
+          },
+        },
+      ],
+    });
+    const result = await runChallenge(challenge, 'export const measur = (): number => 1;', memoryHost());
+    // A missing export is one test's failure, not a broken run: the other tests still have
+    // something to say, and the content suite distinguishes "ran and failed" from "never ran".
+    expect(result.error).toBeNull();
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]?.passed).toBe(false);
+    // The exact wording matters for the same reason it does for the `require` shim: without it a
+    // typo'd export name surfaces as "undefined is not a function" from inside the challenge test.
+    expect(result.results[0]?.message).toBe('Your code does not export "measure". It exports: measur.');
+    // Not an assertion failure, so there is no expected/actual pair for the UI to render.
+    expect(result.results[0]?.detail).toBeNull();
+  });
+
+  it('points at the missing export keyword when the code exports nothing at all', async () => {
+    const challenge = makeChallenge({
+      tests: [
+        {
+          name: 'calls measure',
+          run: ({ fn }) => {
+            fn<() => number>('measure')();
+          },
+        },
+      ],
+    });
+    const result = await runChallenge(challenge, 'const measure = (): number => 1;', memoryHost());
+    expect(result.results[0]?.message).toBe(
+      'Your code does not export "measure". It exports nothing yet — did you forget the `export` keyword?',
+    );
+  });
+
   it('isolates tests from one another with a fresh dom per test', async () => {
     const challenge = makeChallenge({
       tests: [

@@ -29,6 +29,18 @@ export interface TestContext {
   win: Window & typeof globalThis;
   expect: (actual: unknown) => Matchers;
   exports: Readonly<Record<string, unknown>>;
+  /**
+   * Reads a named export from the submitted code as `T`.
+   *
+   * This is how a challenge test reaches the function the prompt asked for. The alternative --
+   * asserting a type onto `exports` in the challenge file -- is an unsafe assertion repeated in
+   * every one of ~100 challenge modules; here the one unavoidable assertion lives in the harness,
+   * at the seam that already owns the boundary with the submitted code.
+   *
+   * Throws with a message naming the missing export when the code does not export `name`, so a
+   * typo fails the test as "you did not export this" rather than as "undefined is not a function".
+   */
+  fn: <T>(name: string) => T;
   tick: () => Promise<void>;
   fire: EventHelpers;
 }
