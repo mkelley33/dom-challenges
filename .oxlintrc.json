@@ -85,6 +85,21 @@
       "rules": {
         "typescript/no-unsafe-type-assertion": "off"
       }
+    },
+    {
+      // Enabled implicitly by the "correctness" category. `import/default` resolves a module's
+      // physical exports to check the import against them, but `?worker` is a Vite-only query
+      // suffix: Vite's worker plugin synthesizes a default export (a Worker constructor) for it
+      // at build/transform time, and the raw `editor.worker.js`/`ts.worker.js` files it points at
+      // have no such export on disk. `tsc` accepts these imports (via vite/client's `*?worker`
+      // ambient module declarations) and `vite build` actually resolves and chunks them --
+      // oxlint's static resolver is simply the one part of the toolchain that does not know this
+      // Vite-specific convention. Listed rather than globbed, and limited to the one file with
+      // `?worker` imports.
+      "files": ["src/lib/monaco.ts"],
+      "rules": {
+        "import/default": "off"
+      }
     }
   ]
 }
