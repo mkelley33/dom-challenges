@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { API_BASE_URL } from '@/api/client';
+import { fetchAllProgress } from '@/api/progress';
 import type { ProgressRecord } from '@/types/progress';
 
 import {
@@ -149,6 +150,54 @@ describe('useSaveProgress', () => {
     const [postUrl, postInit] = fetchMock.mock.calls[1] ?? [];
     expect(postUrl).toBe(`${API_BASE_URL}/progress`);
     expect(postInit?.method).toBe('POST');
+  });
+
+  it('refreshes the cache from the server after a create, with nothing observing the query', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+    const next: ProgressRecord = {
+      id: 'closest-row',
+      challengeId: 'closest-row',
+      status: 'attempted',
+      attempts: 1,
+      solvedAt: null,
+      revealedAt: null,
+      lastCode: 'code',
+      updatedAt: '2026-08-09T11:00:00.000Z',
+    };
+    // json-server discards the client's `id` on create and assigns its own, so the optimistic
+    // record's `id` -- which `emptyProgress` sets to the challenge id -- is not a real row id. Only
+    // a read-back replaces it, and `useClearProgress` DELETEs by exactly this value.
+    const created: ProgressRecord = { ...next, id: 'id-the-server-chose' };
+
+    let rows: ProgressRecord[] = [];
+    const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+      if ((init?.method ?? 'GET') === 'POST') {
+        rows = [created];
+        return Promise.resolve(new Response(JSON.stringify(created), { status: 201 }));
+      }
+      // Answers saveProgress's existence lookup (still empty at that point, so the write takes the
+      // create path) and the collection read alike.
+      return Promise.resolve(new Response(JSON.stringify(rows), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Seeded the way the run flow seeds it -- imperatively, carrying the queryFn, with no component
+    // subscribed. An invalidation left on its 'active' default refetches nothing in this state.
+    await client.ensureQueryData({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress });
+
+    const { result } = renderHook(() => useSaveProgress(), { wrapper: wrapperFor(client) });
+    result.current.mutate(next);
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    await waitFor(() => {
+      const cached = client.getQueryData<ProgressRecord[]>(PROGRESS_QUERY_KEY) ?? [];
+      expect(cached).toHaveLength(1);
+      expect(cached[0]?.id).toBe('id-the-server-chose');
+    });
   });
 
   it('rolls back the optimistic update when the save fails', async () => {

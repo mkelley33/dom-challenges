@@ -59,7 +59,13 @@ export function useSaveProgress(): UseMutationResult<
       if (context) queryClient.setQueryData(PROGRESS_QUERY_KEY, context.previous);
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY });
+      // `refetchType: 'all'`, not the 'active' default: the run flow reads this query imperatively
+      // through `ensureQueryData`, so on the challenge page there is no observer and an 'active'
+      // invalidation would refetch nothing at all. The optimistic record would then be the only one
+      // in the cache -- and on a create it carries the `id` this client made up, which json-server
+      // discarded in favour of its own. Anything later keying off that id (a DELETE, say) would aim
+      // at a row that does not exist. One GET per write is the price of the cache telling the truth.
+      void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY, refetchType: 'all' });
     },
   });
 }
