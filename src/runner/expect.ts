@@ -45,7 +45,7 @@ function describeValue(value: unknown): string {
     case 'symbol':
       return value.toString();
     case 'function':
-      return Object.prototype.toString.call(value);
+      return String(value);
     case 'object':
       if (value instanceof Element) return `<${value.tagName.toLowerCase()}>`;
       try {

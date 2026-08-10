@@ -2,6 +2,8 @@ import { describe, it, expect as vitestExpect } from 'vitest';
 
 import { AssertionError, expect } from './expect';
 
+const describeValueFixtureFn = (): undefined => undefined;
+
 describe('expect', () => {
   it('passes toBe on identical primitives', () => {
     vitestExpect(() => {
@@ -76,6 +78,19 @@ describe('expect', () => {
     vitestExpect(() => {
       expect(el).toHaveAttribute('data-x', '1');
     }).not.toThrow();
+  });
+
+  it('describes function values using their source text, not [object Function]', () => {
+    let caught: unknown;
+    try {
+      expect(describeValueFixtureFn).toBe(null);
+      throw new Error('should have thrown');
+    } catch (error) {
+      caught = error;
+    }
+    vitestExpect(caught).toBeInstanceOf(AssertionError);
+    if (!(caught instanceof AssertionError)) throw caught;
+    vitestExpect(caught.message).toBe(`Expected ${String(describeValueFixtureFn)} to be null`);
   });
 
   it('supports toThrow', () => {
