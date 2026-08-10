@@ -84,6 +84,16 @@ describe('ResultPanel', () => {
     expect(items[0]).not.toHaveTextContent('Expected length 1 but received 3');
   });
 
+  it('does not claim a test count when nothing ran', () => {
+    render(<ResultPanel result={compileFailure} isRunning={false} />);
+
+    // "0 of 0 tests passing" above an error reads as a verdict on the learner's code, when in fact
+    // no test was ever reached. The paragraph below carries the detail; the summary must not
+    // pretend to score a run that never happened.
+    expect(screen.getByRole('status')).not.toHaveTextContent('0 of 0 tests passing');
+    expect(screen.getByRole('status')).toHaveTextContent(/no tests ran/i);
+  });
+
   it('labels a transpile failure as a compile problem and shows the compiler message', () => {
     render(<ResultPanel result={compileFailure} isRunning={false} />);
 

@@ -8,6 +8,9 @@ export interface ResultPanelProps {
 function summarise(result: RunResult | null, isRunning: boolean): string {
   if (isRunning) return 'Running tests…';
   if (!result) return 'Not run yet';
+  // An error result means the run never reached a test, so there is no score to announce -- "0 of 0
+  // tests passing" would read as a verdict on code that was never measured.
+  if (result.error) return 'No tests ran';
 
   const passedCount = result.results.filter((entry) => entry.passed).length;
   return `${String(passedCount)} of ${String(result.results.length)} tests passing`;
