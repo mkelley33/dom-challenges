@@ -5,6 +5,7 @@ import { challengeBySlug } from '@/challenges/registry';
 import { NotFound } from '@/components/NotFound';
 import { useChallengeRun } from '@/hooks/useChallengeRun';
 import { useChallengeProgress, useSaveProgress, useStoredProgress } from '@/hooks/useProgress';
+import { solutionAccess } from '@/lib/solutionAccess';
 import { useEditorStore } from '@/store/editorStore';
 import type { Challenge } from '@/types/challenge';
 
@@ -62,13 +63,19 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
       const stored = await readStoredProgress();
       if (stored === null) return;
 
+      // The settled record may already be unlocked, in which case the button that got us here was
+      // offered by a panel rendering the `emptyProgress` placeholder -- it did not know yet. Two
+      // things hide behind this one check, and `solutionAccess` is where both are defined:
+      //
+      //  - an unaided solve. Stamping `revealedAt` on it drops `earned` to false permanently, and
+      //    no control in the app puts it back. An irreversible mislabel of an achievement, caused
+      //    by an action the app offered only because it had not finished loading.
+      //  - an earlier reveal. First reveal wins: a second click is the same decision, not a later
+      //    one, and rewriting the timestamp would move a moment that already happened.
+      if (solutionAccess(stored).unlocked) return;
+
       const now = new Date().toISOString();
-      writeProgress({
-        ...stored,
-        // First reveal wins: a second click is the same decision, not a later one.
-        revealedAt: stored.revealedAt ?? now,
-        updatedAt: now,
-      });
+      writeProgress({ ...stored, revealedAt: now, updatedAt: now });
     };
 
     void reveal();
