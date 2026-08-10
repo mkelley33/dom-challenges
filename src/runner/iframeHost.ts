@@ -21,6 +21,19 @@ function documentFor(html: string): string {
 }
 
 /**
+ * Rejects a `reset` whose frame was torn down before it ever loaded.
+ *
+ * Its own class rather than a bare `Error` so a caller can tell "the run was cancelled" from
+ * "the frame failed", and report the first as nothing at all.
+ */
+export class HostDisposedError extends Error {
+  constructor() {
+    super('The preview frame was torn down before it finished loading.');
+    this.name = 'HostDisposedError';
+  }
+}
+
+/**
  * A HostHandle backed by a same-origin srcdoc iframe.
  *
  * No `sandbox` attribute: the harness needs to pass live function references and read
@@ -29,10 +42,21 @@ function documentFor(html: string): string {
  */
 export function createIframeHost(container: HTMLElement): HostHandle {
   let frame: HTMLIFrameElement | null = null;
+  // The `reject` of a `reset` that has not settled yet, if there is one.
+  let cancelPending: ((error: Error) => void) | null = null;
 
+  /**
+   * Removing a frame means its `load` will never fire, so tearing one down while its `reset` is
+   * still waiting would strand that promise forever -- and `runChallenge` awaits `reset`
+   * unguarded, so a caller that set a "running" flag before the call would never clear it.
+   * Whoever removes the frame therefore owns settling the promise that was waiting on it.
+   */
   const destroy = (): void => {
     frame?.remove();
     frame = null;
+    const cancel = cancelPending;
+    cancelPending = null;
+    cancel?.(new HostDisposedError());
   };
 
   return {
@@ -42,6 +66,8 @@ export function createIframeHost(container: HTMLElement): HostHandle {
       destroy();
 
       return new Promise<HostContext>((resolve, reject) => {
+        cancelPending = reject;
+
         const next = document.createElement('iframe');
         next.title = 'Challenge preview';
         next.className = 'h-full w-full border-0 bg-white';
@@ -49,6 +75,7 @@ export function createIframeHost(container: HTMLElement): HostHandle {
         next.addEventListener(
           'load',
           () => {
+            cancelPending = null;
             const { contentWindow, contentDocument } = next;
             if (!contentWindow || !contentDocument) {
               reject(new Error('The preview frame did not initialise.'));

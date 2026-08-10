@@ -4,7 +4,7 @@ import type { Challenge } from '@/types/challenge';
 
 import type { HostHandle } from './harness';
 import { runChallenge } from './harness';
-import { createIframeHost } from './iframeHost';
+import { createIframeHost, HostDisposedError } from './iframeHost';
 
 interface Mounted {
   container: HTMLDivElement;
@@ -209,6 +209,21 @@ describe('createIframeHost', () => {
     host.dispose();
 
     expect(container.querySelectorAll('iframe')).toHaveLength(0);
+  });
+
+  it('settles an in-flight reset when the host is disposed', async () => {
+    // Detached again, so the reset is genuinely in flight under happy-dom as well as in a
+    // browser. `dispose` removes the frame, and a removed frame never fires `load` -- so unless
+    // `dispose` settles the promise itself, everything awaiting it waits forever: `runChallenge`
+    // never returns, and a component that clears its "running" flag in a `finally` never clears
+    // it. Reachable by navigating away mid-run, or by StrictMode's mount/cleanup/remount.
+    const detached = document.createElement('div');
+    const host = createIframeHost(detached);
+
+    const pending = host.reset('<p></p>');
+    host.dispose();
+
+    await expect(pending).rejects.toBeInstanceOf(HostDisposedError);
   });
 
   it('tolerates dispose without a frame and dispose twice', () => {
