@@ -1,5 +1,34 @@
 import type { Challenge } from '@/types/challenge';
 
+/**
+ * The shape `capture()` hands back.
+ *
+ * Deliberately `ArrayLike` rather than `HTMLCollection`/`NodeList`: the tests distinguish the two
+ * by behaviour, never by type or by `instanceof`. A learner who returns `list.children` and a
+ * spread copy has understood the same thing, and typing the contract by what it does rather than
+ * by which API produced it is also what keeps the assertions realm-safe.
+ */
+interface Captured {
+  live: ArrayLike<Element>;
+  snapshot: ArrayLike<Element>;
+}
+
+/**
+ * The mutation belongs to the test, not to the learner.
+ *
+ * If `capture()` owned both the capture and the append, no assertion on its return value could
+ * tell a standing live query from a re-query performed afterwards -- the challenge's whole subject
+ * would be skippable. Appending here means the row does not exist until `capture()` has already
+ * returned, so the only way `live` can count it is by being live.
+ */
+function appendRow(doc: Document): void {
+  const list = doc.getElementById('list');
+  if (!list) throw new Error('#list is missing from the challenge markup');
+  const row = doc.createElement('li');
+  row.className = 'row';
+  list.append(row);
+}
+
 export const liveVsStatic: Challenge = {
   id: 'selection-live-vs-static',
   slug: 'live-vs-static',
@@ -13,53 +42,53 @@ export const liveVsStatic: Challenge = {
     'one kind keeps tracking the document as it changes, the other is a snapshot of the instant it',
     'was taken.',
     '',
-    'Export a function `measure()` that demonstrates the difference:',
+    'Export a function `capture()` that returns both kinds of `.row` collection, and changes nothing:',
     '',
-    '1. capture **both** kinds of `.row` collection — the tracking one and the snapshot one — before',
-    '   you touch the DOM;',
-    '2. read `liveBefore` and `staticBefore` from them;',
-    '3. append one more `<li class="row">` to `#list`;',
-    '4. read `liveAfter` and `staticAfter` from **those same two collections** — re-querying the',
-    '   document is what the challenge is testing you not to do.',
+    '- `live` — a collection that keeps tracking the document, so a `.row` added *after* `capture()`',
+    '  has returned is counted by it;',
+    '- `snapshot` — a collection fixed at the moment `capture()` ran, which later changes leave alone.',
     '',
-    'Return `{ liveBefore, staticBefore, liveAfter, staticAfter }`.',
+    'Return `{ live, snapshot }`.',
+    '',
+    'The test does the mutating: it calls `capture()`, appends one more `<li class="row">` to `#list`,',
+    'and only then reads `length` from the two collections you handed back. Re-querying the document',
+    'is not available to you — by the time the third row exists, your function has already returned.',
   ].join('\n'),
   html: '<ul id="list"><li class="row">1</li><li class="row">2</li></ul>',
   starterCode: [
-    'export interface Counts {',
-    '  liveBefore: number;',
-    '  staticBefore: number;',
-    '  liveAfter: number;',
-    '  staticAfter: number;',
+    'export interface Captured {',
+    '  live: ArrayLike<Element>;',
+    '  snapshot: ArrayLike<Element>;',
     '}',
     '',
-    'export function measure(): Counts {',
-    '  return { liveBefore: 0, staticBefore: 0, liveAfter: 0, staticAfter: 0 };',
+    'export function capture(): Captured {',
+    '  return { live: [], snapshot: [] };',
     '}',
     '',
   ].join('\n'),
   tests: [
     {
-      name: 'both collections agree before the append',
-      run: ({ exports, expect }) => {
-        const measure = exports['measure'] as () => Record<string, number>;
-        const counts = measure();
-        expect(counts['liveBefore']).toBe(2);
-        expect(counts['staticBefore']).toBe(2);
+      name: 'both collections start with the two rows already in the list',
+      run: ({ fn, expect }) => {
+        const { live, snapshot } = fn<() => Captured>('capture')();
+        expect(live).toHaveLength(2);
+        expect(snapshot).toHaveLength(2);
       },
     },
     {
-      name: 'the live collection sees the new row',
-      run: ({ exports, expect }) => {
-        const measure = exports['measure'] as () => Record<string, number>;
-        expect(measure()['liveAfter']).toBe(3);
+      name: 'the live collection counts a row appended after capture() returned',
+      run: ({ doc, fn, expect }) => {
+        const { live } = fn<() => Captured>('capture')();
+        appendRow(doc);
+        expect(live).toHaveLength(3);
       },
     },
     {
-      name: 'the static list does not see the new row',
-      run: ({ exports, expect }) => {
-        const measure = exports['measure'] as () => Record<string, number>;
-        expect(measure()['staticAfter']).toBe(2);
+      name: 'the snapshot ignores a row appended after capture() returned',
+      run: ({ doc, fn, expect }) => {
+        const { snapshot } = fn<() => Captured>('capture')();
+        appendRow(doc);
+        expect(snapshot).toHaveLength(2);
       },
     },
   ],
@@ -67,52 +96,44 @@ export const liveVsStatic: Challenge = {
     {
       label: 'Live HTMLCollection versus static NodeList',
       code: [
-        'export interface Counts {',
-        '  liveBefore: number;',
-        '  staticBefore: number;',
-        '  liveAfter: number;',
-        '  staticAfter: number;',
+        'export interface Captured {',
+        '  live: HTMLCollectionOf<Element>;',
+        '  snapshot: NodeListOf<Element>;',
         '}',
         '',
-        'export function measure(): Counts {',
-        "  const list = document.getElementById('list');",
-        "  if (!list) throw new Error('#list is missing');",
-        '',
-        "  const live = document.getElementsByClassName('row');",
-        "  const staticList = document.querySelectorAll('.row');",
-        '',
-        '  const liveBefore = live.length;',
-        '  const staticBefore = staticList.length;',
-        '',
-        "  const row = document.createElement('li');",
-        "  row.className = 'row';",
-        '  list.append(row);',
-        '',
-        '  return { liveBefore, staticBefore, liveAfter: live.length, staticAfter: staticList.length };',
+        'export function capture(): Captured {',
+        '  return {',
+        "    live: document.getElementsByClassName('row'),",
+        "    snapshot: document.querySelectorAll('.row'),",
+        '  };',
         '}',
         '',
       ].join('\n'),
       explanation: [
-        'Both variables are captured before the append, and neither is re-queried afterwards — yet',
-        'they disagree by the end of the function. The difference is in what each query returns.',
+        'Both queries run at the same instant, against the same two-row document, and `capture()`',
+        'returns before the third row exists. Yet one of the two values notices it and the other never',
+        'does. The difference is in what each query returns.',
         '',
         '`getElementsByClassName` returns a live `HTMLCollection`. It is not an array of the elements',
         'that matched; it is a standing query against the document. Every property access re-consults',
         'the tree, so `live.length` answers "how many `.row` elements are in the document *right now*"',
-        'and reports 3 after the append. The same is true of `getElementsByTagName`, `document.forms`,',
-        '`document.images`, and `element.children`.',
+        'and reports 3 once the test has appended — even though nothing re-ran your function. The same',
+        'is true of `getElementsByTagName`, `document.forms`, `document.images`, and `element.children`;',
+        "returning `document.getElementById('list')!.children` here would pass the same tests.",
         '',
         '`querySelectorAll` returns a static `NodeList` — the matches are resolved once, at call time,',
         'and the list never changes again. It reports 2 both times because it is a snapshot of a',
         'document that had two rows. (`element.childNodes` is the exception that spoils the neat rule:',
         'it is a `NodeList`, but a live one.)',
         '',
-        'Neither is more correct. The bug is holding one while thinking you hold the other.',
+        'Neither is more correct. The bug is holding one while thinking you hold the other — which is',
+        'why the test, not your code, appends the row: a value you can only re-query is a value whose',
+        'liveness you never actually tested.',
       ].join('\n'),
       tradeoffs: [
         'Reach for the live collection when you genuinely want a standing answer — a count you read',
-        'occasionally and want current, without re-querying. Reach for `querySelectorAll` for anything',
-        'you are about to iterate, which is nearly always.',
+        'occasionally and want current, without re-querying — exactly what the test does with `live`.',
+        'Reach for `querySelectorAll` for anything you are about to iterate, which is nearly always.',
         '',
         'The reason is that iterating a live collection while mutating the document is a trap:',
         '',
