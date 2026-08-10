@@ -23,6 +23,17 @@ const mounted: Mounted[] = [];
 function mountHost(): Mounted {
   const container = document.createElement('div');
   document.body.append(container);
+  return trackHost(container);
+}
+
+/**
+ * Builds a host over a container that is deliberately left out of the document.
+ *
+ * The frame inside it never navigates, which is the only way to observe a `reset` that has not
+ * resolved yet. Registered for the same `afterEach` cleanup as `mountHost` so that a failing
+ * assertion cannot leak a permanently-pending reset.
+ */
+function trackHost(container: HTMLDivElement): Mounted {
   const entry: Mounted = { container, host: createIframeHost(container) };
   mounted.push(entry);
   return entry;
@@ -83,11 +94,11 @@ describe('createIframeHost', () => {
     // `reset` is distinguishable from a waiting one under happy-dom, whose synchronous `srcdoc`
     // hides the difference everywhere else. An implementation that resolves without awaiting
     // `load` settles here; the real one stays pending until the timer below wins the race.
-    const detached = document.createElement('div');
-    const host = createIframeHost(detached);
+    const { host } = trackHost(document.createElement('div'));
 
     // Both outcomes are folded into one label so that a rejection cannot pass as "pending", and
-    // so that disposing below -- which settles the in-flight reset -- has a handler waiting.
+    // so that the `afterEach` disposal -- which settles the in-flight reset -- has a handler
+    // waiting.
     const settled = host.reset('<p id="hello">hi</p>').then(
       () => 'settled',
       () => 'settled',
@@ -102,7 +113,6 @@ describe('createIframeHost', () => {
     clearTimeout(timer);
 
     expect(outcome).toBe('pending');
-    host.dispose();
   });
 
   it('does not sandbox the frame, so the harness can reach into it', async () => {
@@ -217,8 +227,7 @@ describe('createIframeHost', () => {
     // `dispose` settles the promise itself, everything awaiting it waits forever: `runChallenge`
     // never returns, and a component that clears its "running" flag in a `finally` never clears
     // it. Reachable by navigating away mid-run, or by StrictMode's mount/cleanup/remount.
-    const detached = document.createElement('div');
-    const host = createIframeHost(detached);
+    const { host } = trackHost(document.createElement('div'));
 
     const pending = host.reset('<p></p>');
     host.dispose();
