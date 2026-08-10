@@ -1,49 +1,30 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useCallback, type ChangeEvent } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { EditorPanel } from './EditorPanel';
+import type { MockEditorProps } from '@/test/monacoMock';
 
-interface MockEditorProps {
-  value: string;
-  onChange: (v: string) => void;
-  path?: string;
-  language?: string;
-  options?: { ariaLabel?: string };
-}
+import { EditorPanel } from './EditorPanel';
 
 // Captures every prop Monaco's <Editor> is mounted with, so tests can assert on
 // non-interactive config (like `path`) without reaching into the DOM for it.
 const editorSpy = vi.fn<(props: MockEditorProps) => void>();
 
-vi.mock('@monaco-editor/react', () => ({
-  Editor: (props: MockEditorProps) => {
+// The mock itself lives in `@/test/monacoMock` so the rule it encodes -- the editor's accessible
+// name is read off `options.ariaLabel` and never hardcoded -- has exactly one place to diverge
+// from now that three test files stand in for Monaco. See that file for why hardcoding it would
+// make every `getByRole('textbox', { name: 'Solution code' })` below vacuous.
+vi.mock('@monaco-editor/react', async () => {
+  const { createMonacoReactMock } = await import('@/test/monacoMock');
+  return createMonacoReactMock((props) => {
     editorSpy(props);
-    const { value, onChange, options } = props;
+  });
+});
 
-    const handleChange = useCallback(
-      (e: ChangeEvent<HTMLTextAreaElement>) => {
-        onChange(e.target.value);
-      },
-      [onChange],
-    );
-
-    // The label comes from `options.ariaLabel`, the same channel the real Monaco reads it from,
-    // rather than being hardcoded here. Hardcoding it would make every `getByRole('textbox',
-    // { name: 'Solution code' })` below pass even if EditorPanel never named the editor at all --
-    // which is precisely the production bug those queries exist to rule out.
-    return <textarea aria-label={options?.ariaLabel} value={value} onChange={handleChange} />;
-  },
-  loader: { config: vi.fn<() => void>() },
-}));
-
-// EditorPanel imports configureMonaco eagerly (unlike the lazily-loaded editor itself), and
-// monaco.ts's `?worker` imports only resolve under Vite's client build -- not under Vitest's
-// test environment. configureMonaco's own correctness (wiring real workers, pointing the loader
-// at the local Monaco) is verified by the build check in the task brief, not here; this mock
-// exists purely so loading EditorPanel.tsx does not try to resolve those worker modules.
-vi.mock('@/lib/monaco', () => ({ configureMonaco: vi.fn<() => void>() }));
+vi.mock('@/lib/monaco', async () => {
+  const { createMonacoLibMock } = await import('@/test/monacoMock');
+  return createMonacoLibMock();
+});
 
 describe('EditorPanel', () => {
   const baseProps = {
