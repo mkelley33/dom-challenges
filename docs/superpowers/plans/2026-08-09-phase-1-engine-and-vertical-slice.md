@@ -4055,11 +4055,36 @@ A shadcn `Tabs` with `TabsList`/`TabsTrigger` for `problem`, `code`, `result`, r
 
 Desktop (`lg:`): a three-column grid using the persisted `layout` percentages. Below `lg`: one column where the two inactive panels get `hidden` and the active one `flex`. Keep the Run button sticky at the bottom on small screens.
 
+**AMENDED — `hidden` must not be applied to the panel containing the preview frame.** Tailwind's
+`hidden` is `display: none`, and a document that is not rendered never services
+`requestAnimationFrame`: the harness's `tick()` would fall back to its 50 ms timer on every call
+and any paint-dependent work in a learner's code simply would not happen. This constraint was
+recorded for Task 12 and it recurs here the moment the mobile layout hides two of three panels.
+Move the inactive preview off-screen instead — a wrapper that stays rendered (`position: absolute`
+with a large negative offset, or `clip-path` with non-zero size) and is hidden from assistive tech
+with `aria-hidden` — rather than removing it from the box tree. The other two panels may use
+`hidden` freely. Add a test that the preview frame's container is still rendered while another
+mobile tab is active; asserting only that the element exists is not enough, since `display: none`
+elements are present in the DOM.
+
 - [ ] **Step 5: Accessibility sweep**
 
 Walk every component built in Tasks 10–17 and confirm: one `<h1>` per page; landmarks (`header`, `main`, `nav`) present; every icon-only control has an accessible name; visible focus rings are not removed; `Dialog` traps focus and restores it on close (shadcn handles this — verify, do not assume); pass/fail is not conveyed by colour alone (the `✓`/`✗` plus screen-reader-only text in Task 13 covers this).
 
 Run `pnpm lint` and confirm `jsx-a11y` reports nothing.
+
+- [ ] **Step 6: Add a router `errorElement`**
+
+**ADDED after the Task 14 review.** There is no error boundary anywhere in `src/` — no
+`errorElement`, no `componentDidCatch` — while the app now has three lazy boundaries that can
+reject on a flaky network: the challenge route (`src/routes.tsx`), Monaco
+(`src/components/challenge/EditorPanel.tsx`), and the reveal dialog
+(`src/components/challenge/SolutionsPanel.tsx`). A rejected chunk import currently throws to the
+root and blanks the whole app rather than degrading the one control that failed. One
+`errorElement` on the `AppShell` route covers all three; it must render inside the shell so the
+learner keeps the nav and can get back to a working page, and it must offer a retry (a reload is
+acceptable — `lazy` re-issues its import on the next attempt). Test it by rendering a route whose
+component throws, and assert the shell's nav is still reachable.
 
 - [ ] **Step 6: Verify in a real browser at both sizes**
 
