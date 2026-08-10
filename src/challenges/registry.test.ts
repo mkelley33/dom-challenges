@@ -63,6 +63,10 @@ describe('the real registry', () => {
     expect(validateRegistry(allChallenges)).toEqual([]);
   });
 
+  it('looks up a registered challenge by slug', () => {
+    expect(challengeBySlug('query-basics')?.id).toBe('selection-query-basics');
+  });
+
   it('returns undefined for an unknown slug', () => {
     expect(challengeBySlug('no-such-slug')).toBeUndefined();
   });
@@ -72,6 +76,12 @@ describe('the real registry', () => {
   });
 
   it('filters by category', () => {
-    expect(challengesInCategory('selection').every((c) => c.category === 'selection')).toBe(true);
+    const selection = challengesInCategory('selection');
+    // `every` is vacuously true on an empty array, and filtering on `category` only to assert
+    // `category` is tautological even on a full one. The membership and the empty-category checks
+    // are what make this fail for a filter that returns nothing, or everything.
+    expect(selection.every((c) => c.category === 'selection')).toBe(true);
+    expect(selection.map((c) => c.slug)).toContain('query-basics');
+    expect(challengesInCategory('react')).toEqual([]);
   });
 });

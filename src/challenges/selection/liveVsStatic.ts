@@ -1,0 +1,135 @@
+import type { Challenge } from '@/types/challenge';
+
+export const liveVsStatic: Challenge = {
+  id: 'selection-live-vs-static',
+  slug: 'live-vs-static',
+  title: 'Live collections versus static lists',
+  category: 'selection',
+  difficulty: 'advanced',
+  concepts: ['HTMLCollection', 'NodeList', 'getElementsByClassName', 'querySelectorAll'],
+  relatedIds: ['selection-query-basics'],
+  prompt: [
+    'The list below holds two `.row` items. Not every DOM query hands back the same kind of result:',
+    'one kind keeps tracking the document as it changes, the other is a snapshot of the instant it',
+    'was taken.',
+    '',
+    'Export a function `measure()` that demonstrates the difference:',
+    '',
+    '1. capture **both** kinds of `.row` collection — the tracking one and the snapshot one — before',
+    '   you touch the DOM;',
+    '2. read `liveBefore` and `staticBefore` from them;',
+    '3. append one more `<li class="row">` to `#list`;',
+    '4. read `liveAfter` and `staticAfter` from **those same two collections** — re-querying the',
+    '   document is what the challenge is testing you not to do.',
+    '',
+    'Return `{ liveBefore, staticBefore, liveAfter, staticAfter }`.',
+  ].join('\n'),
+  html: '<ul id="list"><li class="row">1</li><li class="row">2</li></ul>',
+  starterCode: [
+    'export interface Counts {',
+    '  liveBefore: number;',
+    '  staticBefore: number;',
+    '  liveAfter: number;',
+    '  staticAfter: number;',
+    '}',
+    '',
+    'export function measure(): Counts {',
+    '  return { liveBefore: 0, staticBefore: 0, liveAfter: 0, staticAfter: 0 };',
+    '}',
+    '',
+  ].join('\n'),
+  tests: [
+    {
+      name: 'both collections agree before the append',
+      run: ({ exports, expect }) => {
+        const measure = exports['measure'] as () => Record<string, number>;
+        const counts = measure();
+        expect(counts['liveBefore']).toBe(2);
+        expect(counts['staticBefore']).toBe(2);
+      },
+    },
+    {
+      name: 'the live collection sees the new row',
+      run: ({ exports, expect }) => {
+        const measure = exports['measure'] as () => Record<string, number>;
+        expect(measure()['liveAfter']).toBe(3);
+      },
+    },
+    {
+      name: 'the static list does not see the new row',
+      run: ({ exports, expect }) => {
+        const measure = exports['measure'] as () => Record<string, number>;
+        expect(measure()['staticAfter']).toBe(2);
+      },
+    },
+  ],
+  solutions: [
+    {
+      label: 'Live HTMLCollection versus static NodeList',
+      code: [
+        'export interface Counts {',
+        '  liveBefore: number;',
+        '  staticBefore: number;',
+        '  liveAfter: number;',
+        '  staticAfter: number;',
+        '}',
+        '',
+        'export function measure(): Counts {',
+        "  const list = document.getElementById('list');",
+        "  if (!list) throw new Error('#list is missing');",
+        '',
+        "  const live = document.getElementsByClassName('row');",
+        "  const staticList = document.querySelectorAll('.row');",
+        '',
+        '  const liveBefore = live.length;',
+        '  const staticBefore = staticList.length;',
+        '',
+        "  const row = document.createElement('li');",
+        "  row.className = 'row';",
+        '  list.append(row);',
+        '',
+        '  return { liveBefore, staticBefore, liveAfter: live.length, staticAfter: staticList.length };',
+        '}',
+        '',
+      ].join('\n'),
+      explanation: [
+        'Both variables are captured before the append, and neither is re-queried afterwards — yet',
+        'they disagree by the end of the function. The difference is in what each query returns.',
+        '',
+        '`getElementsByClassName` returns a live `HTMLCollection`. It is not an array of the elements',
+        'that matched; it is a standing query against the document. Every property access re-consults',
+        'the tree, so `live.length` answers "how many `.row` elements are in the document *right now*"',
+        'and reports 3 after the append. The same is true of `getElementsByTagName`, `document.forms`,',
+        '`document.images`, and `element.children`.',
+        '',
+        '`querySelectorAll` returns a static `NodeList` — the matches are resolved once, at call time,',
+        'and the list never changes again. It reports 2 both times because it is a snapshot of a',
+        'document that had two rows. (`element.childNodes` is the exception that spoils the neat rule:',
+        'it is a `NodeList`, but a live one.)',
+        '',
+        'Neither is more correct. The bug is holding one while thinking you hold the other.',
+      ].join('\n'),
+      tradeoffs: [
+        'Reach for the live collection when you genuinely want a standing answer — a count you read',
+        'occasionally and want current, without re-querying. Reach for `querySelectorAll` for anything',
+        'you are about to iterate, which is nearly always.',
+        '',
+        'The reason is that iterating a live collection while mutating the document is a trap:',
+        '',
+        '- `for (let i = 0; i < live.length; i++)` that appends a matching element in the body never',
+        '  terminates. Each append grows `live.length`, and the bound is re-read on every iteration, so',
+        '  the loop chases a finish line it keeps moving.',
+        '- Removing elements in the same loop is the quieter bug: `live[0]` is dropped from the',
+        '  collection the moment it leaves the document, every later element shifts down one index, and',
+        '  `i++` then steps past the element that moved into the slot. You silently process half of',
+        '  them. Iterating backwards, or snapshotting first, avoids it.',
+        '',
+        'Ergonomics push the same way. `NodeList` has `forEach`. `HTMLCollection` has no `forEach` and',
+        'no array methods at all — indexing and `length` are the whole API. Both are spreadable, so',
+        '`Array.from(live)` or `[...live]` gets you to `map` and `filter`; note that the conversion is',
+        'also what turns a live collection into a snapshot, which is usually what the code wanted in',
+        'the first place.',
+      ].join('\n'),
+    },
+  ],
+};
