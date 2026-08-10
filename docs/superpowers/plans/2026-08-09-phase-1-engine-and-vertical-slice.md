@@ -853,7 +853,14 @@ describe('createTick', () => {
   it('flushes pending microtasks', async () => {
     const order: string[] = [];
     const tick = createTick(window);
-    void Promise.resolve().then(() => order.push('microtask'));
+    // Two chained `.then()` hops, not one: a bare `await` on an already-resolved
+    // promise (what a no-op `tick()` would give for free) only buys a single
+    // microtask turn, so a one-hop chain here would pass even if `tick()` did
+    // nothing. Chaining a second hop means only a `tick()` that actually drains
+    // the microtask queue can get the callback to run before the assertion.
+    void Promise.resolve()
+      .then(() => undefined)
+      .then(() => order.push('microtask'));
     await tick();
     expect(order).toEqual(['microtask']);
   });
@@ -874,9 +881,17 @@ describe('createTick', () => {
     let called = 0;
     const observer = new MutationObserver(() => { called += 1; });
     observer.observe(list, { childList: true });
-    list.append(document.createElement('li'));
 
     const tick = createTick(window);
+    // Defer the mutation itself by one microtask hop. happy-dom delivers
+    // MutationObserver callbacks via a single `queueMicrotask` hop, so mutating
+    // synchronously makes the callback observable after exactly the one microtask
+    // turn a no-op `tick()` gets for free via `await`. Queuing the mutation turns
+    // delivery into a second hop, reachable only by a `tick()` that actually
+    // drains the microtask queue before this test resumes.
+    void Promise.resolve().then(() => {
+      list.append(document.createElement('li'));
+    });
     await tick();
     observer.disconnect();
     expect(called).toBe(1);
