@@ -26,6 +26,37 @@ describe('createTick', () => {
     expect(order).toEqual(['raf']);
   });
 
+  it('falls back to a timer when the document never services animation frames', async () => {
+    // Animation-frame callbacks run only for documents the browser is rendering. A hidden tab
+    // stops servicing them until it is shown again; an iframe inside a `display: none` container
+    // never services them at all. A rAF-only `tick()` therefore hangs until the harness times the
+    // test out -- reported to the learner as their code being too slow. Standing in a
+    // `requestAnimationFrame` that never calls back reproduces that without a real hidden
+    // document; the race is what distinguishes "fell back" from "waited forever".
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = () => 0;
+    let stall: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      // A 0ms timer witnesses that `tick()` still waited a turn of the task queue rather than
+      // resolving on the spot: without it, a `tick()` that did nothing at all would satisfy
+      // "did not stall" for free.
+      const ran: string[] = [];
+      setTimeout(() => ran.push('macrotask'), 0);
+      const outcome = await Promise.race([
+        createTick(window)().then(() => 'resolved'),
+        new Promise<string>((resolve) => {
+          stall = setTimeout(() => resolve('stalled'), 1000);
+        }),
+      ]);
+      expect(outcome).toBe('resolved');
+      expect(ran).toEqual(['macrotask']);
+    } finally {
+      clearTimeout(stall);
+      window.requestAnimationFrame = original;
+    }
+  });
+
   it('flushes a pending MutationObserver callback', async () => {
     document.body.innerHTML = '<ul id="list"></ul>';
     const list = document.getElementById('list');
