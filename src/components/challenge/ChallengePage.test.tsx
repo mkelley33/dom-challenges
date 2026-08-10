@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { challengeBySlug } from '@/challenges/registry';
+import { PROGRESS_QUERY_KEY } from '@/hooks/useProgress';
 import { useEditorStore } from '@/store/editorStore';
 import type { Challenge } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
@@ -48,7 +49,20 @@ function renderChallengePage(slug: string) {
     </QueryClientProvider>,
   );
 
-  return router;
+  return { router, client };
+}
+
+/**
+ * Resolves once the progress read has settled into `status`.
+ *
+ * The reveal resolves its record off this same query, so a settled query is a strict precondition
+ * for the reveal's decision having been made -- which is what a "nothing was written" assertion
+ * needs, and what waiting on a *recorded request* does not give: requests are recorded when issued.
+ */
+function progressQuerySettled(client: QueryClient, status: 'success' | 'error'): Promise<void> {
+  return waitFor(() => {
+    expect(client.getQueryState(PROGRESS_QUERY_KEY)?.status).toBe(status);
+  });
 }
 
 function editor(): Promise<HTMLElement> {
@@ -240,7 +254,7 @@ describe('ChallengePage', () => {
   });
 
   it('switching challenges leaks neither text into the other editor nor drafts over each other', async () => {
-    const router = renderChallengePage(first.slug);
+    const { router } = renderChallengePage(first.slug);
     await userEvent.type(await editor(), 'A');
     await waitFor(() => {
       expect(draftFor(first)).toBe(`${first.starterCode}A`);
@@ -361,11 +375,11 @@ describe('ChallengePage', () => {
 
     settleProgress();
 
-    await waitFor(() => {
-      expect(calls.some((call) => call.method === 'GET' && call.url.endsWith('/progress'))).toBe(true);
-    });
-    // Waited out rather than asserted immediately: the write, if the guard were missing, happens
-    // after that read resolves, so asserting straight away would pass against the bug.
+    // The heading, not a recorded request: `stubProgressApi` pushes to `calls` when a request is
+    // *issued*, which for the gated read is before it resolves, so waiting on that would let the
+    // assertion below run before a missing guard had any chance to write. "Other approaches" can
+    // only render once the settled record is in hand -- the same record the reveal reads.
+    expect(await screen.findByRole('heading', { level: 2, name: 'Other approaches' })).toBeInTheDocument();
     await expect.poll(() => writes(calls)).toHaveLength(0);
   });
 
@@ -378,25 +392,24 @@ describe('ChallengePage', () => {
 
     settleProgress();
 
-    await waitFor(() => {
-      expect(calls.some((call) => call.method === 'GET' && call.url.endsWith('/progress'))).toBe(true);
-    });
+    // As above: the unlocked heading is what proves the settled record reached the page.
+    expect(await screen.findByRole('heading', { level: 2, name: 'Solution' })).toBeInTheDocument();
     // First reveal wins: the second is the same decision, not a later one. Nothing is written at
     // all, so `revealedAt` keeps the moment the learner actually made the choice.
     await expect.poll(() => writes(calls)).toHaveLength(0);
-    expect(ALREADY_REVEALED.revealedAt).toBe(FIRST_REVEAL_AT);
   });
 
   it('records nothing when the prior record cannot be read', async () => {
     const user = userEvent.setup();
     const calls = stubFailingProgressRead();
 
-    renderChallengePage(first.slug);
+    const { client } = renderChallengePage(first.slug);
     await confirmReveal(user);
 
-    await waitFor(() => {
-      expect(calls.some((call) => call.method === 'GET' && call.url.endsWith('/progress'))).toBe(true);
-    });
+    // A failed read changes nothing on screen, so there is no heading to wait on here. The query's
+    // settled error state is the equivalent guarantee: the reveal reads the same query, so it has
+    // had its answer by the time this resolves.
+    await progressQuerySettled(client, 'error');
     // A record that cannot be read cannot be safely rewritten. The tempting fallback -- reveal onto
     // `emptyProgress(challenge.id)` -- typechecks and POSTs a placeholder over the learner's row.
     await expect.poll(() => writes(calls)).toHaveLength(0);
