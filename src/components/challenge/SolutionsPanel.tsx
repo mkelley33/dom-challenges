@@ -1,16 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { solutionAccess } from '@/lib/solutionAccess';
 import type { Solution } from '@/types/challenge';
@@ -18,9 +9,10 @@ import type { ProgressRecord } from '@/types/progress';
 
 import { Markdown } from './Markdown';
 
-// Hoisted so the element handed to Base UI's `render` prop is created once rather than per render
-// (react-perf/jsx-no-jsx-as-prop) -- safe because it closes over nothing.
-const keepTryingRender = <Button variant="outline" />;
+const RevealConfirmDialog = lazy(async () => {
+  const { RevealConfirmDialog: Component } = await import('./RevealConfirmDialog');
+  return { default: Component };
+});
 
 interface CodeBlockProps {
   code: string;
@@ -51,6 +43,10 @@ function CodeBlock({ code }: CodeBlockProps) {
         if (active) setHighlighted(html);
       } catch {
         // Nothing to report and nothing to do: the fallback below is already on screen.
+        //
+        // Deleting this `catch` fails the suite only because Vitest reports unhandled rejections by
+        // default -- no single test asserts the swallow. Anyone setting
+        // `dangerouslyIgnoreUnhandledErrors` removes that protection silently.
       }
     };
 
@@ -82,6 +78,65 @@ function CodeBlock({ code }: CodeBlockProps) {
   );
 }
 
+interface LockedSolutionsProps {
+  onReveal: () => void;
+}
+
+/**
+ * Its own component so the dialog's state and its preload belong to the locked branch alone -- a
+ * hook in `SolutionsPanel` would have to run in both, warming a chunk an unlocked panel never uses.
+ */
+function LockedSolutions({ onReveal }: LockedSolutionsProps) {
+  const [confirming, setConfirming] = useState(false);
+  // Latched rather than mirrored from `confirming`: unmounting the dialog the instant it closes
+  // would cut short Base UI's exit transition and, with it, the focus restoration to the button.
+  const [dialogNeeded, setDialogNeeded] = useState(false);
+
+  useEffect(() => {
+    // Warmed as soon as the locked panel is on screen, so the boundary below is a formality by the
+    // time a learner has read the copy and decided. Effects run after paint, so this never delays
+    // the panel itself -- and without it, a click on a cold connection would sit on `fallback`.
+    //
+    // Best effort, and swallowed rather than left floating: a failed warm only means the click pays
+    // for the load, because `lazy` runs the import again when the boundary is actually crossed.
+    import('./RevealConfirmDialog').catch(() => undefined);
+  }, []);
+
+  const handleOpen = useCallback(() => {
+    setDialogNeeded(true);
+    setConfirming(true);
+  }, []);
+
+  const handleOpenChange = useCallback((open: boolean) => {
+    setConfirming(open);
+  }, []);
+
+  const handleConfirm = useCallback(() => {
+    setConfirming(false);
+    onReveal();
+  }, [onReveal]);
+
+  return (
+    <>
+      <h2 className="text-base font-semibold">Solutions</h2>
+      <p className="text-sm text-muted">
+        Worth a few more attempts first — the test results say exactly which part is not there yet.
+      </p>
+      <Button variant="outline" className="self-start" onClick={handleOpen}>
+        Reveal solution
+      </Button>
+
+      {/* `null`, because a dialog is portaled and fixed: nothing it renders sits in this panel's
+          flow, so there is no space to reserve and nothing to jump when it arrives. */}
+      <Suspense fallback={null}>
+        {dialogNeeded && (
+          <RevealConfirmDialog open={confirming} onOpenChange={handleOpenChange} onConfirm={handleConfirm} />
+        )}
+      </Suspense>
+    </>
+  );
+}
+
 export interface SolutionsPanelProps {
   solutions: Solution[];
   record: ProgressRecord;
@@ -97,48 +152,12 @@ export interface SolutionsPanelProps {
  * deliberately no branch below that filters `solutions`.
  */
 export function SolutionsPanel({ solutions, record, onReveal }: SolutionsPanelProps) {
-  const [confirming, setConfirming] = useState(false);
   const { unlocked, earned } = solutionAccess(record);
-
-  const handleOpen = useCallback(() => {
-    setConfirming(true);
-  }, []);
-
-  const handleOpenChange = useCallback((open: boolean) => {
-    setConfirming(open);
-  }, []);
-
-  const handleConfirm = useCallback(() => {
-    setConfirming(false);
-    onReveal();
-  }, [onReveal]);
 
   if (!unlocked) {
     return (
       <section aria-label="Solutions" className="flex min-h-0 flex-col gap-3 overflow-auto p-4">
-        <h2 className="text-base font-semibold">Solutions</h2>
-        <p className="text-sm text-muted">
-          Worth a few more attempts first — the test results say exactly which part is not there yet.
-        </p>
-        <Button variant="outline" className="self-start" onClick={handleOpen}>
-          Reveal solution
-        </Button>
-
-        <Dialog open={confirming} onOpenChange={handleOpenChange}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Reveal the solution?</DialogTitle>
-              <DialogDescription>
-                This challenge will be marked as revealed, and that cannot be undone for this attempt. Clearing your
-                progress is the only way back.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogClose render={keepTryingRender}>Keep trying</DialogClose>
-              <Button onClick={handleConfirm}>Yes, reveal it</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <LockedSolutions onReveal={onReveal} />
       </section>
     );
   }
