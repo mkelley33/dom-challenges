@@ -48,11 +48,17 @@ export interface RunOptions {
 const DEFAULT_TIMEOUT_MS = 2000;
 
 /**
- * Errors crossing out of the host realm are not instances of *this* realm's `Error`,
- * so `String(error)` is the fallback that still yields "Error: boom" rather than "[object Object]".
+ * Errors crossing out of the host realm are not instances of *this* realm's `Error`, so the
+ * check is structural: `instanceof` would send every error thrown by submitted code down the
+ * `String(error)` path and report "Error: boom" where a same-realm throw reports "boom".
+ * `String(error)` remains the fallback for values that carry no message at all (`throw 42`),
+ * where it still beats "[object Object]".
  */
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return String(error);
 }
 
 function evaluate(
@@ -60,7 +66,7 @@ function evaluate(
   code: string,
   modules: Record<string, unknown>,
 ): Record<string, unknown> {
-  const moduleObject = { exports: {} as Record<string, unknown> };
+  const moduleObject: { exports: Record<string, unknown> } = { exports: {} };
   const requireShim = (name: string): unknown => {
     if (Object.prototype.hasOwnProperty.call(modules, name)) return modules[name];
     throw new Error(`Cannot import "${name}" in this challenge.`);
