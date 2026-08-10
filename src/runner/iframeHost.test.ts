@@ -155,8 +155,16 @@ describe('createIframeHost', () => {
     const created = context.document.createElement('div');
     const seeded = context.document.getElementById('hello');
 
+    // The identity checks are what carry the realm guarantee here: nothing but a distinct
+    // window and document can satisfy them.
     expect(context.window).not.toBe(globalThis.window);
     expect(context.document).not.toBe(globalThis.document);
+    // The two `toBeInstanceOf` checks below are realm checks in a browser only. happy-dom
+    // shares one class table across `Window` instances, so `context.window.Element` is the
+    // *same* class object as this realm's -- they would hold even if `reset` handed back the
+    // app's own window. Kept because they are correct and do discriminate where it counts (a
+    // real frame's classes are its own), but they prove nothing under Vitest: read them as
+    // documentation of the browser contract, not as this file's evidence for it.
     expect(created).toBeInstanceOf(context.window.Element);
     expect(seeded).toBeInstanceOf(context.window.HTMLParagraphElement);
     expect(context.document.defaultView).toBe(context.window);
