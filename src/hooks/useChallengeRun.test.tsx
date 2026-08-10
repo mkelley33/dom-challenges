@@ -6,8 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as Harness from '@/runner/harness';
 import { HostDisposedError } from '@/runner/iframeHost';
 import type { Challenge } from '@/types/challenge';
+import type { ProgressRecord } from '@/types/progress';
 
 import { useChallengeRun } from './useChallengeRun';
+import { PROGRESS_QUERY_KEY } from './useProgress';
 
 type RunChallengeFn = typeof Harness.runChallenge;
 
@@ -84,6 +86,31 @@ function writtenProgress(fetchMock: FetchMock): string[] {
   );
 }
 
+/**
+ * A fetch stub that echoes the last progress write back to every later read.
+ *
+ * `stubFetch` always answers `[]`, which quietly hides the round trip the run flow depends on:
+ * each run reads the stored record, increments `attempts` and writes it back, so a flow that
+ * never sees its own previous write would record attempt 1 forever. Echoing the stored body --
+ * as a string, so nothing here has to parse or assert a shape -- is the smallest server that
+ * makes that visible.
+ */
+function stubEchoingProgressServer(): FetchMock {
+  let stored: string | null = null;
+
+  const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+    const method = init?.method ?? 'GET';
+    if ((method === 'POST' || method === 'PATCH') && typeof init?.body === 'string') {
+      stored = init.body;
+      return Promise.resolve(new Response(stored, { status: 200 }));
+    }
+    return Promise.resolve(new Response(stored === null ? '[]' : `[${stored}]`, { status: 200 }));
+  });
+
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 const containers: HTMLDivElement[] = [];
 
 /**
@@ -124,14 +151,17 @@ function newClient(): QueryClient {
  * rendered and was then overwritten".
  */
 function renderRun(ref: RefObject<HTMLDivElement | null>, seen?: (Harness.RunResult | null)[]) {
-  return renderHook(
+  const client = newClient();
+  const rendered = renderHook(
     () => {
       const run = useChallengeRun(challenge, ref);
       seen?.push(run.result);
       return run;
     },
-    { wrapper: wrapperFor(newClient()) },
+    { wrapper: wrapperFor(client) },
   );
+
+  return { ...rendered, client };
 }
 
 function previewDocument(ref: RefObject<HTMLDivElement | null>): Document | null {
@@ -297,6 +327,37 @@ describe('useChallengeRun', () => {
     await expect(running).resolves.toBeUndefined();
     expect(result.current.result).toBeNull();
     expect(writtenProgress(fetchMock)).toHaveLength(0);
+  });
+
+  it('counts the second run as a second attempt and keeps the first solve date', async () => {
+    const fetchMock = stubEchoingProgressServer();
+    const ref = attachedRef();
+    const { result, client } = renderRun(ref);
+
+    await act(async () => {
+      await result.current.run(PASSING);
+    });
+    // The read-back is what makes the second run an increment rather than a repeat, so wait for
+    // the stored record to reach the cache before running again.
+    await waitFor(() => {
+      expect(client.getQueryData<ProgressRecord[]>(PROGRESS_QUERY_KEY)?.[0]?.attempts).toBe(1);
+    });
+
+    await act(async () => {
+      await result.current.run(PASSING);
+    });
+    await waitFor(() => {
+      expect(writtenProgress(fetchMock)).toHaveLength(2);
+    });
+
+    const [firstWrite, secondWrite] = writtenProgress(fetchMock);
+    expect(firstWrite).toContain('"attempts":1');
+    expect(secondWrite).toContain('"attempts":2');
+
+    const firstSolvedAt = /"solvedAt":"([^"]+)"/.exec(firstWrite ?? '')?.[1];
+    expect(firstSolvedAt).toBeDefined();
+    // Re-running something already solved is not a new solve.
+    expect(secondWrite).toContain(`"solvedAt":"${String(firstSolvedAt)}"`);
   });
 
   it('hands the runner the code it was given, against the current challenge', async () => {
