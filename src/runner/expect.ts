@@ -32,6 +32,24 @@ export interface Matchers {
 
 export type ExpectFn = (actual: unknown) => Matchers;
 
+/**
+ * DOM checks here are structural, never `instanceof`.
+ *
+ * Submitted code runs in the host's realm -- a `srcdoc` iframe in the browser -- whose `Element`
+ * and `Node` are different class objects from the ones this module closes over. `value instanceof
+ * Element` is therefore `false` for every element a learner correctly produced, and in a realm
+ * with no DOM globals at all it throws `ReferenceError` instead of failing as an assertion.
+ * `nodeType` carries the same numbers in every realm, so it is what these guards read.
+ */
+function isNode(value: unknown): value is Node {
+  return typeof value === 'object' && value !== null && 'nodeType' in value && typeof value.nodeType === 'number';
+}
+
+/** `nodeType === 1` is `Node.ELEMENT_NODE`; `tagName` is checked so the members read below exist. */
+function isElement(value: unknown): value is Element {
+  return isNode(value) && value.nodeType === 1 && 'tagName' in value && typeof value.tagName === 'string';
+}
+
 function describeValue(value: unknown): string {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
@@ -47,7 +65,7 @@ function describeValue(value: unknown): string {
     case 'function':
       return String(value);
     case 'object':
-      if (value instanceof Element) return `<${value.tagName.toLowerCase()}>`;
+      if (isElement(value)) return `<${value.tagName.toLowerCase()}>`;
       try {
         return JSON.stringify(value);
       } catch {
@@ -122,15 +140,16 @@ function createMatchers(actual: unknown, negated: boolean): Matchers {
       check('toContain', passed, expected);
     },
     toHaveTextContent: (expected) => {
-      const text = actual instanceof Node ? (actual.textContent ?? '') : '';
+      const textContent = isNode(actual) ? actual.textContent : null;
+      const text = typeof textContent === 'string' ? textContent : '';
       check('toHaveTextContent', text.trim() === expected.trim(), expected);
     },
     toHaveClass: (expected) => {
-      const passed = actual instanceof Element && actual.classList.contains(expected);
+      const passed = isElement(actual) && actual.classList.contains(expected);
       check('toHaveClass', passed, expected);
     },
     toHaveAttribute: (name, value) => {
-      const present = actual instanceof Element && actual.hasAttribute(name);
+      const present = isElement(actual) && actual.hasAttribute(name);
       const passed = value === undefined ? present : present && actual.getAttribute(name) === value;
       check('toHaveAttribute', passed, value === undefined ? name : `${name}="${value}"`);
     },
