@@ -31,8 +31,8 @@ export const closestRow: Challenge = {
   tests: [
     {
       name: 'finds the row from a deeply nested cell',
-      run: ({ doc, exports, expect }) => {
-        const findRow = exports['findRow'] as (start: Element) => HTMLElement | null;
+      run: ({ doc, fn, expect }) => {
+        const findRow = fn<(start: Element) => HTMLElement | null>('findRow');
         const cell = doc.getElementById('cell-b');
         expect(cell).not.toBeNull();
         if (!cell) return;
@@ -41,8 +41,8 @@ export const closestRow: Challenge = {
     },
     {
       name: 'returns the element itself when it is already a row',
-      run: ({ doc, exports, expect }) => {
-        const findRow = exports['findRow'] as (start: Element) => HTMLElement | null;
+      run: ({ doc, fn, expect }) => {
+        const findRow = fn<(start: Element) => HTMLElement | null>('findRow');
         const row = doc.getElementById('row-1');
         expect(row).not.toBeNull();
         if (!row) return;
@@ -51,8 +51,8 @@ export const closestRow: Challenge = {
     },
     {
       name: 'returns null when there is no row above the element',
-      run: ({ doc, exports, expect }) => {
-        const findRow = exports['findRow'] as (start: Element) => HTMLElement | null;
+      run: ({ doc, fn, expect }) => {
+        const findRow = fn<(start: Element) => HTMLElement | null>('findRow');
         const outside = doc.getElementById('outside');
         expect(outside).not.toBeNull();
         if (!outside) return;

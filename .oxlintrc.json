@@ -66,21 +66,6 @@
       "rules": {
         "typescript/no-unnecessary-type-parameters": "off"
       }
-    },
-    {
-      // The same `exports`-bag seam as above, on the content side. A challenge test receives the
-      // learner's exports as `Readonly<Record<string, unknown>>`, and the challenge is the only
-      // place that knows the signature the prompt asked for, so asserting it is how the test calls
-      // the thing it exists to test. The alternative -- narrowing with `typeof x === 'function'` --
-      // is strictly worse here: it widens to `Function`, whose call returns `any`, smuggling in the
-      // type the project bans everywhere. Globbed rather than listed because this applies to every
-      // challenge module in every category directory, of which there will be ~100. The glob is one
-      // level deep on purpose: it covers `src/challenges/<category>/*.ts` and nothing else, leaving
-      // the rule on for `src/challenges/registry.ts` and `src/challenges/content.test.ts`.
-      "files": ["src/challenges/*/*.ts"],
-      "rules": {
-        "typescript/no-unsafe-type-assertion": "off"
-      }
     }
   ]
 }
