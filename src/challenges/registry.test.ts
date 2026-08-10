@@ -78,10 +78,16 @@ describe('the real registry', () => {
   it('filters by category', () => {
     const selection = challengesInCategory('selection');
     // `every` is vacuously true on an empty array, and filtering on `category` only to assert
-    // `category` is tautological even on a full one. The membership and the empty-category checks
+    // `category` is tautological even on a full one. The membership check and the derived counts
     // are what make this fail for a filter that returns nothing, or everything.
     expect(selection.every((c) => c.category === 'selection')).toBe(true);
     expect(selection.map((c) => c.slug)).toContain('query-basics');
-    expect(challengesInCategory('react')).toEqual([]);
+    // Derived from the registry rather than hard-coded. Asserting that a *named* category comes
+    // back empty is an assertion with an expiry date: `react` is a declared category with content
+    // planned, so `toEqual([])` would break the day it gets its first challenge -- under a test
+    // named "filters by category", which is not what would have gone wrong. Counted this way the
+    // assertion still fails for a filter that ignores its argument and hands back everything.
+    expect(selection.length).toBe(allChallenges.filter((c) => c.category === 'selection').length);
+    expect(challengesInCategory('react').length).toBe(allChallenges.filter((c) => c.category === 'react').length);
   });
 });
