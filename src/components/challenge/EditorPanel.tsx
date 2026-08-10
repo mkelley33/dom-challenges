@@ -26,6 +26,9 @@ const MonacoEditor = lazy(async () => {
 // jsx-no-jsx-as-prop/jsx-no-new-object-as-prop rules flag.
 const EDITOR_LOADING_FALLBACK = <p className="p-3 text-sm text-muted">Loading editor…</p>;
 const EDITOR_OPTIONS = {
+  // Monaco builds its own textarea, so this is the only channel that gives the editor an
+  // accessible name -- without it the control is an unlabelled text box to a screen reader.
+  ariaLabel: 'Solution code',
   minimap: { enabled: false },
   fontSize: 14,
   scrollBeyondLastLine: false,

@@ -10,6 +10,7 @@ interface MockEditorProps {
   onChange: (v: string) => void;
   path?: string;
   language?: string;
+  options?: { ariaLabel?: string };
 }
 
 // Captures every prop Monaco's <Editor> is mounted with, so tests can assert on
@@ -19,7 +20,7 @@ const editorSpy = vi.fn<(props: MockEditorProps) => void>();
 vi.mock('@monaco-editor/react', () => ({
   Editor: (props: MockEditorProps) => {
     editorSpy(props);
-    const { value, onChange } = props;
+    const { value, onChange, options } = props;
 
     const handleChange = useCallback(
       (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -28,7 +29,11 @@ vi.mock('@monaco-editor/react', () => ({
       [onChange],
     );
 
-    return <textarea aria-label="Solution code" value={value} onChange={handleChange} />;
+    // The label comes from `options.ariaLabel`, the same channel the real Monaco reads it from,
+    // rather than being hardcoded here. Hardcoding it would make every `getByRole('textbox',
+    // { name: 'Solution code' })` below pass even if EditorPanel never named the editor at all --
+    // which is precisely the production bug those queries exist to rule out.
+    return <textarea aria-label={options?.ariaLabel} value={value} onChange={handleChange} />;
   },
   loader: { config: vi.fn<() => void>() },
 }));
