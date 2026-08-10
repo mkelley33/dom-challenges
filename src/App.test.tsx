@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { App } from './App';
 
 describe('App', () => {
-  it('renders the application name', () => {
+  it('renders the application shell', () => {
     render(<App />);
-    expect(screen.getByRole('heading', { name: /dom challenges/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /dom challenges/i })).toBeInTheDocument();
   });
 });
