@@ -40,13 +40,15 @@
       }
     },
     {
-      // Enabled implicitly by the "suspicious" category. These files are the seam between the
-      // app's realm and the sandbox's, and every value crossing it arrives untyped: happy-dom's
-      // `Window` is structurally distinct from lib.dom's, `new win.Function(...)` is typed only
-      // as `Function`, and a learner's `exports` bag is `Record<string, unknown>`. A narrowing
-      // assertion is the only way to cross those seams, so here the rule reports nothing but
-      // false positives. It stays on everywhere else, including the rest of src/runner.
-      "files": ["src/runner/harness.ts", "src/runner/harness.test.ts", "src/test/**/*.ts"],
+      // Enabled implicitly by the "suspicious" category. Each of these three files holds exactly
+      // one kind of seam between the app's realm and the sandbox's, where the value arrives
+      // untyped and an assertion is the only way across: happy-dom's `Window` is structurally
+      // distinct from lib.dom's (createMemoryHost.ts), `new win.Function(...)` is typed only as
+      // `Function` (harness.ts), and a learner's `exports` bag is `Record<string, unknown>`
+      // (harness.test.ts). The rule stays on everywhere else, including the rest of src/runner
+      // and the rest of src/test -- listing files rather than globbing keeps it that way as
+      // helpers are added.
+      "files": ["src/runner/harness.ts", "src/runner/harness.test.ts", "src/test/createMemoryHost.ts"],
       "rules": {
         "typescript/no-unsafe-type-assertion": "off"
       }
