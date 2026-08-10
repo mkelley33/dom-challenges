@@ -352,6 +352,46 @@ describe('useChallengeRun', () => {
     expect(writtenProgress(fetchMock).join('|')).not.toContain('"status":"solved"');
   });
 
+  it('never lets a run reset superseded land in the cleared panel', async () => {
+    const fetchMock = stubFetch();
+    // The one thing a real host cannot be made to do on cue: stay in flight until the test says
+    // otherwise, so `reset` is guaranteed to arrive while the run is still unresolved.
+    let landRun!: (value: Harness.RunResult) => void;
+    runChallengeOverride = () =>
+      new Promise<Harness.RunResult>((resolve) => {
+        landRun = resolve;
+      });
+    const ref = attachedRef();
+    const seen: (Harness.RunResult | null)[] = [];
+    const { result } = renderRun(ref, seen);
+
+    let running: Promise<void> = Promise.resolve();
+    act(() => {
+      running = result.current.run(PASSING);
+    });
+    await waitFor(() => {
+      expect(result.current.isRunning).toBe(true);
+    });
+
+    let resetting: Promise<void> = Promise.resolve();
+    act(() => {
+      resetting = result.current.reset(challenge.starterCode);
+    });
+
+    await act(async () => {
+      landRun({ passed: true, results: [], error: null });
+      await Promise.all([running, resetting]);
+    });
+
+    // The render history, not just the last value: reading only the end cannot tell "the run never
+    // landed" apart from "it landed and something cleared it afterwards".
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.some((entry) => entry?.passed === true)).toBe(false);
+    expect(result.current.result).toBeNull();
+    // Nor is a run the learner cancelled an attempt they made.
+    expect(writtenProgress(fetchMock)).toHaveLength(0);
+  });
+
   it('treats a host torn down mid-run as a cancellation, not as a failed run', async () => {
     const fetchMock = stubFetch();
     // Detached, so the frame never loads and the run is still in flight when the hook unmounts --
