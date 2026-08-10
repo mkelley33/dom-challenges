@@ -3750,6 +3750,22 @@ Behaviour to build, each covered by a test in `SolutionsPanel.test.tsx`:
 
 Render `explanation` and `tradeoffs` with `ReactMarkdown`; render `code` in a `<pre><code>` highlighted by `shiki`.
 
+**AMENDED — this is shiki's first use in the project, and its default entry point is a bundle
+trap.** Importing `codeToHtml` from `'shiki'` pulls every grammar and every theme it ships with,
+which is measured in megabytes; it would land inside the `ChallengePage` chunk that Task 13 just
+finished separating out (413 kB). Build the highlighter from `shiki/core` via
+`createHighlighterCore`, dynamically importing **only** the `typescript` grammar and the one or
+two themes actually rendered, and use the JavaScript RegExp engine
+(`createJavaScriptRegexEngine` from `shiki/engine/javascript`) rather than the default oniguruma
+WASM — TypeScript's grammar is supported by it and the WASM binary is pure weight otherwise. Load
+the highlighter through a dynamic `import()` inside the panel so it forms its own chunk rather
+than inflating `ChallengePage`'s, and render unhighlighted `<pre><code>` until it resolves so a
+slow highlighter never blocks the solution text. Report `ChallengePage`'s chunk size before and
+after; a highlighter that grows it materially has been wired wrong.
+
+Highlighting is decoration. If the highlighter fails to load, the code must still be readable —
+catch and fall back to plain `<pre><code>`, and cover that fallback with a test.
+
 - [ ] **Step 5: Wire reveal into `ChallengePage`**
 
 `onReveal` writes `revealedAt` and `updatedAt` onto the challenge's existing record.
