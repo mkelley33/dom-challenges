@@ -2882,6 +2882,16 @@ export const routeDefinitions: RouteObject[] = [
 export const router = createBrowserRouter(routeDefinitions);
 ```
 
+**AMENDED after the Task 13 review — `ChallengePage` must be code-split, and this file is where
+that is owned.** The static import above is correct for Task 10, when `ChallengePage` is a
+placeholder. By Task 13 it transitively pulls `react-markdown`, `remark-gfm`, and the editor chain
+into the entry chunk: the entry grew 325 kB → 729 kB and `vite build` began emitting its 500 kB
+chunk warning. Task 12 already established that Monaco itself must stay out of any chunk that does
+not render an editor; the same argument applies one level up. Wrap the challenge route's component
+in `lazy()` with a `<Suspense>` boundary around `AppShell`'s `<Outlet />` — keeping `element` in
+the route table synchronous so `createMemoryRouter(routeDefinitions, …)` in tests still works —
+and confirm the build no longer warns.
+
 `src/App.tsx`:
 
 ```tsx
@@ -3520,7 +3530,13 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
         const now = new Date().toISOString();
         saveProgress.mutate({
           ...progress,
-          status: next.passed ? 'solved' : 'attempted',
+          // AMENDED after the Task 13 review (owner decision). The original line read
+          // `status: next.passed ? 'solved' : 'attempted'`, which regressed a solved challenge to
+          // `attempted` on any later failing run while the line below deliberately preserved
+          // `solvedAt` -- a self-contradictory record, and a solved count that dropped whenever a
+          // learner experimented after solving. Solved is now sticky: only Task 15's Clear button
+          // un-solves a challenge.
+          status: next.passed || progress.solvedAt !== null ? 'solved' : 'attempted',
           attempts: progress.attempts + 1,
           solvedAt: next.passed ? (progress.solvedAt ?? now) : progress.solvedAt,
           lastCode: code,
@@ -3545,6 +3561,18 @@ export function useChallengeRun(challenge: Challenge, containerRef: RefObject<HT
   return { result, isRunning, run, reset };
 }
 ```
+
+**AMENDED after the Task 13 review — the `progress` closure above is destructive, not merely
+stale.** The sketch spreads `...progress`, a value captured when the callback was created, and
+`saveProgress` PATCHes the whole record body rather than a delta. On a cold deep-link to
+`/challenge/:slug` the `GET /progress` is still in flight when the learner's first run starts, so
+`progress` is the synthesised `emptyProgress` placeholder — and the write then overwrites a real
+solved row with `attempts: 1`, `status: 'attempted'`, `solvedAt: null`. The prior record must be
+read **at write time**, after awaiting the progress query, and the write must be skipped entirely
+if that read cannot be established. Never derive the written record from a placeholder that only
+means "not loaded yet". The same restructure removes `progress` from the callback's dependency
+array, which is what makes the memoisation real: `emptyProgress` builds a fresh object on every
+render, so a `progress` dependency invalidates the callback every time regardless.
 
 - [ ] **Step 5: Implement `ResultPanel` and `PromptPanel`**
 
