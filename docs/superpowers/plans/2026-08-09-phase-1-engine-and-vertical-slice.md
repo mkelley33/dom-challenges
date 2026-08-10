@@ -3752,7 +3752,18 @@ Render `explanation` and `tradeoffs` with `ReactMarkdown`; render `code` in a `<
 
 - [ ] **Step 5: Wire reveal into `ChallengePage`**
 
-`onReveal` calls `useSaveProgress().mutate({ ...progress, revealedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })`.
+`onReveal` writes `revealedAt` and `updatedAt` onto the challenge's existing record.
+
+**AMENDED after the Task 13 review — do not spread a render-time `progress` value here.** The
+sketch this replaced read `{ ...progress, … }` from the component closure, which is the same
+destructive write Task 13 had to fix: `saveProgress` PATCHes the whole record body, so a learner
+who deep-links to `/challenge/:slug` and clicks Reveal before `GET /progress` settles would
+overwrite their real row with the synthesised `emptyProgress` placeholder — wiping `attempts`,
+`status` and `solvedAt` in exchange for a `revealedAt`. Reveal must resolve the prior record the
+way `useChallengeRun` does: await the settled progress query, then `findChallengeProgress(records,
+challenge.id)`, then write. If the record cannot be established, skip the write rather than
+writing a placeholder-derived one. A test must cover reveal-before-the-query-settles against an
+already-solved row.
 
 - [ ] **Step 6: Run the tests and verify they pass**
 
