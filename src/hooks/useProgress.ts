@@ -96,6 +96,11 @@ export function useClearProgress(): UseMutationResult<unknown, Error, string, { 
       if (context) queryClient.setQueryData(PROGRESS_QUERY_KEY, context.previous);
     },
     onSettled: () => {
+      // Deliberately left on the 'active' default, unlike `useSaveProgress` above. A delete removes
+      // a row rather than creating one, so there is no server-assigned field for the cache to be
+      // missing: after `onMutate` filters the row out, the cache already equals what the server
+      // holds. The asymmetry between the two mutations is a decision, not an oversight -- do not
+      // "align" them without a reason that survives that argument.
       void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY });
     },
   });

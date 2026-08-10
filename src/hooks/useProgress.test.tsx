@@ -184,6 +184,11 @@ describe('useSaveProgress', () => {
 
     // Seeded the way the run flow seeds it -- imperatively, carrying the queryFn, with no component
     // subscribed. An invalidation left on its 'active' default refetches nothing in this state.
+    //
+    // The coupling runs the other way too, and this test does not cover that direction: a cache
+    // seeded through `setQueryData` carries no queryFn, so its invalidation cannot refetch under
+    // *any* `refetchType`. If some later path seeds this key that way -- a prefetch, a push, a test
+    // helper -- the read-back below silently stops happening for it while this test keeps passing.
     await client.ensureQueryData({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress });
 
     const { result } = renderHook(() => useSaveProgress(), { wrapper: wrapperFor(client) });
