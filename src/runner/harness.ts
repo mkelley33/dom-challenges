@@ -91,12 +91,17 @@ function evaluate(
  * The assertion is unavoidable -- `exports` is `Record<string, unknown>` because nothing about
  * submitted code is known until it runs -- but it belongs here rather than in the challenge
  * files. Narrowing with `typeof value === 'function'` instead would not help: that widens to
- * `Function`, whose call returns `any`.
+ * `Function`, whose call returns `any`, and it would be the wrong check anyway -- `fn<T>` is
+ * generic over any export, not only functions, so a test is free to pull out a constant or an
+ * object just as well.
  *
- * A missing export throws rather than handing back `undefined`, for the same reason the `require`
- * shim above names the module it cannot supply. `undefined` would surface several frames later as
- * "undefined is not a function" inside a challenge test, pointing the learner at the harness
- * instead of at the `export` keyword they left off.
+ * What this accessor checks is presence, not shape. A missing export throws rather than handing
+ * back `undefined`, for the same reason the `require` shim above names the module it cannot
+ * supply: `undefined` would surface several frames later as "undefined is not a function" inside
+ * a challenge test, pointing the learner at the harness instead of at the `export` keyword they
+ * left off. An export that exists but is the wrong shape for what the test expected -- present,
+ * but not callable -- is not caught here; it is handed back as `T` unchanged, and whatever the
+ * test does with it produces whatever error that mismatch produces.
  */
 function createExportAccessor(exports: Record<string, unknown>): <T>(name: string) => T {
   return <T>(name: string): T => {

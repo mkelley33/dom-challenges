@@ -32,13 +32,17 @@ export interface TestContext {
   /**
    * Reads a named export from the submitted code as `T`.
    *
-   * This is how a challenge test reaches the function the prompt asked for. The alternative --
+   * This is how a challenge test reaches the value the prompt asked the learner to export --
+   * typically a function, though `fn` is generic over any export shape. The alternative --
    * asserting a type onto `exports` in the challenge file -- is an unsafe assertion repeated in
    * every one of ~100 challenge modules; here the one unavoidable assertion lives in the harness,
    * at the seam that already owns the boundary with the submitted code.
    *
-   * Throws with a message naming the missing export when the code does not export `name`, so a
-   * typo fails the test as "you did not export this" rather than as "undefined is not a function".
+   * Checks presence, not shape. Throws with a message naming the missing export when the code
+   * does not export `name` at all, so a typo fails the test as "you did not export this" rather
+   * than as "undefined is not a function". An export that exists but is not callable is not
+   * caught here -- it is handed back as `T`, and calling it produces whatever error that mismatch
+   * produces.
    */
   fn: <T>(name: string) => T;
   tick: () => Promise<void>;
