@@ -1406,7 +1406,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Challenge } from '@/types/challenge';
 
-import { allChallenges, challengeBySlug, challengesInCategory, validateRegistry } from './registry';
+import { allChallenges, challengeById, challengeBySlug, challengesInCategory, validateRegistry } from './registry';
 
 function stub(overrides: Partial<Challenge>): Challenge {
   return {
@@ -1446,6 +1446,11 @@ describe('validateRegistry', () => {
     expect(problems.join(' ')).toContain('ghost');
   });
 
+  it('does not report relatedIds that resolve to a real challenge in the same list', () => {
+    const problems = validateRegistry([stub({ id: 'a', slug: 'a', relatedIds: ['b'] }), stub({ id: 'b', slug: 'b' })]);
+    expect(problems).toEqual([]);
+  });
+
   it('reports a challenge with no tests', () => {
     const problems = validateRegistry([stub({ id: 'a', slug: 'a', tests: [] })]);
     expect(problems.join(' ')).toContain('no tests');
@@ -1464,6 +1469,10 @@ describe('the real registry', () => {
 
   it('returns undefined for an unknown slug', () => {
     expect(challengeBySlug('no-such-slug')).toBeUndefined();
+  });
+
+  it('returns undefined for an unknown id', () => {
+    expect(challengeById('no-such-id')).toBeUndefined();
   });
 
   it('filters by category', () => {
