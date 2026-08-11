@@ -2901,7 +2901,16 @@ chunk warning. Task 12 already established that Monaco itself must stay out of a
 not render an editor; the same argument applies one level up. Wrap the challenge route's component
 in `lazy()` with a `<Suspense>` boundary around `AppShell`'s `<Outlet />` — keeping `element` in
 the route table synchronous so `createMemoryRouter(routeDefinitions, …)` in tests still works —
-and confirm the build no longer warns.
+and confirm the route's eager bytes actually fell.
+
+**AMENDED again in the merge-gating fix wave.** This step originally read "and confirm the build no
+longer warns". It no longer can, and never should have: `chunkSizeWarningLimit` has been raised
+above Monaco's own lazy chunks, because a build that warns on every run about chunks no route
+downloads masks the next real regression exactly as thoroughly as a raised limit does. The signal
+moved to `scripts/routeBudget.ts`, which runs as the last step of `pnpm build` and fails a route
+whose eager JavaScript passes its committed budget. `vite build`'s size listing could not have
+answered this question anyway -- it cannot tell a deferred chunk from a preloaded one. See
+AGENTS.md §7.
 
 `src/App.tsx`:
 

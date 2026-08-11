@@ -61,7 +61,8 @@ you can still write and run code — but nothing is recorded as solved, and ther
 | `pnpm test:watch` | Vitest in watch mode                                                           |
 | `pnpm typecheck`  | `tsc --build` over both projects, app and `server/`                            |
 | `pnpm lint`       | oxlint, including the type-aware rules                                         |
-| `pnpm build`      | Typechecks, then a production build into `dist/`                               |
+| `pnpm build`      | Typechecks, builds into `dist/`, then checks the route budgets                 |
+| `pnpm budget`     | Route-level eager bytes against their budgets, over the existing `dist/`       |
 | `pnpm preview`    | Serves the built `dist/` locally                                               |
 | `pnpm format`     | Prettier over the repo                                                         |
 
@@ -189,8 +190,9 @@ code either way — that is the point of the host contract described in `AGENTS.
   summing to exactly 100 however long the drag, and keeps the persisted value readable.
 - **With json-server down, progress fails quietly.** Editing and running still work, and nothing is destroyed, but
   reads and writes fail with no banner explaining it. The spec calls for one; it is not built yet.
-- **`vite build` always prints the 500 kB chunk warning.** It names Monaco's lazily-loaded chunks, which no entry
-  references. See `AGENTS.md` for why the limit has not simply been raised.
+- **The landing page eagerly ships every challenge module.** `Dashboard` imports the whole registry, so each challenge
+  authored adds roughly 15 kB to `/`. `pnpm build` fails once a route passes its committed budget, which is what will
+  force the fix; see `AGENTS.md` §10.
 
 ## License
 

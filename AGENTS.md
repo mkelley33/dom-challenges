@@ -235,16 +235,24 @@ invisible until someone measures.
 **Bundle claims must be measured at route level.** `vite build`'s size listing cannot distinguish a genuinely deferred
 chunk from one the route statically imports and preloads via `__vite__mapDeps`. "A new chunk appeared" and "the entry
 chunk did not grow" prove nothing on their own: a real case had a named chunk shed 110 kB while 64 kB of that was
-re-chunking into files sitting in the same route's preload list, for a real saving of 46 kB. **Resolve the
-`__vite__mapDeps` table per call site and report the route's total eager bytes.** Any chunk number in this repo's
-history that was not checked that way should be treated as unverified.
+re-chunking into files sitting in the same route's preload list, for a real saving of 46 kB. **Resolve the static
+import graph per call site and report the route's total eager bytes** — never sum the `__vite__mapDeps` table whole.
+Any chunk number in this repo's history that was not checked that way should be treated as unverified.
 
-**`vite build` always emits the 500 kB chunk warning.** It names Monaco's lazy chunks, none of which is referenced by
-`index.html`, so it carries no signal — but a build that is permanently red masks the next real regression exactly as
-thoroughly as a raised limit would. `chunkSizeWarningLimit` is a single global number, so there is no scoped middle
-option: either raise it above Monaco's chunks _and_ add an explicit guard on the entry chunk's size, or accept the
-noise knowingly. It is currently accepted knowingly. If you find that unacceptable, do the first option — do not
-silently raise the limit alone.
+**`pnpm build` measures that for you, and fails on it.** `scripts/routeBudget.ts` runs as the build's last step. It
+reads Vite's build manifest — the same static-import edges the preload helper is generated from, which is why it does
+not have to parse `__vite__mapDeps` back out of the emitted chunk — and reports the eager JavaScript for `/`,
+`/category/:categoryId` and `/challenge/:slug` against committed budgets. A budget it trips is a measurement, so
+answer it by measuring: raising the number is the last resort, not the first. It also fails outright when a route's
+`lazy()` module stops being a chunk of its own, because that is the regression whose cost lands on a _different_
+route's line.
+
+**`chunkSizeWarningLimit` is raised to 7500 kB, and is not a budget.** Every build warned before that, always about
+the same Monaco workers — chunks no route references and no learner downloads until the editor opens — and a build
+that is permanently red masks the next real regression exactly as thoroughly as a raised limit would. The limit is a
+single global number compared against one chunk at a time, so it could never say anything about a route in the first
+place. It is set by Monaco's largest chunk (`ts.worker`, ~6,914 kB) and by nothing else; the route budgets above are
+what replaced its signal. Do not read it as a size target, and do not lower it hoping it will act as one.
 
 ---
 
