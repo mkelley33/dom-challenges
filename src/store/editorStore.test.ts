@@ -142,6 +142,37 @@ describe('persistence', () => {
     expect(useEditorStore.getState().layout.promptPercent).toBe(50);
   });
 
+  it('clamps a rehydrated split that sums past 100, which no control in the app can undo', async () => {
+    // The payload that bricked the page in Chrome. `ChallengePage` computes `resultPercent = -40`,
+    // emits `minmax(0, -40fr)`, and the invalid track takes the whole `grid-template-columns`
+    // declaration with it: three columns collapse to one, the editor measures 42px tall, and both
+    // handles measure 16x0. Neither handle can undo it, because `resizePanes` preserves each pair's
+    // total. Reachable today only by editing storage by hand -- and by any future change to the
+    // stored shape, since `persist` declares no version and no migrate.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ state: { layout: { promptPercent: 90, editorPercent: 50 } }, version: 0 }),
+    );
+
+    await useEditorStore.persist.rehydrate();
+
+    expect(useEditorStore.getState().layout).toEqual({ promptPercent: 70, editorPercent: 15 });
+  });
+
+  it('widens a rehydrated split that starves a pane, and repairs the stored entry', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ state: { layout: { promptPercent: 2, editorPercent: 3 } }, version: 0 }),
+    );
+
+    await useEditorStore.persist.rehydrate();
+
+    expect(useEditorStore.getState().layout).toEqual({ promptPercent: 15, editorPercent: 15 });
+    // Written back, not merely corrected in memory: leaving the bad value in storage would hand the
+    // same repair to every future load, and to any code that reads the key without the store.
+    expect(readPersistedState().layout).toEqual({ promptPercent: 15, editorPercent: 15 });
+  });
+
   it('does not persist mobileTab: it is view state for the current visit, not a saved preference', () => {
     useEditorStore.getState().setMobileTab('result');
 

@@ -76,3 +76,54 @@ export function resizePanes(layout: EditorLayout, edge: PaneEdge, deltaPercent: 
     ? { promptPercent: nextLeading, editorPercent: total - nextLeading }
     : { promptPercent: layout.promptPercent, editorPercent: nextLeading };
 }
+
+/**
+ * The split both boundaries are moved *from* when a stored one is normalised: every pane at the
+ * extreme the clamp allows.
+ *
+ * Chosen so that neither move below is constrained by anything but `MIN_PANE_PERCENT` itself. From
+ * here the first boundary may land anywhere in `[MIN, 100 - 2 * MIN]` and the second anywhere the
+ * first leaves room for, which between them is exactly the set of splits the resizer can produce.
+ */
+const WIDEST_SEED: EditorLayout = { promptPercent: MIN_PANE_PERCENT, editorPercent: 100 - 2 * MIN_PANE_PERCENT };
+
+function finitePercent(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Where a boundary sits, as a share of the row measured from its left edge. */
+function boundaries(layout: EditorLayout): [number, number] {
+  return [layout.promptPercent, layout.promptPercent + layout.editorPercent];
+}
+
+/**
+ * A split read back out of storage, turned into one the workspace can actually be driven from.
+ *
+ * The stored value is a plain `localStorage` entry: it can be hand-edited, and `persist` declares
+ * no `version` and no `migrate`, so any future change to `EditorLayout`'s shape arrives here too.
+ * A split summing past 100 gives the results track a negative `fr`, which invalidates the entire
+ * `grid-template-columns` declaration -- three columns become one, and **no control in the app
+ * undoes it**, because every move `resizePanes` makes preserves its own pair's total.
+ *
+ * Expressed as two moves through `resizePanes` rather than as a clamp of its own. The clamp exists
+ * once so that the pointer path and the keyboard path cannot disagree about where a pane's floor
+ * is; a third copy here would be a third thing to keep in step. Each boundary is asked for the
+ * position the stored split wanted, from a seed where nothing but that clamp can refuse it -- and
+ * because `resizePanes` moves a boundary by moving the pane leading it, "the position the stored
+ * split wanted" is the *difference between boundaries*, not between pane widths.
+ */
+export function normaliseLayout(stored: unknown): EditorLayout {
+  if (typeof stored !== 'object' || stored === null) return DEFAULT_LAYOUT;
+  if (!('promptPercent' in stored) || !('editorPercent' in stored)) return DEFAULT_LAYOUT;
+
+  const promptPercent = finitePercent(stored.promptPercent);
+  const editorPercent = finitePercent(stored.editorPercent);
+  if (promptPercent === null || editorPercent === null) return DEFAULT_LAYOUT;
+
+  const [wantedFirst, wantedSecond] = boundaries({ promptPercent, editorPercent });
+  const [seedFirst, seedSecond] = boundaries(WIDEST_SEED);
+
+  const firstPlaced = resizePanes(WIDEST_SEED, 'prompt-editor', wantedFirst - seedFirst);
+  // `prompt-editor` preserves its pair's total, so the second boundary is still the seed's.
+  return resizePanes(firstPlaced, 'editor-result', wantedSecond - seedSecond);
+}

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { EditorLayout } from '@/lib/paneLayout';
-import { DEFAULT_LAYOUT } from '@/lib/paneLayout';
+import { DEFAULT_LAYOUT, normaliseLayout } from '@/lib/paneLayout';
 import type { CategoryId, Difficulty } from '@/types/challenge';
 
 export type MobileTab = 'code' | 'problem' | 'result';
@@ -67,6 +67,18 @@ export const useEditorStore = create<EditorStore>()(
       name: 'dom-challenges-editor',
       // mobileTab is view state for the current visit, not something to restore days later.
       partialize: (state) => ({ drafts: state.drafts, filters: state.filters, layout: state.layout }),
+      /**
+       * The stored split is the one value here the workspace cannot survive being wrong about: a
+       * pair summing past 100 gives the results track a negative `fr`, and an invalid track takes
+       * the whole `grid-template-columns` declaration with it. `normaliseLayout` runs it back
+       * through the resizer's own clamp -- see the docblock there for why it is not a second one.
+       *
+       * Written through `setLayout` rather than mutated, so the repaired split is persisted as well
+       * as applied: leaving the bad value in storage would hand the same repair to every load.
+       */
+      onRehydrateStorage: () => (state) => {
+        state?.setLayout(normaliseLayout(state.layout));
+      },
     },
   ),
 );
