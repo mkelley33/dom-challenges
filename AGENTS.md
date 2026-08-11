@@ -350,8 +350,25 @@ regenerate and nothing that can drift out of step with the module beside it.
 
 `ChallengePage` looks the slug up in the index synchronously (so an unknown slug is a not-found page immediately, not a
 spinner that becomes one) and then reads `loadChallenge(entry)` with React's `use`. That is why `loadChallenge` caches
-its promises by id: `use` requires the same promise across renders. It also deletes a **rejected** promise from that
-cache, so a dropped chunk request is retried rather than becoming a permanently broken challenge.
+its promises by id: `use` requires the same promise across renders.
+
+**A rejected promise stays in that cache, and must.** Evicting it so the next caller could retry looks like the kinder
+branch and is a livelock: the next caller _is_ the retry render `use` schedules, so it calls `load()` again, gets a
+fresh pending promise, and suspends again. Measured at **21,528 imports in two seconds** with the page pinned to the
+loading fallback and `RouteError` never reached — worse than the failure it was softening, and worse than the eager
+registry it replaced, where content never suspended at all. Keeping the rejection is what lets the failure settle into
+a throw the boundary can catch.
+
+Evicting would not buy a retry anyway: per the HTML module map a repeat `import()` of a specifier that already failed
+resolves to the recorded failure without re-fetching — the same conclusion `routes.errorElement.test.tsx` records for
+`lazy`, that only a fresh document re-issues the request. `RouteError`'s reload button is that fresh document. An
+in-session retry would have to be its own entry point the error UI calls deliberately, never the path a render reads.
+
+Two tests hold this and neither can see it alone: `loader.test.ts` pins the promise identity across a rejection, and
+`ChallengePage.loadFailure.test.tsx` renders the real route with an unloadable challenge module and waits for the error
+page. The unit test passed against the eviction, because calling `loadChallenge` directly is not composing it with
+`use` — §8's recurring defect, in the form where the assertion checks that the branch fired rather than what it does to
+the thing consuming it.
 
 **What it cost and what it saved, measured by route-level delta** (`pnpm build`, then empty the category's entries and
 rebuild — §7's method, and the only one that is trustworthy here):
@@ -365,8 +382,7 @@ rebuild — §7's method, and the only one that is trustworthy here):
 
 The floor is byte-identical either way, so the refactor added no fixed overhead: a challenge went from **6,756 B on the
 first paint to 414 B**, a factor of sixteen. At the ~103 challenges the project targets, that is ~408 kB of eager
-JavaScript on `/` rather than ~1.05 MB. The per-challenge spread before was wide — 2,424 B for `queryBasics`, 9,356 B
-for `treeWalker` — which matters below, because the cheapest one is the one a byte budget cannot see.
+JavaScript on `/` rather than ~1.05 MB.
 
 **Two checks hold this, and they fail for different reasons.** `pnpm build` runs both:
 

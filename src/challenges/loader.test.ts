@@ -19,14 +19,6 @@ const INDEX_KEYS = ['category', 'concepts', 'difficulty', 'id', 'load', 'related
 /** The fields that make a challenge module expensive. None of them may reach the index. */
 const CONTENT_KEYS = ['prompt', 'html', 'starterCode', 'tests', 'solutions'] as const;
 
-const CONTENT: ChallengeContent = {
-  prompt: 'p',
-  html: '<div></div>',
-  starterCode: '// start here\n',
-  tests: [{ name: 't', run: () => undefined }],
-  solutions: [{ label: 'Canonical', code: '', explanation: 'e', tradeoffs: 't' }],
-};
-
 function fakeEntry(id: string, load: () => Promise<ChallengeContent>): ChallengeEntry {
   return {
     id,
@@ -110,17 +102,27 @@ describe('loadChallenge', () => {
     expect(loadChallenge(entry!)).toBe(loadChallenge(entry!));
   });
 
-  it('retries after a failed load rather than caching the failure', async () => {
+  it('keeps a failed load, so the render reading it settles instead of asking again', async () => {
     let attempts = 0;
-    const entry = fakeEntry('fixture-flaky-chunk', () => {
+    const entry = fakeEntry('fixture-unloadable-chunk', () => {
       attempts += 1;
-      return attempts === 1 ? Promise.reject(new Error('chunk load failed')) : Promise.resolve(CONTENT);
+      return Promise.reject(new Error('chunk load failed'));
     });
 
+    const failed = loadChallenge(entry);
+    await expect(failed).rejects.toThrow('chunk load failed');
+
+    // Identity, *after* the rejection has settled, and the import count beside it. Dropping the
+    // failed promise so the next caller could retry looks like the kinder branch and is not: the
+    // caller is the retry render `use` schedules, so it gets a fresh pending promise, suspends
+    // again, and never reaches the boundary. Measured at 21,528 imports in two seconds, on a page
+    // showing nothing but the loading fallback.
+    //
+    // `ChallengePage.loadFailure.test.tsx` is the other half of this: it renders the real route and
+    // waits for the error page. Neither test can see the defect alone -- this one passed against
+    // the eviction, because calling `loadChallenge` directly is not composing it with `use`.
+    expect(loadChallenge(entry)).toBe(failed);
     await expect(loadChallenge(entry)).rejects.toThrow('chunk load failed');
-    // A cached rejection makes one dropped chunk request a permanently broken challenge for the
-    // rest of the session -- reachable by nothing but a reload, on a page that offers no reload.
-    await expect(loadChallenge(entry)).resolves.toMatchObject({ id: 'fixture-flaky-chunk', prompt: 'p' });
-    expect(attempts).toBe(2);
+    expect(attempts).toBe(1);
   });
 });

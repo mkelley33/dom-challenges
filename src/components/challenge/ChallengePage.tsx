@@ -275,9 +275,11 @@ interface ChallengeContentGateProps {
  * promise stable across renders -- `use` requires that, and an uncached promise would suspend the
  * route forever.
  *
- * The failure path is `AppShell`'s error boundary, the same one a failed route chunk lands in: a
+ * The failure path is the route error boundary, the same one a failed route chunk lands in: a
  * challenge whose chunk cannot be fetched is the same problem as a route whose chunk cannot be
- * fetched, and `RouteError` already offers the reload that answers both.
+ * fetched, and `RouteError` already offers the reload that answers both. That depends on
+ * `loadChallenge` keeping a *rejected* promise cached -- see the comment there, and
+ * `ChallengePage.loadFailure.test.tsx`, which is what holds it.
  */
 function ChallengeContentGate({ entry }: ChallengeContentGateProps) {
   const challenge = use(loadChallenge(entry));

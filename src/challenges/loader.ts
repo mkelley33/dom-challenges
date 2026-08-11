@@ -1,13 +1,25 @@
 import type { Challenge, ChallengeEntry } from '@/types/challenge';
 
 /**
- * The challenge each entry has already been asked for, keyed by id.
+ * The challenge each entry has already been asked for, keyed by id -- **settled either way**.
  *
  * Two reasons, and only one of them is about the network. React's `use` -- which is how
  * `ChallengePage` reads this -- requires the *same* promise on every render of the component that
  * reads it; a loader handing back a fresh promise each time suspends forever and warns about an
  * uncached promise on every attempt. The second is the ordinary one: a learner returning to a
  * challenge they have already opened should not wait for it twice.
+ *
+ * A **failure** stays here for the first reason, and the cost of getting that wrong is measured:
+ * evicting a rejected promise so the next caller could retry meant the retry render `use` schedules
+ * called `load()` again, got a fresh pending promise, and suspended again -- 21,528 imports in two
+ * seconds, the page pinned to the loading fallback, and the error boundary never reached. A cached
+ * rejection is what lets the failure settle into a throw `RouteError` can catch.
+ *
+ * Nor would evicting buy a retry. Per the HTML module map a repeat `import()` of a specifier that
+ * already failed resolves to the recorded failure without re-fetching, which is the same conclusion
+ * `routes.errorElement.test.tsx` reached for `lazy`: only a fresh document re-issues the request,
+ * which is exactly what `RouteError`'s reload button does. An in-session retry would have to be its
+ * own entry point that the error UI calls deliberately -- never the path a render reads.
  */
 const loaded = new Map<string, Promise<Challenge>>();
 
@@ -37,14 +49,6 @@ export function loadChallenge(entry: ChallengeEntry): Promise<Challenge> {
     ...content,
   }));
 
-  // A rejected promise must not be what the next caller gets. A dropped chunk request is transient
-  // and a cached rejection is not: it would make one failed fetch a permanently broken challenge
-  // for the rest of the session, on a page that offers no way to retry but a reload.
-  const guarded = pending.catch((error: unknown) => {
-    loaded.delete(entry.id);
-    throw error;
-  });
-
-  loaded.set(entry.id, guarded);
-  return guarded;
+  loaded.set(entry.id, pending);
+  return pending;
 }
