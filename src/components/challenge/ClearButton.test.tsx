@@ -222,7 +222,7 @@ describe('ClearButton', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not be cleared/i);
   });
 
-  it('cannot be set off a second time while the first clear is still in flight', async () => {
+  it('cannot be set off a second time while the first clear is still in flight, and keeps focus', async () => {
     const user = userEvent.setup();
     let releaseRead!: (record: ProgressRecord | null) => void;
     readStoredProgress.mockReturnValue(
@@ -234,9 +234,20 @@ describe('ClearButton', () => {
 
     await confirmClear(user);
 
+    // The read is still open -- the cold deep-link case, where it is a whole request long -- so the
+    // dialog restores focus to a trigger that is mid-clear. A plainly `disabled` button cannot take
+    // focus, and it would land on <body> instead: a keyboard learner loses their place at exactly
+    // the moment the page is rearranging itself.
     await waitFor(() => {
-      expect(clearButton()).toBeDisabled();
+      expect(clearButton()).toHaveFocus();
     });
+    expect(clearButton()).toHaveAttribute('aria-disabled', 'true');
+
+    // Focusable, but genuinely inert: a second confirm would delete a row the first one is already
+    // deleting, and the second DELETE 404s and rolls the cache back over the first.
+    await user.click(clearButton());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(clearProgress).not.toHaveBeenCalled();
 
     releaseRead(storedRecord());
 
@@ -244,6 +255,7 @@ describe('ClearButton', () => {
       expect(onCleared).toHaveBeenCalledTimes(1);
     });
     // ...and it comes back, rather than leaving the learner with a dead control.
-    expect(clearButton()).toBeEnabled();
+    expect(clearButton()).not.toHaveAttribute('aria-disabled', 'true');
+    expect(clearProgress).toHaveBeenCalledTimes(1);
   });
 });
