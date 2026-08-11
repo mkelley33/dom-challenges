@@ -113,6 +113,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./detachAndReattach').then((module) => module.detachAndReattach),
   },
   {
+    id: 'creation-replace-in-place',
+    slug: 'replace-in-place',
+    title: 'Swap the element, keep the reference',
+    category: 'creation',
+    difficulty: 'advanced',
+    concepts: ['replaceWith', 'replaceChild', 'outerHTML', 'stale references'],
+    relatedIds: ['creation-detach-and-reattach', 'creation-inner-html-cost'],
+    load: () => import('./replaceInPlace').then((module) => module.replaceInPlace),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
