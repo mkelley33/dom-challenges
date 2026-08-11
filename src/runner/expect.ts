@@ -50,7 +50,82 @@ function isElement(value: unknown): value is Element {
   return isNode(value) && value.nodeType === 1 && 'tagName' in value && typeof value.tagName === 'string';
 }
 
-function describeValue(value: unknown): string {
+/** How many entries of a collection are printed before the rest are summarised as a count. */
+const MAX_LISTED_ITEMS = 10;
+
+/** How much of a text node's data is printed. Long enough to recognise, short enough to scan. */
+const MAX_TEXT_CHARS = 30;
+
+/**
+ * `<li class="item">` rather than `<li>`.
+ *
+ * A failure that prints `<div>` three times over tells a learner which *kind* of thing came back
+ * and nothing about which ones -- and every challenge in the selection category is about telling
+ * one element from its neighbours. `id` and `class` are the two attributes those challenges select
+ * on, so they are the two that make the printed element identifiable.
+ */
+function describeElement(value: Element): string {
+  const id = value.getAttribute('id');
+  const className = value.getAttribute('class');
+  const attributes = [
+    id === null || id === '' ? '' : ` id=${JSON.stringify(id)}`,
+    className === null || className === '' ? '' : ` class=${JSON.stringify(className)}`,
+  ].join('');
+  return `<${value.tagName.toLowerCase()}${attributes}>`;
+}
+
+function describeNode(value: Node): string {
+  if (isElement(value)) return describeElement(value);
+  // `nodeType === 3` is `Node.TEXT_NODE`. Its data is quoted and clipped: the childNodes challenges
+  // hand back runs of indentation whitespace, and `#text "\n  "` is what makes those legible as the
+  // nodes they are rather than as gaps between the elements.
+  if (value.nodeType === 3) {
+    const data = value.nodeValue ?? '';
+    const clipped = data.length > MAX_TEXT_CHARS ? `${data.slice(0, MAX_TEXT_CHARS)}…` : data;
+    return `#text ${JSON.stringify(clipped)}`;
+  }
+  // `#comment`, `#document`, `#document-fragment`: the node's own name already reads as a label.
+  return value.nodeName;
+}
+
+/**
+ * Renders a `NodeList`, an `HTMLCollection` or an array of nodes as a list of its members, or
+ * returns `null` for anything that is neither.
+ *
+ * Structural throughout, for the same reason `isNode` is: the collection was built in the host
+ * realm, so `value instanceof NodeList` is `false` for every collection a learner actually
+ * produces. `item` is the duck-type both DOM collections share, and it is the only thing that can
+ * recognise an *empty* one -- which matters, because an empty NodeList is the actual value behind
+ * every `toHaveLength(0)` failure in this category and `{}` is the least informative way to print
+ * it. Arrays are recognised by their contents instead, so `["Home","Docs"]` keeps rendering as
+ * JSON while `[...document.querySelectorAll('p')]` does not.
+ */
+function describeCollection(value: object, depth: number): string | null {
+  const length = Reflect.get(value, 'length');
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) return null;
+
+  const isDomCollection = typeof Reflect.get(value, 'item') === 'function';
+  const shown = Math.min(length, MAX_LISTED_ITEMS);
+  const members: string[] = [];
+  let sawNode = false;
+
+  for (let index = 0; index < shown; index += 1) {
+    const member = Reflect.get(value, index);
+    if (isNode(member)) sawNode = true;
+    members.push(describeValue(member, depth + 1));
+  }
+
+  if (!isDomCollection && !sawNode) return null;
+  if (length > shown) members.push(`…${String(length - shown)} more`);
+  return `[${members.join(', ')}]`;
+}
+
+/**
+ * `depth` exists only to stop the collection branch recursing into itself: a member of a collection
+ * is described one level down, where the branch is off and `JSON.stringify` (which detects its own
+ * cycles) takes over. Without it a self-referential array holding one node would recurse forever.
+ */
+function describeValue(value: unknown, depth = 0): string {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
   switch (typeof value) {
@@ -64,13 +139,18 @@ function describeValue(value: unknown): string {
       return value.toString();
     case 'function':
       return String(value);
-    case 'object':
-      if (isElement(value)) return `<${value.tagName.toLowerCase()}>`;
+    case 'object': {
+      if (isNode(value)) return describeNode(value);
+      if (depth === 0) {
+        const listed = describeCollection(value, depth);
+        if (listed !== null) return listed;
+      }
       try {
         return JSON.stringify(value);
       } catch {
         return Object.prototype.toString.call(value);
       }
+    }
     default:
       return Object.prototype.toString.call(value);
   }
