@@ -11,7 +11,7 @@ Most challenges carry more than one accepted solution, each with an explanation 
 teaches _when_ to reach for a technique rather than only _how_.
 
 This is Phase 1: the engine plus one category authored end to end — **Selection & Traversal**, 13 challenges from
-novice to expert. Twelve further categories are specified in `docs/superpowers/specs/`.
+novice to expert. Twelve further categories are specified in §5 of the design doc under `docs/superpowers/specs/`.
 
 ## Requirements
 
@@ -59,7 +59,7 @@ you can still write and run code — but nothing is recorded as solved, and ther
 | `pnpm seed`       | Generates `server/db.json` (Faker, fixed seed — reproducible; resets progress) |
 | `pnpm test`       | Full Vitest suite, once                                                        |
 | `pnpm test:watch` | Vitest in watch mode                                                           |
-| `pnpm typecheck`  | `tsc --build` over both projects, app and `server/`                            |
+| `pnpm typecheck`  | `tsc --build` over both projects: `src/`, and `server/` + `scripts/`           |
 | `pnpm lint`       | oxlint, including the type-aware rules                                         |
 | `pnpm build`      | Typechecks, builds into `dist/`, then checks the route budgets                 |
 | `pnpm budget`     | Route-level eager bytes against their budgets, over the existing `dist/`       |
@@ -75,7 +75,7 @@ challenges yet say so rather than rendering an empty progress bar.
 filter, and a "hide solved" switch.
 
 **Challenge (`/challenge/:slug`)** — three panes on a desktop (problem, code, result), and a single column with a
-`[Problem | Code | Result]` tab bar below 1024px. The tab you were last on is remembered across reloads.
+`[Problem | Code | Result]` tab bar below 1024px.
 
 - **Run** transpiles your code, executes it in a fresh frame per test, and reports each test's outcome. A passing run
   marks the challenge solved.
@@ -87,7 +87,7 @@ filter, and a "hide solved" switch.
   learner who reveals sees exactly the same solutions and tradeoffs as one who solved unaided.
 - **Resizing the panes.** On a desktop there is a handle between each pair of columns. Drag it, or focus it with Tab
   and use the left and right arrow keys. No pane can be taken below 15% of the row, so a split you save is always one
-  you can undo. Below 1024px the columns are stacked behind the tab bar and the handles are not rendered.
+  you can undo. Below 1024px the columns are stacked behind the tab bar and the handles are hidden.
 
 Your in-progress code is saved to `localStorage` per challenge as you type, and survives a reload. So does the pane
 split. Progress — attempts, solved and revealed state — is saved to json-server.
@@ -107,10 +107,11 @@ src/
   hooks/         run flow, progress queries and mutations, media query
   store/         Zustand: editor drafts, filters, pane layout, active mobile tab
   api/           fetch wrapper and the progress endpoints
-  lib/           Monaco config, shiki highlighter, progress summary, solution gating
+  lib/           Monaco config, shiki highlighter, progress summary, solution gating, pane arithmetic
   types/         Challenge and ProgressRecord
   test/          shared test helpers (happy-dom host, Monaco mock)
 server/          json-server database and its Faker seed script
+scripts/         the route-level bundle budget checked by `pnpm build`
 docs/            the design spec and the phase plans
 ```
 
@@ -161,7 +162,7 @@ one mistake that passes the test suite and fails in a real browser. Read it befo
 pnpm test
 ```
 
-341 tests across 32 files. Beyond the usual unit and component coverage, one suite is load-bearing:
+Beyond the usual unit and component coverage, one suite is load-bearing:
 `src/challenges/content.test.ts` runs every challenge in the registry through the real harness and proves, per
 challenge:
 
