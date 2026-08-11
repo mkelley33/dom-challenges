@@ -103,6 +103,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./fragmentIsEmptied').then((module) => module.fragmentIsEmptied),
   },
   {
+    id: 'creation-detach-and-reattach',
+    slug: 'detach-and-reattach',
+    title: 'A removed node is not a destroyed node',
+    category: 'creation',
+    difficulty: 'advanced',
+    concepts: ['remove', 'removeChild', 'detached nodes', 'node lifetime'],
+    relatedIds: ['creation-move-not-copy', 'creation-inner-html-cost'],
+    load: () => import('./detachAndReattach').then((module) => module.detachAndReattach),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
