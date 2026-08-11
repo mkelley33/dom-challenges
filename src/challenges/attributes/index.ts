@@ -30,6 +30,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  */
 export const attributesEntries: ChallengeEntry[] = [
   {
+    id: 'attributes-empty-or-absent',
+    slug: 'empty-or-absent',
+    title: 'The empty attribute and the missing one',
+    category: 'attributes',
+    difficulty: 'novice',
+    concepts: ['getAttribute', 'setAttribute', 'removeAttribute', 'hasAttribute', 'alt'],
+    relatedIds: [],
+    load: () => import('./emptyOrAbsent').then((module) => module.emptyOrAbsent),
+  },
+  {
     id: 'attributes-dirty-value',
     slug: 'dirty-value',
     title: 'The value on screen and the value in the markup',
