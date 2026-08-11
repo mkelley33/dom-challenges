@@ -4,6 +4,7 @@ import { asyncEntries } from './async';
 import { attributesEntries } from './attributes';
 import { creationEntries } from './creation';
 import { eventsEntries } from './events';
+import { formsEntries } from './forms';
 import { observersEntries } from './observers';
 import { performanceEntries } from './performance';
 import { selectionEntries } from './selection';
@@ -94,6 +95,7 @@ export const challengeIndex: readonly ChallengeEntry[] = [
   ...byAscendingDifficulty(attributesEntries),
   ...byAscendingDifficulty(stylesEntries),
   ...byAscendingDifficulty(eventsEntries),
+  ...byAscendingDifficulty(formsEntries),
   ...byAscendingDifficulty(observersEntries),
   ...byAscendingDifficulty(performanceEntries),
   ...byAscendingDifficulty(asyncEntries),

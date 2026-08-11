@@ -180,6 +180,38 @@ describe('APIs present but not faithful', () => {
     expect(order).toEqual(['frame', 'timer']);
   });
 
+  it('raises tooShort/tooLong on an unedited value, empties validationMessage, and never matches :invalid', async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input id="short" name="short" minlength="5" value="ab">',
+        '  <input id="required" name="required" required>',
+        '</form>',
+      ].join('\n'),
+    );
+    const short = context.document.querySelector<HTMLInputElement>('input#short');
+    const required = context.document.querySelector<HTMLInputElement>('input#required');
+    if (!short || !required) throw new Error('the fixture is missing a field');
+
+    // The controls: the validity engine is running and agrees with Chrome on the flag this file is
+    // not complaining about, and a message the code sets itself does round-trip. So the three
+    // failures below are those specific rules, not a validity object that was never populated.
+    expect(required.validity.valueMissing).toBe(true);
+    required.setCustomValidity('Say something');
+    expect(required.validationMessage).toBe('Say something');
+    required.setCustomValidity('');
+
+    // `tooShort`/`tooLong` apply only once the value has been edited by the user. Chrome reports
+    // `valid` for a value that came from the markup; happy-dom ignores the condition -- so a
+    // challenge built on `minlength`/`maxlength` would pass here and do nothing in a browser.
+    expect(short.validity.tooShort).toBe(true);
+    // Chrome: "Please fill out this field." A browser's own message is localised and non-empty.
+    expect(required.validationMessage).toBe('');
+    // Chrome matches all three. So "style the invalid fields" cannot be validated here at all.
+    expect(required.matches(':invalid')).toBe(false);
+    expect(required.matches(':required')).toBe(false);
+  });
+
   it('does not retarget an event that leaves an open shadow root', async () => {
     const context = await hostContext('<div id="host"></div>');
     const host = context.document.getElementById('host');
