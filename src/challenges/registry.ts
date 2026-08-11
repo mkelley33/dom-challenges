@@ -1,6 +1,7 @@
 import type { CategoryId, ChallengeEntry, ChallengeMeta, Difficulty } from '@/types/challenge';
 
 import { observersEntries } from './observers';
+import { performanceEntries } from './performance';
 import { selectionEntries } from './selection';
 
 export const CATEGORY_META: Record<CategoryId, { title: string; blurb: string }> = {
@@ -83,6 +84,7 @@ function byAscendingDifficulty(entries: readonly ChallengeEntry[]): ChallengeEnt
 export const challengeIndex: readonly ChallengeEntry[] = [
   ...byAscendingDifficulty(selectionEntries),
   ...byAscendingDifficulty(observersEntries),
+  ...byAscendingDifficulty(performanceEntries),
 ];
 
 const byId = new Map(challengeIndex.map((entry) => [entry.id, entry]));
