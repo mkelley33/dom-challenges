@@ -6,15 +6,11 @@ import { Dashboard } from './components/browse/Dashboard';
 import { AppShell } from './components/layout/AppShell';
 import { NotFound } from './components/NotFound';
 
-/**
- * The two routes that carry a dependency chain the landing page does not need. `Dashboard` stays
- * statically imported: it *is* the landing page, so splitting it would only add a round trip
- * before the first thing anyone sees.
- *
- * `React.lazy` rather than the route's own `lazy` property, so `element` stays a plain element and
- * `createMemoryRouter(routeDefinitions, ...)` keeps working unchanged. `AppShell` owns the
- * `<Suspense>` boundary both suspend into.
- */
+// Both split routes below use `React.lazy` rather than the route's own `lazy` property, so
+// `element` stays a plain element and `createMemoryRouter(routeDefinitions, ...)` keeps working
+// unchanged; `AppShell` owns the `<Suspense>` boundary they suspend into. `Dashboard` stays
+// statically imported: it *is* the landing page, so splitting it would only add a round trip
+// before the first thing anyone sees.
 
 /**
  * Carries the editor chain -- Monaco, `react-markdown`, `remark-gfm`. Statically imported it put
