@@ -51,13 +51,21 @@ export const moveNotCopy: ChallengeContent = {
       },
     },
     {
-      name: 'the row leaves the list it came from, and the rest keep their order',
+      name: 'the row leaves the list it came from, and the rows that stay are the same rows',
       run: ({ doc, fn, expect }) => {
         const inbox = requireElement(doc, 'inbox');
+        const alpha = requireElement(doc, 'alpha');
+        const gamma = requireElement(doc, 'gamma');
         fn<Pin>('pin')(requireElement(doc, 'beta'), requireElement(doc, 'pinned'));
 
         expect(inbox.querySelectorAll('.item')).toHaveLength(2);
         expect([...inbox.children].map((row) => row.id)).toEqual(['alpha', 'gamma']);
+        // Ids are not identity. This is a preservation claim in a challenge whose whole subject is
+        // that moving a node keeps everything attached to it, so an answer that rebuilds the inbox
+        // from copies -- and strips the other rows' listeners on the way past -- contradicts the
+        // lesson while satisfying every description of the result.
+        expect(alpha.parentElement).toBe(inbox);
+        expect(gamma.parentElement).toBe(inbox);
       },
     },
     {

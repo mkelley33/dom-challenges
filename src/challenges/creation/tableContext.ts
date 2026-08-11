@@ -108,16 +108,28 @@ export const tableContext: ChallengeContent = {
       },
     },
     {
-      name: 'the header row is left exactly as it was',
+      name: 'the header row and its cells are the same nodes afterwards',
       run: ({ doc, fn, expect }) => {
+        const grid = requireElement(doc, 'grid');
         const head = requireElement(doc, 'head');
-        const headCells = [...head.children];
+        const [nameCell, roleCell] = [...head.children];
+        if (!nameCell || !roleCell) throw new Error('the header should start with two cells');
         requireElement(doc, 'body').append(rowFrom(fn, ['Ada', 'Engineer']));
 
-        // A solution that reaches for `#grid` and rewrites its `innerHTML` to get a row out of it
-        // gets one -- and replaces the header with parser-built copies on the way past.
-        expect(head.parentElement?.tagName).toBe('THEAD');
-        expect([...head.children]).toEqual(headCells);
+        // Every assertion here is an identity read against a node that is still expected to be in
+        // the *document*, and both halves of that matter.
+        //
+        // Anchoring on the header's own ancestor instead -- `head.parentElement?.tagName` -- proves
+        // nothing: a `#grid` rebuild detaches the whole `<thead>` with this row still inside it, so
+        // the parent is a `<thead>` either way. Walking up to `#grid`, which the test is holding, is
+        // what makes the detachment visible.
+        //
+        // And the cells are compared with `toBe`, never `toEqual`: `deepEqual` compares own
+        // enumerable keys, DOM elements have none, so *any* two nodes are `toEqual` -- a `<div>`
+        // equals an `<li>`, and a text node equals an element. See AGENTS.md section 8.
+        expect(head.parentElement?.parentElement).toBe(grid);
+        expect(nameCell.parentElement).toBe(head);
+        expect(roleCell.parentElement).toBe(head);
       },
     },
   ],
