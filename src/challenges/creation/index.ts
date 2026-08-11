@@ -32,11 +32,11 @@ import type { ChallengeEntry } from '@/types/challenge';
  * **Re-measured in real Chrome when the category was filled out**, through the production
  * `createIframeHost` on a Vite-served page, in a foregrounded tab (`visibilityState: 'visible'`,
  * `hasFocus(): true`) with a positive control asserted first -- the frame services a
- * `requestAnimationFrame` within 500ms -- and repeated. Both runs identical: **22 solution runs, 0
- * failures; 11 starters, all running cleanly and all failing a named assertion; 45 hand-written
- * wrong solutions, all rejected; `localStorage` 0 keys -> 0 keys.** Seventeen direct DOM probes in
- * the same frame agreed with happy-dom on every one, including the four this category's assertions
- * actually rest on:
+ * `requestAnimationFrame` within 500ms -- and repeated. Both runs identical: **26 solution runs, 0
+ * failures; 13 starters, all running cleanly and all failing a named assertion; 62 hand-written
+ * wrong solutions, all rejected; `localStorage` 0 keys -> 0 keys.** Twenty-four direct DOM probes in
+ * the same frame agreed with happy-dom on all but one (below), including the four this category's
+ * assertions actually rest on:
  *
  * - a live `HTMLCollection` iterated forwards while removing **skips** -- `for..of` and an indexed
  *   loop both leave the second of two adjacent matches behind, in both engines;
@@ -47,19 +47,39 @@ import type { ChallengeEntry } from '@/types/challenge';
  * - `insertAdjacentHTML` in all four positions preserves the surrounding text nodes' identity, and
  *   an `innerHTML` rebuild of the same shape does not.
  *
- * Two behaviours worth recording because a challenge's prose asserts them and no test can: on an
+ * **A second divergence, found while authoring `svg-namespace`.** `insertAdjacentHTML` into an
+ * `<svg>` element parses as **HTML rather than as foreign content** here: Chrome gives an
+ * SVG-namespaced `circle`, happy-dom an `HTMLUnknownElement` named `CIRCLE` that renders nothing. A
+ * challenge on that route would be green in the suite and broken for the learner, so nothing here
+ * uses or asserts it. Pinned with two controls in `src/test/happyDomGaps.test.ts`. Everything else
+ * about namespaces matches: `createElement` gives XHTML/`CIRCLE`/`HTMLUnknownElement`,
+ * `createElementNS` gives SVG/`circle`/`SVGCircleElement`, parsed markup and `innerHTML` inside the
+ * tree give SVG, `cloneNode` keeps the namespace, and a `<template>` holding an `<svg>` wrapper
+ * parses its contents as foreign content.
+ *
+ * Table context also matches exactly, which is what makes `table-context` authorable: in a `<div>`,
+ * `<tr>`, `<td>`, `<th>`, `<tbody>`, `<caption>` and `<col>` are all dropped and their text
+ * foster-parented out (`childElementCount` 0), while `<li>` and `<option>` survive; the same markup
+ * in a `<template>`, in a `<tbody>`, or in a freshly created `<table>` comes through intact.
+ *
+ * Three behaviours worth recording because a challenge's prose asserts them and no test does: on an
  * element with no parent, `insertAdjacentHTML('beforebegin', …)` throws `NoModificationAllowedError`
- * while `before()` is a **silent no-op**. Measured in Chrome, twice.
+ * while `before()` is a **silent no-op**; and an SVG element's `className` is an `SVGAnimatedString`
+ * rather than a string. Measured in Chrome, twice.
  *
- * **Why the category stops at eleven.** The ground is covered and the remaining ideas are either
- * unauthorable here or already taught: batching is the divergence above; `<template>` inertness is
- * `template-rows` plus `selection/template-content`; `DOMParser` and `createContextualFragment` are
- * the same "parse a string into nodes" lesson `inner-html-cost` teaches with the cost attached; and
- * HTML's context-sensitive parsing (a `<tr>` dropped outside a table) is a parser lesson rather than
- * a creation one. A twelfth challenge would repeat a trap already in here.
+ * **Why the category stops at thirteen, one past the expected range.** Ten to twelve was the target,
+ * and the thirteenth is here because a review measured two ideas this docblock had excluded by
+ * assertion rather than by measurement. HTML's context-sensitive parsing was called "a parser lesson
+ * rather than a creation one"; it is fully authorable in both engines and its payload is
+ * creation-shaped -- the one case where building the nodes *strictly* beats writing the markup,
+ * which is the argument `create-and-append` and `inner-html-cost` both make on softer grounds.
+ * Namespace-aware creation had simply been missed, and it is a `createElement` trap. Both are now
+ * written. What remains excluded, and why: batching is the divergence above; `<template>` inertness
+ * is `template-rows` plus `selection/template-content`; `DOMParser` and `createContextualFragment`
+ * are the same "parse a string into nodes" lesson `inner-html-cost` teaches with the cost attached.
  *
- * What the eleven cost, by §7's route-level delta -- build, empty this array, rebuild, subtract:
- * **4,533 B on every route, 412.1 B an entry**, inside the 414 B `scripts/budgets.ts` allows for
+ * What the thirteen cost, by §7's route-level delta -- build, empty this array, rebuild, subtract:
+ * **5,354 B on every route, 411.8 B an entry**, inside the 414 B `scripts/budgets.ts` allows for
  * one. All three ceilings moved by the same amount, so nothing here needed a re-baseline.
  *
  * See AGENTS.md §3 and §10.
