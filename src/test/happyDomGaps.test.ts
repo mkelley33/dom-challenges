@@ -180,6 +180,69 @@ describe('APIs present but not faithful', () => {
     expect(order).toEqual(['frame', 'timer']);
   });
 
+  it('does not retarget an event that leaves an open shadow root', async () => {
+    const context = await hostContext('<div id="host"></div>');
+    const host = context.document.getElementById('host');
+    if (!host) throw new Error('#host is missing from the fixture');
+
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = '<button id="inner">In</button>';
+    const inner = root.querySelector('#inner');
+    if (!inner) throw new Error('the shadow tree is missing #inner');
+
+    let seenTarget: string | null = null;
+    let composed: string[] = [];
+    context.document.addEventListener(
+      'click',
+      (event) => {
+        seenTarget = event.target instanceof Element ? event.target.id : 'not an element';
+        composed = event
+          .composedPath()
+          .filter((node): node is Element => node instanceof Element)
+          .map((element) => element.id || element.nodeName);
+      },
+      { once: true },
+    );
+    inner.dispatchEvent(new context.window.MouseEvent('click', { bubbles: true, composed: true }));
+
+    // The controls: the event crossed the boundary at all, and the composed path is exactly what
+    // Chrome reports -- so what follows is retargeting specifically, not a missing event or a
+    // shadow root the engine failed to build.
+    expect(composed).toEqual(['inner', 'host', 'BODY', 'HTML']);
+
+    // Chrome reports "host": an event leaving a shadow tree is retargeted to the element the
+    // listener is allowed to know about. That makes `event.target.closest(...)` the natural wrong
+    // answer, and it makes it one the content suite cannot catch on its own -- hence the shape of
+    // `src/challenges/events/composedPath.ts`, whose markup rejects it from the other direction.
+    expect(seenTarget).toBe('inner');
+  });
+
+  it('attaches a listener whose AbortSignal was already aborted, where a browser does not', async () => {
+    const context = await hostContext('<button id="target">t</button>');
+    const target = context.document.getElementById('target');
+    if (!target) throw new Error('#target is missing from the fixture');
+
+    const controller = new context.window.AbortController();
+    controller.abort();
+
+    let alreadyAborted = 0;
+    target.addEventListener('click', () => (alreadyAborted += 1), { signal: controller.signal });
+
+    // The control: aborting a signal *after* the listener is attached does remove it, so listener
+    // removal through a signal works here and only the already-aborted case is wrong.
+    const live = new context.window.AbortController();
+    let removedLater = 0;
+    target.addEventListener('click', () => (removedLater += 1), { signal: live.signal });
+    target.click();
+    live.abort();
+    target.click();
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(removedLater).toBe(1);
+    // Chrome never attaches this one at all, so a browser reports 0.
+    expect(alreadyAborted).toBe(2);
+  });
+
   it('hands back specified rather than computed values from getComputedStyle', async () => {
     const context = await hostContext(
       [
