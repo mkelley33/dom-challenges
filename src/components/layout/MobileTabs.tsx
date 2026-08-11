@@ -6,6 +6,17 @@ import type { MobileTab } from '@/store/editorStore';
 export interface MobileTabsProps {
   value: MobileTab;
   onChange: (tab: MobileTab) => void;
+  /**
+   * The id of the column each tab shows.
+   *
+   * Base UI wires `aria-controls` itself only when a matching `Tabs.Panel` is mounted, and there is
+   * none here: the three columns are the app's layout, and they are `region` landmarks at desktop
+   * where this control does not exist at all. `aria-controls` puts no role constraint on its
+   * target, so pointing at them directly restores the relationship -- and the jump-to-controlled
+   * command that depends on it -- without re-roling three landmarks for a control that is hidden
+   * above `lg`.
+   */
+  panelIds: Record<MobileTab, string>;
 }
 
 // Module scope, because the list never varies: rebuilt inline it would be a new array on every
@@ -26,7 +37,7 @@ const TABS: readonly { value: MobileTab; label: string }[] = [
  * uncontrolled copy here would move on its own click and then disagree with the store the next time
  * anything else set the tab (running the tests does exactly that).
  */
-export function MobileTabs({ value, onChange }: MobileTabsProps) {
+export function MobileTabs({ value, onChange, panelIds }: MobileTabsProps) {
   // Wrapped rather than handed straight to Base UI, which calls its listener with a second
   // `eventDetails` argument. Passing that through would put a primitive's event object in this
   // component's public signature, where a caller storing the tab has no use for it.
@@ -41,7 +52,7 @@ export function MobileTabs({ value, onChange }: MobileTabsProps) {
     <Tabs value={value} onValueChange={handleValueChange} className="lg:hidden">
       <TabsList aria-label="Challenge view" className="w-full">
         {TABS.map((tab) => (
-          <TabsTrigger key={tab.value} value={tab.value}>
+          <TabsTrigger key={tab.value} value={tab.value} aria-controls={panelIds[tab.value]}>
             {tab.label}
           </TabsTrigger>
         ))}

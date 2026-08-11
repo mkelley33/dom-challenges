@@ -111,6 +111,23 @@ function isDisplayNone(element: HTMLElement): boolean {
 }
 
 /**
+ * How the result column is placed right now, read as whole class tokens.
+ *
+ * `classList.contains` rather than a substring match on `className`, so `h-96` cannot be satisfied
+ * by `min-h-96` and `w-80` cannot be satisfied by `max-w-80`.
+ */
+function parkedGeometry() {
+  const { classList } = panel('result');
+  return {
+    outOfFlow: classList.contains('absolute'),
+    offToTheLeft: classList.contains('-left-[200vw]'),
+    hasHeight: classList.contains('h-96'),
+    hasWidth: classList.contains('w-80'),
+    displayNone: classList.contains('hidden'),
+  };
+}
+
+/**
  * The preview section, by attribute rather than by role.
  *
  * `getByRole` cannot reach it while it is parked off-screen, because being out of the
@@ -709,23 +726,62 @@ describe('ChallengePage', () => {
     ]);
   });
 
-  it('parks the inactive preview off-screen and takes it out of the accessibility tree instead', async () => {
+  it('parks the inactive preview off-screen at a real size, rather than shrinking it away', async () => {
     const user = userEvent.setup();
     stubViewport(false);
     renderChallengePage(first.slug);
     await editor();
 
     await user.click(viewTab('Results'));
-    expect(panel('result').classList.contains('absolute')).toBe(false);
+    const onScreen = parkedGeometry();
+    await user.click(viewTab('Problem'));
+    const parked = parkedGeometry();
+
+    // Both halves of the invariant, because only one of them is obvious. "Out of flow" alone is
+    // satisfied by `h-0 w-0`, by `invisible`, by `scale-0` and by `content-visibility: hidden` --
+    // all of which keep `absolute` and all of which destroy the rendering the invariant exists to
+    // protect. The size classes are what say the frame still has a box to render into, and this
+    // constraint has already regressed once.
+    expect({ onScreen, parked }).toEqual({
+      onScreen: { outOfFlow: false, offToTheLeft: false, hasHeight: false, hasWidth: false, displayNone: false },
+      parked: { outOfFlow: true, offToTheLeft: true, hasHeight: true, hasWidth: true, displayNone: false },
+    });
+  });
+
+  it('makes the parked preview inert, so focus cannot reach the frame 200vw off-screen', async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    renderChallengePage(first.slug);
+    await editor();
+
+    await user.click(viewTab('Results'));
+    expect(previewSection()).not.toHaveAttribute('inert');
     expect(previewSection()).toHaveAttribute('aria-hidden', 'false');
 
     await user.click(viewTab('Problem'));
 
-    // Out of view, still rendered. A document that is not rendered never services
-    // requestAnimationFrame, so a `hidden` here would drop the harness's `tick()` onto its 50 ms
-    // fallback on every call and stop any paint-dependent learner code from running at all.
-    expect(panel('result').classList.contains('absolute')).toBe(true);
+    // `aria-hidden` alone over this subtree is the canonical `aria-hidden-focus` violation: the
+    // frame is an <iframe>, iframes are in the tab order, and challenges render buttons and links
+    // into them. A learner tabbing off the Clear button would drop focus into content parked
+    // 200vw away -- no visible ring, and, to a screen reader, a focused element that is not in the
+    // accessibility tree at all. `inert` is what actually stops it: it propagates into nested
+    // browsing contexts, and it changes nothing about rendering, so the box above survives.
+    expect(previewSection()).toHaveAttribute('inert');
     expect(previewSection()).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('names the column each tab controls, so the tablist is more than three labelled buttons', async () => {
+    renderChallengePage(first.slug);
+    await editor();
+
+    // Asserted against the id the column actually carries, not merely "some id": a tablist whose
+    // tabs all pointed at one panel, or at the wrong one, would satisfy any presence check.
+    expect(['Problem', 'Code', 'Results'].map((label) => viewTab(label).getAttribute('aria-controls'))).toEqual([
+      panel('problem').id,
+      panel('code').id,
+      panel('result').id,
+    ]);
+    expect(panel('problem').id).not.toBe('');
   });
 
   it('leaves the preview in the accessibility tree at desktop widths, whatever the phone tab says', async () => {

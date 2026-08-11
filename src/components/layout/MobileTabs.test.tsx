@@ -6,9 +6,11 @@ import type { MobileTab } from '@/store/editorStore';
 
 import { MobileTabs } from './MobileTabs';
 
+const PANEL_IDS: Record<MobileTab, string> = { problem: 'panel-problem', code: 'panel-code', result: 'panel-result' };
+
 function renderTabs(value: MobileTab) {
   const onChange = vi.fn<(tab: MobileTab) => void>();
-  render(<MobileTabs value={value} onChange={onChange} />);
+  render(<MobileTabs value={value} onChange={onChange} panelIds={PANEL_IDS} />);
   return { onChange };
 }
 
@@ -22,6 +24,19 @@ describe('MobileTabs', () => {
 
     expect(screen.getByRole('tablist', { name: 'Challenge view' })).toBeInTheDocument();
     expect(tabNames()).toEqual(['Problem', 'Code', 'Results']);
+  });
+
+  it('points each tab at the column it shows', () => {
+    renderTabs('problem');
+
+    // Each at its own column, in order. Base UI wires `aria-controls` only when a matching
+    // `Tabs.Panel` is mounted, and there is none here -- the columns are the app's layout -- so
+    // without this the tablist is three labelled buttons with no stated relationship to anything.
+    expect(tabNames().map((_, index) => screen.getAllByRole('tab')[index]?.getAttribute('aria-controls'))).toEqual([
+      PANEL_IDS.problem,
+      PANEL_IDS.code,
+      PANEL_IDS.result,
+    ]);
   });
 
   it('marks the tab it was given as the selected one', () => {

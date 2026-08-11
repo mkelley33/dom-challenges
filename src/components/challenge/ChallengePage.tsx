@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useId, useMemo, useRef } from 'react';
 import { useParams } from 'react-router';
 
 import { challengeBySlug } from '@/challenges/registry';
@@ -86,12 +86,25 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
     [challenge.id, setDraft],
   );
 
-  // `aria-hidden` is the one part of the responsive layout that CSS cannot express, so it is the
-  // one part that has to ask where the viewport is. Keyed off the tab alone it would hide the
-  // preview from every desktop screen-reader user whose last phone tab was not "Results".
+  // `inert` and `aria-hidden` are the parts of the responsive layout that CSS cannot express, so
+  // they are the parts that have to ask where the viewport is. Keyed off the tab alone they would
+  // hide -- and make unreachable -- the preview for every desktop user whose last phone tab was
+  // not "Results".
   const isDesktop = useMediaQuery(DESKTOP_MEDIA_QUERY);
   const previewInactive = mobileTab !== 'result';
   const previewOffScreen = previewInactive && !isDesktop;
+
+  // `useId` rather than hand-written strings: two challenge pages have never been on screen at
+  // once, but an id that is unique by construction cannot start colliding when one is.
+  const panelIdPrefix = useId();
+  const panelIds = useMemo(
+    () => ({
+      problem: `${panelIdPrefix}problem`,
+      code: `${panelIdPrefix}code`,
+      result: `${panelIdPrefix}result`,
+    }),
+    [panelIdPrefix],
+  );
 
   // Applied unconditionally, and inert below `lg` by construction: the container is `display: flex`
   // until the breakpoint, and `grid-template-columns` means nothing to a flex container. That is
@@ -159,7 +172,7 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
     // or unmounted by a viewport -- so rotating a phone never resets a panel's state, and no later
     // task has two layouts to keep in step.
     <div className="flex h-full min-h-0 flex-col gap-3 p-4">
-      <MobileTabs value={mobileTab} onChange={setMobileTab} />
+      <MobileTabs value={mobileTab} onChange={setMobileTab} panelIds={panelIds} />
 
       {/* `relative` so the parked preview below has this box to be positioned against. Stacked and
           scrolling below `lg`, three columns filling the remaining height from `lg` up. */}
@@ -170,7 +183,11 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
         {/* Prompt and solutions share the first column: they are the two halves of "what am I being
             asked, and how else could it have been done", and the solutions half is empty of content
             until it is unlocked. */}
-        <div data-panel="problem" className={cn(COLUMN, mobileTab === 'problem' ? SHOWN : HIDDEN_BELOW_LG)}>
+        <div
+          id={panelIds.problem}
+          data-panel="problem"
+          className={cn(COLUMN, mobileTab === 'problem' ? SHOWN : HIDDEN_BELOW_LG)}
+        >
           <div className={`${PANEL} min-h-48 lg:min-h-0 lg:flex-[2]`}>
             <PromptPanel challenge={challenge} />
           </div>
@@ -183,6 +200,7 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
             only from `lg`: below it, the box must not be a scroll container or the sticky action row
             at its foot would have no scrollport to stick to and would simply never stick. */}
         <div
+          id={panelIds.code}
           data-panel="code"
           className={cn(
             'min-h-96 flex-col rounded-lg border bg-surface-raised lg:min-h-0 lg:overflow-hidden',
@@ -207,8 +225,12 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
         {/* Never `HIDDEN_BELOW_LG`: see `PREVIEW_OFF_SCREEN`. The results panel rides along, which
             also means its live region stays in the accessibility tree on every tab -- so a run
             started from the code tab is still announced. */}
-        <div data-panel="result" className={cn(COLUMN, SHOWN, previewInactive && PREVIEW_OFF_SCREEN)}>
-          <PreviewFrame containerRef={previewRef} hiddenFromScreenReaders={previewOffScreen} />
+        <div
+          id={panelIds.result}
+          data-panel="result"
+          className={cn(COLUMN, SHOWN, previewInactive && PREVIEW_OFF_SCREEN)}
+        >
+          <PreviewFrame containerRef={previewRef} offScreen={previewOffScreen} />
           <div className={`${PANEL} min-h-40 flex-1`}>
             <ResultPanel result={result} isRunning={isRunning} />
           </div>
