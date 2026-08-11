@@ -207,12 +207,7 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
             mobileTab === 'code' ? SHOWN : HIDDEN_BELOW_LG,
           )}
         >
-          <EditorPanel
-            challengeId={challenge.id}
-            starterCode={challenge.starterCode}
-            value={code}
-            onChange={handleChange}
-          />
+          <EditorPanel challengeId={challenge.id} value={code} onChange={handleChange} />
           {/* Both controls live outside the editor's own region: neither edits the code. One runs
               it, the other throws the whole attempt away. Sticky below `lg` so the primary action
               is under a thumb rather than scrolled off the top with the panel header. */}

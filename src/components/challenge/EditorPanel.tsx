@@ -36,7 +36,6 @@ const EDITOR_OPTIONS = {
 
 export interface EditorPanelProps {
   challengeId: string;
-  starterCode: string;
   value: string;
   onChange: (code: string) => void;
 }

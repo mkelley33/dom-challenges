@@ -29,7 +29,6 @@ vi.mock('@/lib/monaco', async () => {
 describe('EditorPanel', () => {
   const baseProps = {
     challengeId: 'c1',
-    starterCode: '// start',
     value: '// start',
     onChange: vi.fn<(code: string) => void>(),
   };
@@ -43,8 +42,8 @@ describe('EditorPanel', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('shows the value passed in for the current challenge, not the starter code', async () => {
-    render(<EditorPanel {...baseProps} starterCode="// starter" value="// a learner's draft" />);
+  it('shows the value it is given rather than holding any of its own', async () => {
+    render(<EditorPanel {...baseProps} value="// a learner's draft" />);
     const field = await screen.findByRole('textbox', { name: 'Solution code' });
     expect(field).toHaveValue("// a learner's draft");
   });
