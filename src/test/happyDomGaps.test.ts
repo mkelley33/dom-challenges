@@ -180,6 +180,52 @@ describe('APIs present but not faithful', () => {
     expect(order).toEqual(['frame', 'timer']);
   });
 
+  it('stores the ARIAMixin properties without reflecting them to attributes', async () => {
+    const context = await hostContext('<button id="trigger">Trigger</button>');
+    const trigger = context.document.getElementById('trigger');
+    if (!trigger) throw new Error('#trigger is missing from the fixture');
+
+    trigger.setAttribute('aria-checked', 'mixed');
+    trigger.ariaExpanded = 'true';
+    trigger.role = 'switch';
+
+    // The controls: attributes written as attributes are readable and selectable, and `role` -- the
+    // one ARIA IDL property happy-dom really does reflect -- round-trips. So the failures below are
+    // the mixin specifically, not ARIA attributes being ignored wholesale.
+    expect(trigger.getAttribute('aria-checked')).toBe('mixed');
+    expect(context.document.querySelectorAll('[aria-checked="mixed"]')).toHaveLength(1);
+    expect(trigger.getAttribute('role')).toBe('switch');
+
+    // Chrome writes `aria-expanded="true"` and reads `ariaChecked` back as `"mixed"`. Here the
+    // assignment lands on a plain JS property that nothing else can see, so a solution written with
+    // the IDL form is correct in a browser and invisible to every attribute selector in a test.
+    expect(trigger.getAttribute('aria-expanded')).toBeNull();
+    expect(trigger.ariaChecked).toBe(undefined);
+  });
+
+  it('lets a plain div take focus, and never matches :focus-within', async () => {
+    const context = await hostContext('<div id="wrap"><button id="real">Real</button></div><div id="plain">p</div>');
+    const plain = context.document.getElementById('plain');
+    const real = context.document.getElementById('real');
+    const wrap = context.document.getElementById('wrap');
+    if (!plain || !real || !wrap) throw new Error('the fixture is missing an element');
+
+    // The control: focus works, and it works the way a browser's does for something focusable.
+    real.focus();
+    expect(context.document.activeElement).toBe(real);
+    expect(real.matches(':focus')).toBe(true);
+
+    // Chrome refuses: a `<div>` with no `tabindex` is not focusable, so `activeElement` stays put.
+    // Any challenge whose focus assertions involve a non-focusable element would pass here and fail
+    // in a browser -- hence every focusable element in `src/challenges/a11y` being a <button>.
+    plain.focus();
+    expect(context.document.activeElement).toBe(plain);
+
+    // Chrome matches this the moment #real has focus.
+    real.focus();
+    expect(wrap.matches(':focus-within')).toBe(false);
+  });
+
   it('raises tooShort/tooLong on an unedited value, empties validationMessage, and never matches :invalid', async () => {
     const context = await hostContext(
       [
