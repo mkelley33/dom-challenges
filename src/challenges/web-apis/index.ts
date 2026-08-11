@@ -15,7 +15,10 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   focused one even when the page is. Green suite, broken learner.
  * - **Drag and drop** is the trap in the first direction: `new DragEvent('drop', { dataTransfer })`
  *   carries its `dataTransfer` in Chrome and drops it under happy-dom, where the listener sees
- *   `null`.
+ *   **`undefined`** -- not `null`. The distinction is small and load-bearing: the property is typed
+ *   `DataTransfer | null`, so the `=== null` guard a careful author writes does not return, and the
+ *   `.getData()` after it throws a `TypeError` rather than taking the guarded branch. Pinned by
+ *   `src/test/happyDomGaps.test.ts`.
  *
  * `ClipboardEvent` plus `DataTransfer` behaves identically in both -- `setData`, `getData`, the
  * event's `clipboardData` identity, `defaultPrevented`, and the empty-flavour `''` -- which is what

@@ -40,6 +40,24 @@ function readFilters(win: Window & typeof globalThis, doc: Document): Filters {
   };
 }
 
+/** Every key these tests, or the code they call, can leave behind. */
+const TEST_KEYS = ['filters:a', 'filters:b', 'filters:junk'];
+
+/**
+ * Removes the keys this challenge writes.
+ *
+ * The preview frame is same-origin with the app, so it shares one storage area with it (AGENTS.md
+ * §2) -- a key this challenge leaves behind is left in the learner's own origin, permanently,
+ * because nothing will ever come back for it. The runner repairs `dom-challenges-*` and deliberately
+ * touches nothing else, which makes tidying up after itself the challenge's own job.
+ *
+ * In a `finally`, so a failing assertion still cleans up: a learner debugging a red test would
+ * otherwise accumulate one stale key per run.
+ */
+function clearTestKeys(win: Window & typeof globalThis): void {
+  for (const key of TEST_KEYS) win.localStorage.removeItem(key);
+}
+
 export const filterState: ChallengeContent = {
   prompt: [
     'The panel below is a search filter, and its state should survive a reload and be shareable as a',
@@ -104,23 +122,27 @@ export const filterState: ChallengeContent = {
     {
       name: 'what save() stores can be read back by load() from a different key',
       run: ({ doc, expect, fn, win }) => {
-        const filters = readFilters(win, doc);
-        const save = fn<(key: string, filters: Filters) => void>('save');
-        const load = fn<(key: string) => Filters | null>('load');
+        try {
+          const filters = readFilters(win, doc);
+          const save = fn<(key: string, filters: Filters) => void>('save');
+          const load = fn<(key: string) => Filters | null>('load');
 
-        save('filters:a', filters);
+          save('filters:a', filters);
 
-        // Whatever is under `filters:a` is moved to `filters:b` and the original removed. A module
-        // that kept the object in a variable, or keyed a cache by `filters:a`, has nothing to answer
-        // with -- the only thing that survived this is the string in storage.
-        const raw = win.localStorage.getItem('filters:a');
-        if (raw === null) throw new Error('save() left nothing in localStorage under "filters:a"');
-        win.localStorage.setItem('filters:b', raw);
-        win.localStorage.removeItem('filters:a');
+          // Whatever is under `filters:a` is moved to `filters:b` and the original removed. A module
+          // that kept the object in a variable, or keyed a cache by `filters:a`, has nothing to
+          // answer with -- the only thing that survived this is the string in storage.
+          const raw = win.localStorage.getItem('filters:a');
+          if (raw === null) throw new Error('save() left nothing in localStorage under "filters:a"');
+          win.localStorage.setItem('filters:b', raw);
+          win.localStorage.removeItem('filters:a');
 
-        // `page` has to be the number 3 and not the string "3": everything that went into storage
-        // came out as a string, and putting the type back is the work.
-        expect(load('filters:b')).toEqual(filters);
+          // `page` has to be the number 3 and not the string "3": everything that went into storage
+          // came out as a string, and putting the type back is the work.
+          expect(load('filters:b')).toEqual(filters);
+        } finally {
+          clearTestKeys(win);
+        }
       },
     },
     {
@@ -132,11 +154,15 @@ export const filterState: ChallengeContent = {
     {
       name: 'load() returns null instead of throwing on a value it did not write',
       run: ({ expect, fn, win }) => {
-        // Something else on the origin got there first. `JSON.parse` throws on this, and an
-        // unguarded `load` throws with it.
-        win.localStorage.setItem('filters:junk', 'left here by something else');
+        try {
+          // Something else on the origin got there first. `JSON.parse` throws on this, and an
+          // unguarded `load` throws with it.
+          win.localStorage.setItem('filters:junk', 'left here by something else');
 
-        expect(fn<(key: string) => Filters | null>('load')('filters:junk')).toBeNull();
+          expect(fn<(key: string) => Filters | null>('load')('filters:junk')).toBeNull();
+        } finally {
+          clearTestKeys(win);
+        }
       },
     },
     {
