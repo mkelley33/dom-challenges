@@ -123,6 +123,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./replaceInPlace').then((module) => module.replaceInPlace),
   },
   {
+    id: 'creation-remove-while-iterating',
+    slug: 'remove-while-iterating',
+    title: 'The rows a live collection lets you skip',
+    category: 'creation',
+    difficulty: 'expert',
+    concepts: ['HTMLCollection', 'live collections', 'remove', 'querySelectorAll'],
+    relatedIds: ['selection-live-vs-static', 'creation-detach-and-reattach'],
+    load: () => import('./removeWhileIterating').then((module) => module.removeWhileIterating),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
