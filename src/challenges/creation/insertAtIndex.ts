@@ -84,9 +84,15 @@ export const insertAtIndex: ChallengeContent = {
         if (!wash || !rinse || !dry) throw new Error('the challenge markup should start with three steps');
         fn<InsertAt>('insertAt')(list, makeStep(doc, 'Sort'), 1);
 
+        // Position first, identity second, because they fail illegibly in the other order. These
+        // steps carry no id and no class, so `describeElement` prints all four of them as `<li>` --
+        // and a solution that put the step in the wrong place fails an identity assertion with
+        // `Expected <li> to be <li>`. Asserting the order as a value reports it as a diff instead,
+        // and leaves the identity checks to catch the one thing they alone can see.
+        expect(stepTexts(list)).toEqual(['Wash', 'Sort', 'Rinse', 'Dry']);
         // Rebuilding the list from a string produces the right text and the wrong nodes, and every
-        // listener, property and typed-in value on the old ones goes with it. The first assertion is
-        // the legible one: a rebuilt list leaves this node detached, and `null` says so.
+        // listener, property and typed-in value on the old ones goes with it. A rebuilt list leaves
+        // this node detached, and `null` says so.
         expect(wash.parentElement).toBe(list);
         expect(list.children[0]).toBe(wash);
         expect(list.children[2]).toBe(rinse);
