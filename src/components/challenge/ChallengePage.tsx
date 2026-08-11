@@ -15,6 +15,7 @@ import type { Challenge } from '@/types/challenge';
 
 import { ClearButton } from './ClearButton';
 import { EditorPanel } from './EditorPanel';
+import { PaneResizer } from './PaneResizer';
 import { PreviewFrame } from './PreviewFrame';
 import { PromptPanel } from './PromptPanel';
 import { ResultPanel } from './ResultPanel';
@@ -65,11 +66,15 @@ interface ChallengeWorkspaceProps {
  */
 function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
   const previewRef = useRef<HTMLDivElement>(null);
+  // Handed to both resize handles, which need the width of the row their tracks share to turn a
+  // pointer's pixels into a share of it.
+  const gridRef = useRef<HTMLDivElement>(null);
   const draft = useEditorStore((state) => state.drafts[challenge.id]);
   const setDraft = useEditorStore((state) => state.setDraft);
   const mobileTab = useEditorStore((state) => state.mobileTab);
   const setMobileTab = useEditorStore((state) => state.setMobileTab);
   const layout = useEditorStore((state) => state.layout);
+  const setLayout = useEditorStore((state) => state.setLayout);
   const { result, isRunning, run, reset } = useChallengeRun(challenge, previewRef);
   const record = useChallengeProgress(challenge.id);
   const readStoredProgress = useStoredProgress(challenge.id);
@@ -113,10 +118,21 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
   const gridStyle = useMemo<CSSProperties>(() => {
     const resultPercent = 100 - layout.promptPercent - layout.editorPercent;
     const track = (percent: number): string => `minmax(0, ${String(percent)}fr)`;
-    // `fr` rather than `%`, so the three tracks keep the stored *ratio* without the gaps between
+    // `fr` rather than `%`, so the three tracks keep the stored *ratio* without the handles between
     // them pushing the row past the width of the grid.
+    //
+    // The two `auto` tracks are those handles. They are the only tracks here that are not a share
+    // of the row, and the row's column gap is zero from `lg` up so that they are also the only
+    // fixed width in it -- which is what lets `PaneResizer` work out the space the panes share by
+    // subtracting nothing but itself, twice.
     return {
-      gridTemplateColumns: [track(layout.promptPercent), track(layout.editorPercent), track(resultPercent)].join(' '),
+      gridTemplateColumns: [
+        track(layout.promptPercent),
+        'auto',
+        track(layout.editorPercent),
+        'auto',
+        track(resultPercent),
+      ].join(' '),
     };
   }, [layout.editorPercent, layout.promptPercent]);
 
@@ -176,9 +192,14 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
 
       {/* `relative` so the parked preview below has this box to be positioned against. Stacked and
           scrolling below `lg`, three columns filling the remaining height from `lg` up. */}
+      {/* `lg:gap-x-0` because from `lg` up the gutter *is* the resize handle: a column gap beside it
+          would widen the seam and, worse, add a second fixed width to the row that the handle's own
+          pixels-to-percent arithmetic would have to know about. The row gap below `lg`, where the
+          columns are stacked and the handles are not rendered, is untouched. */}
       <div
+        ref={gridRef}
         style={gridStyle}
-        className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto lg:grid lg:overflow-hidden"
+        className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto lg:grid lg:gap-x-0 lg:overflow-hidden"
       >
         {/* Prompt and solutions share the first column: they are the two halves of "what am I being
             asked, and how else could it have been done", and the solutions half is empty of content
@@ -195,6 +216,10 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
             <SolutionsPanel solutions={challenge.solutions} record={record} onReveal={handleReveal} />
           </div>
         </div>
+
+        {/* Rendered at every size and hidden below `lg` from its own class list, like every other
+            part of this layout: the columns are only side by side above the breakpoint. */}
+        <PaneResizer edge="prompt-editor" layout={layout} containerRef={gridRef} onResize={setLayout} />
 
         {/* This column is its own panel, so it carries the panel's chrome directly. `overflow-hidden`
             only from `lg`: below it, the box must not be a scroll container or the sticky action row
@@ -216,6 +241,8 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
             <ClearButton challengeId={challenge.id} onCleared={handleCleared} />
           </div>
         </div>
+
+        <PaneResizer edge="editor-result" layout={layout} containerRef={gridRef} onResize={setLayout} />
 
         {/* Never `HIDDEN_BELOW_LG`: see `PREVIEW_OFF_SCREEN`. The results panel rides along, which
             also means its live region stays in the accessibility tree on every tab -- so a run

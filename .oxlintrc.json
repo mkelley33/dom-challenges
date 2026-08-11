@@ -98,6 +98,27 @@
       }
     },
     {
+      // Enabled implicitly by the "correctness" category, and right about a *static* separator:
+      // `<hr>` is the tag for a thematic break. `PaneResizer` is not one. It is the ARIA window
+      // splitter -- a focusable separator carrying `aria-valuenow` and answering the arrow keys --
+      // and no element satisfies all four of oxlint's own a11y rules at once. Verified by running
+      // each variant through `pnpm lint`:
+      //
+      //   <div role="separator" tabIndex={0} ...>  -> only this rule fires
+      //   <hr tabIndex={0} ...>                    -> no-noninteractive-tabindex,
+      //                                               no-noninteractive-element-interactions
+      //   <hr role="separator" tabIndex={0} ...>   -> no-redundant-roles,
+      //                                               no-noninteractive-element-to-interactive-role
+      //
+      // The first is the pattern the ARIA authoring practices specify, so it is the one that is
+      // kept. Listed rather than globbed: every other file in the repo still has the rule on, and a
+      // second resizer would have to be added here deliberately.
+      "files": ["src/components/challenge/PaneResizer.tsx"],
+      "rules": {
+        "jsx-a11y/prefer-tag-over-role": "off"
+      }
+    },
+    {
       // Enabled implicitly by the "correctness" category. `import/default` resolves a module's
       // physical exports to check the import against them, but `?worker` is a Vite-only query
       // suffix: Vite's worker plugin synthesizes a default export (a Worker constructor) for it

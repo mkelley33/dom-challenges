@@ -99,6 +99,18 @@ function panel(name: 'code' | 'problem' | 'result'): HTMLElement {
   return element;
 }
 
+/** The row the three columns and the two handles are laid out in. */
+function grid(): HTMLElement {
+  const element = panel('code').parentElement;
+  if (!(element instanceof HTMLElement)) throw new Error('The code column is not inside a layout row.');
+  return element;
+}
+
+/** One of the two resize handles, by the pair of panes it names. */
+function resizeHandle(name: string): HTMLElement {
+  return screen.getByRole('separator', { name });
+}
+
 /**
  * Whether a column is `display: none`.
  *
@@ -884,9 +896,69 @@ describe('ChallengePage', () => {
     await editor();
 
     // Deliberately not the stored defaults: a hardcoded ratio would pass against those and fail
-    // here. The third track is what is left over, so the three always sum to the whole row.
-    const grid = panel('code').parentElement;
-    expect(grid?.style.gridTemplateColumns).toBe('minmax(0, 20fr) minmax(0, 50fr) minmax(0, 30fr)');
+    // here. The third track is what is left over, so the three always sum to the whole row. The two
+    // `auto` tracks between them are the resize handles, which are a fixed width rather than a
+    // share of the row -- see `PaneResizer`.
+    expect(grid().style.gridTemplateColumns).toBe('minmax(0, 20fr) auto minmax(0, 50fr) auto minmax(0, 30fr)');
+  });
+
+  it('puts a resize handle between each pair of columns, in the order the columns are laid out', async () => {
+    renderChallengePage(first.slug);
+    await editor();
+
+    // The grid's children read in order, because a handle's whole meaning is which two panes it
+    // sits between: two handles parked at the end of the row would satisfy any count, and would
+    // name a pair they are nowhere near.
+    const laidOut = [...grid().children].map(
+      (child) => child.getAttribute('data-panel') ?? child.getAttribute('aria-label'),
+    );
+    expect(laidOut).toEqual([
+      'problem',
+      'Resize the Problem and Code panes',
+      'code',
+      'Resize the Code and Results panes',
+      'result',
+    ]);
+  });
+
+  it('resizes the panes from the keyboard, and the new split reaches both the store and the grid', async () => {
+    const user = userEvent.setup();
+    renderChallengePage(first.slug);
+    await editor();
+
+    resizeHandle('Resize the Problem and Code panes').focus();
+    await user.keyboard('{ArrowRight}');
+
+    // The store, because that is what is persisted -- a split that only moved the grid would be
+    // back at 28/42 on the next reload, which is the state this whole task exists to leave behind.
+    expect(useEditorStore.getState().layout).toEqual({ promptPercent: 30, editorPercent: 40 });
+    expect(grid().style.gridTemplateColumns).toBe('minmax(0, 30fr) auto minmax(0, 40fr) auto minmax(0, 30fr)');
+
+    resizeHandle('Resize the Code and Results panes').focus();
+    await user.keyboard('{ArrowLeft}');
+
+    // The second handle moves its own boundary and leaves the first one's alone: the prompt keeps
+    // the 30 it was just given, and the two points the editor gives up go to the results pane.
+    expect(useEditorStore.getState().layout).toEqual({ promptPercent: 30, editorPercent: 38 });
+    expect(grid().style.gridTemplateColumns).toBe('minmax(0, 30fr) auto minmax(0, 38fr) auto minmax(0, 32fr)');
+  });
+
+  it('cannot resize the results pane -- and the preview inside it -- out of the layout', async () => {
+    const user = userEvent.setup();
+    renderChallengePage(first.slug);
+    await editor();
+
+    resizeHandle('Resize the Code and Results panes').focus();
+    // Far more presses than the boundary has room for, which is what a learner leaning on the key
+    // does. The split is persisted, so a results pane driven to zero here would still be zero after
+    // a reload -- with the handle that could undo it sitting in a pane of no width.
+    await user.keyboard('{ArrowRight>40/}');
+
+    expect(useEditorStore.getState().layout).toEqual({ promptPercent: 28, editorPercent: 57 });
+    expect(grid().style.gridTemplateColumns).toBe('minmax(0, 28fr) auto minmax(0, 57fr) auto minmax(0, 15fr)');
+    // And the column keeps a real box: the preview frame inside it stops servicing
+    // `requestAnimationFrame` the moment it is in a subtree that is not rendered.
+    expect(isDisplayNone(panel('result'))).toBe(false);
   });
 
   it('records nothing when the prior record cannot be read', async () => {
