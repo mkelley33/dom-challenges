@@ -4,6 +4,7 @@ import { asyncEntries } from './async';
 import { observersEntries } from './observers';
 import { performanceEntries } from './performance';
 import { selectionEntries } from './selection';
+import { storageEntries } from './storage';
 
 export const CATEGORY_META: Record<CategoryId, { title: string; blurb: string }> = {
   selection: { title: 'Selection & Traversal', blurb: 'Finding elements and walking the tree.' },
@@ -87,6 +88,7 @@ export const challengeIndex: readonly ChallengeEntry[] = [
   ...byAscendingDifficulty(observersEntries),
   ...byAscendingDifficulty(performanceEntries),
   ...byAscendingDifficulty(asyncEntries),
+  ...byAscendingDifficulty(storageEntries),
 ];
 
 const byId = new Map(challengeIndex.map((entry) => [entry.id, entry]));
