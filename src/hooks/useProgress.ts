@@ -20,6 +20,23 @@ export function emptyProgress(challengeId: string): ProgressRecord {
   };
 }
 
+/**
+ * Whether this record says nothing happened -- which is what `emptyProgress` above synthesises when
+ * the server is holding no row for a challenge.
+ *
+ * Deliberately reads all four fields rather than `status` and `attempts` alone. A learner who
+ * reveals the solution before ever running writes a real row with `status: 'unattempted'` and
+ * `attempts: 0` (the reveal spreads the placeholder and sets only `revealedAt`), so the shorter
+ * predicate would mistake a stored reveal for "no row" and skip the delete that undoes it.
+ *
+ * Recognising a stored-but-empty row as unrecorded costs nothing: there is nothing in it to undo.
+ */
+export function isUnrecorded(record: ProgressRecord): boolean {
+  return (
+    record.status === 'unattempted' && record.attempts === 0 && record.solvedAt === null && record.revealedAt === null
+  );
+}
+
 export function useProgressQuery(): UseQueryResult<ProgressRecord[]> {
   return useQuery({ queryKey: PROGRESS_QUERY_KEY, queryFn: fetchAllProgress, staleTime: 30_000 });
 }

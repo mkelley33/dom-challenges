@@ -8,6 +8,8 @@ import { fetchAllProgress } from '@/api/progress';
 import type { ProgressRecord } from '@/types/progress';
 
 import {
+  emptyProgress,
+  isUnrecorded,
   PROGRESS_QUERY_KEY,
   useChallengeProgress,
   useClearProgress,
@@ -103,6 +105,25 @@ describe('useChallengeProgress', () => {
       expect(result.current.status).toBe('solved');
     });
     expect(result.current).toEqual(solved);
+  });
+});
+
+describe('isUnrecorded', () => {
+  it('recognises the synthesised placeholder', () => {
+    expect(isUnrecorded(emptyProgress('never-tried'))).toBe(true);
+  });
+
+  it('does not call a row unrecorded for the sake of one empty field', () => {
+    const blank = emptyProgress('never-tried');
+
+    // Each of these is a real thing the learner did, on a row the server is holding. Any predicate
+    // that reads only `status` and `attempts` calls the reveal case unrecorded -- and that case is
+    // reachable: revealing before ever running writes a row with neither a status nor an attempt.
+    expect(isUnrecorded({ ...blank, revealedAt: '2026-08-10T09:00:00.000Z' })).toBe(false);
+    expect(isUnrecorded({ ...blank, solvedAt: '2026-08-10T09:00:00.000Z' })).toBe(false);
+    expect(isUnrecorded({ ...blank, attempts: 1 })).toBe(false);
+    expect(isUnrecorded({ ...blank, status: 'attempted' })).toBe(false);
+    expect(isUnrecorded(solved)).toBe(false);
   });
 });
 

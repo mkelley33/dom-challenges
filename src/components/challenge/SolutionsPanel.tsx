@@ -9,10 +9,15 @@ import type { ProgressRecord } from '@/types/progress';
 
 import { Markdown } from './Markdown';
 
-const RevealConfirmDialog = lazy(async () => {
-  const { RevealConfirmDialog: Component } = await import('./RevealConfirmDialog');
+const ConfirmDialog = lazy(async () => {
+  const { ConfirmDialog: Component } = await import('./ConfirmDialog');
   return { default: Component };
 });
+
+// Says what is recorded, and stops there. Naming a way back would name a control that does not
+// exist yet -- the Clear button arrives with the progress panel.
+const REVEAL_DESCRIPTION =
+  'Revealing is recorded against this challenge. From then on these solutions are marked revealed rather than earned.';
 
 interface CodeBlockProps {
   code: string;
@@ -99,7 +104,7 @@ function LockedSolutions({ onReveal }: LockedSolutionsProps) {
     //
     // Best effort, and swallowed rather than left floating: a failed warm only means the click pays
     // for the load, because `lazy` runs the import again when the boundary is actually crossed.
-    import('./RevealConfirmDialog').catch(() => undefined);
+    import('./ConfirmDialog').catch(() => undefined);
   }, []);
 
   const handleOpen = useCallback(() => {
@@ -130,7 +135,15 @@ function LockedSolutions({ onReveal }: LockedSolutionsProps) {
           flow, so there is no space to reserve and nothing to jump when it arrives. */}
       <Suspense fallback={null}>
         {dialogNeeded && (
-          <RevealConfirmDialog open={confirming} onOpenChange={handleOpenChange} onConfirm={handleConfirm} />
+          <ConfirmDialog
+            open={confirming}
+            onOpenChange={handleOpenChange}
+            onConfirm={handleConfirm}
+            title="Reveal the solution?"
+            description={REVEAL_DESCRIPTION}
+            cancelLabel="Keep trying"
+            confirmLabel="Yes, reveal it"
+          />
         )}
       </Suspense>
     </>
