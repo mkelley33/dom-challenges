@@ -23,7 +23,16 @@
   },
   "overrides": [
     {
-      "files": ["src/runner/**/*.ts"],
+      // Enabled implicitly by the "correctness" category, and right in general: `new Function` is
+      // arbitrary code execution built from a string. Running arbitrary code from a string is what
+      // this file is *for* -- `loadModule` compiles the learner's submission, and it uses the
+      // host's own `win.Function` so that `document` and `window` inside it resolve through the
+      // frame's scope chain rather than the app's. It appears exactly once, at `harness.ts:77`.
+      //
+      // Was globbed over `src/runner/**/*.ts` until the merge-gating review: the only glob-scoped
+      // override in the file, in a file where four other blocks argue "Listed rather than globbed",
+      // and the only one with no comment. Both are fixed here.
+      "files": ["src/runner/harness.ts"],
       "rules": {
         "no-new-func": "off"
       }
@@ -51,17 +60,29 @@
       }
     },
     {
-      // Enabled implicitly by the "suspicious" category. Each of these four files holds exactly
-      // one kind of seam between the app's realm and the sandbox's, where the value arrives
-      // untyped and an assertion is the only way across: happy-dom's `Window` is structurally
-      // distinct from lib.dom's (createMemoryHost.ts), `new win.Function(...)` is typed only as
-      // `Function` (harness.ts), a learner's `exports` bag is `Record<string, unknown>`
-      // (harness.test.ts), and lib.dom types `iframe.contentWindow` as plain `Window`, which
-      // omits the global-scope members -- `Function`, `setTimeout` -- that `HostContext.window`
-      // promises as `Window & typeof globalThis` (iframeHost.ts). The rule stays on everywhere
-      // else, including the rest of src/runner and the rest of src/test -- listing files rather
-      // than globbing keeps it that way as helpers are added.
+      // Enabled implicitly by the "suspicious" category. Every file in this repo that is allowed an
+      // unsafe assertion is listed here, in one block, so the rule's whole blast radius is five
+      // files and can be read in one place. It was two separate blocks until the merge-gating
+      // review, which meant neither said how wide the exemption actually was.
+      //
+      // Each file holds exactly one kind of boundary where a value arrives untyped and an assertion
+      // is the only way across:
+      //
+      //   createMemoryHost.ts  happy-dom's `Window` is structurally distinct from lib.dom's
+      //   harness.ts           `new win.Function(...)` is typed only as `Function`
+      //   harness.test.ts      a learner's `exports` bag is `Record<string, unknown>`
+      //   iframeHost.ts        lib.dom types `iframe.contentWindow` as plain `Window`, which omits
+      //                        the global-scope members -- `Function`, `setTimeout` -- that
+      //                        `HostContext.window` promises as `Window & typeof globalThis`
+      //   client.ts            `response.json()` resolves to `any` by the DOM lib's own typing, and
+      //                        `apiFetch<T>` is the one HTTP boundary every call in src/api goes
+      //                        through
+      //
+      // The rule stays on everywhere else, including the rest of src/runner, the rest of src/api
+      // and the rest of src/test -- listing files rather than globbing keeps it that way as
+      // helpers are added.
       "files": [
+        "src/api/client.ts",
         "src/runner/harness.ts",
         "src/runner/harness.test.ts",
         "src/runner/iframeHost.ts",
@@ -83,18 +104,6 @@
       "files": ["src/types/challenge.ts", "src/runner/harness.ts"],
       "rules": {
         "typescript/no-unnecessary-type-parameters": "off"
-      }
-    },
-    {
-      // Enabled implicitly by the "suspicious" category. `apiFetch<T>` is the one HTTP boundary
-      // every API call in src/api goes through: `response.json()` resolves to `any` by the DOM
-      // lib's own typing, and asserting it to the caller-supplied `T` is the unavoidable unsound
-      // step at that boundary -- the same trade already made for src/runner/harness.ts's seam
-      // with submitted code. Listed rather than globbed, and limited to the one function that
-      // owns the assertion.
-      "files": ["src/api/client.ts"],
-      "rules": {
-        "typescript/no-unsafe-type-assertion": "off"
       }
     },
     {
