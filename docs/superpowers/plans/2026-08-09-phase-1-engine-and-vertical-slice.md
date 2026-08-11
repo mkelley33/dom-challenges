@@ -4237,8 +4237,50 @@ git commit -m "docs: add readme license and project instruction files"
 
 ## Phase 1 Done When
 
+---
+
+### Task 20: Wire the desktop pane resizer
+
+**ADDED after Task 19.** Spec §8 requires "three resizable panes: prompt, editor, results. Pane
+sizes persist in Zustand." The store side was built in Task 9 and is tested — `EditorLayout`,
+`setLayout`, and the persisted `layout` slice all exist — and `ChallengePage` *reads* the
+percentages into its desktop grid. But **nothing calls `setLayout` outside its own unit test**, so
+the panes are permanently 28/42/30 and the persisted state is dead weight. The plan's own
+self-review missed this: no task ever claimed the requirement. Either the resizer gets built or
+the store slice and the spec line both come out; building it is correct, because the reading half
+already works.
+
+**Files:**
+- Create: `src/components/challenge/PaneResizer.tsx`, `src/components/challenge/PaneResizer.test.tsx`
+- Modify: `src/components/challenge/ChallengePage.tsx`
+
+**Interfaces:**
+- Consumes: `useEditorStore.layout` / `setLayout` (Task 9).
+- Produces: `PaneResizer` — a separator between two panes that adjusts their percentages.
+
+Requirements:
+
+- **Keyboard operable, not mouse-only.** Use `role="separator"` with `aria-orientation="vertical"`,
+  an accessible name naming the two panes it sits between, `aria-valuenow`/`aria-valuemin`/
+  `aria-valuemax`, and Arrow key handling. A drag-only resizer fails the accessibility bar this
+  branch has held everywhere else, and Task 18's pass would have to undo it.
+- **Desktop only.** The mobile layout is a single column with a segmented control; a separator
+  there is meaningless. It must not appear below `lg`.
+- **Percentages must stay summing to 100 and each pane must keep a usable minimum** — a learner
+  who drags the editor to zero and reloads has bricked their page, because the size is persisted.
+  Clamp, and test the clamp at both ends.
+- **Do not let the drag path bypass the clamp that the keyboard path enforces**, or vice versa —
+  route both through one function and test that function directly.
+- The preview lives in the results pane. Resizing must never take it out of the box tree; see the
+  `display: none` constraint recorded for Tasks 12 and 18.
+
+Commit separately from any other work.
+
+---
+
 - `pnpm typecheck && pnpm lint && pnpm test` is green.
-- `pnpm dev` serves an app where all 12 Selection & Traversal challenges can be solved, cleared, resubmitted, and revealed.
+- `pnpm dev` serves an app where all 13 Selection & Traversal challenges can be solved, cleared, resubmitted, and revealed.
+- The desktop panes resize by pointer and by keyboard, and the sizes survive a reload.
 - The content suite proves every reference solution passes and every starter fails.
 - Monaco loads from the local bundle, in its own chunk.
 - The app works at 375px and 1440px, and `jsx-a11y` reports nothing.
