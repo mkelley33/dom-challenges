@@ -471,4 +471,118 @@ describe('APIs present but not faithful', () => {
     expect(dot.getAttribute('class')).toBe('dot');
     expect(chart.querySelectorAll('.dot')).toHaveLength(1);
   });
+  it('snapshots the live attributes map when iterating it, where a browser skips', async () => {
+    const context = await hostContext('<div id="card" class="a" title="t" lang="en" hidden data-x="1"></div>');
+    const card = context.document.getElementById('card');
+    if (!card) throw new Error('#card is missing from the fixture');
+
+    // The controls: the map really is live in this engine -- its length follows the element -- and
+    // it really is iterable. So what follows is about the *iterator* taking a snapshot rather than
+    // about `attributes` being an inert copy or `for..of` failing outright.
+    const map = card.attributes;
+    expect(map).toHaveLength(6);
+    card.setAttribute('role', 'note');
+    expect(map).toHaveLength(7);
+    card.removeAttribute('role');
+    expect([...card.attributes].map((attribute) => attribute.name)).toEqual(card.getAttributeNames());
+
+    for (const attribute of card.attributes) card.removeAttribute(attribute.name);
+
+    // Chrome leaves `["class", "lang", "data-x"]`: `NamedNodeMap` gets its iterator from its indexed
+    // getter, so the walk advances an index while the map shrinks under it and every second
+    // attribute is stepped over. Measured twice through the production `createIframeHost` in a
+    // foregrounded tab. Here the whole list goes -- which is the dangerous direction, because the
+    // buggy loop is the one that passes. No Attributes challenge may ask for bulk attribute
+    // removal for this reason; `attributes/copyAttributes.ts` only ever writes to a *different*
+    // element, and its tradeoffs carry the warning.
+    expect(card.getAttributeNames()).toEqual([]);
+  });
+
+  it('resolves a dashed dataset key, and accepts writing one, where a browser does neither', async () => {
+    const context = await hostContext('<div id="card" data-view-count="3" data--x="dd"></div>');
+    const card = context.document.getElementById('card');
+    if (!card) throw new Error('#card is missing from the fixture');
+
+    // The controls: the camelCase mapping both engines agree on, in both directions. Without them a
+    // failure below would be indistinguishable from `dataset` not working here at all.
+    expect(card.dataset.viewCount).toBe('3');
+    card.dataset.pageSize = '50';
+    expect(card.getAttribute('data-page-size')).toBe('50');
+
+    // Chrome answers `undefined` for a dashed key and throws `SyntaxError` when one is written --
+    // a `-` followed by an ASCII lowercase letter is not a legal `dataset` name. It also exposes
+    // `data--x` as `dataset.X`, which this engine does not. Measured twice through the production
+    // `createIframeHost`. The read is the dangerous direction: a solution that indexes `dataset`
+    // with the attribute's own name works here and returns `undefined` for the learner, so
+    // `attributes/dataAttributes.ts` never asks for one.
+    expect(Reflect.get(card.dataset, 'view-count')).toBe('3');
+    expect(Reflect.get(card.dataset, 'X')).toBe(undefined);
+    Reflect.set(card.dataset, 'foo-bar', 'q');
+    expect(card.getAttribute('data-foo-bar')).toBe('q');
+  });
+
+  it('accepts an empty and a whitespace-bearing class token, where a browser throws', async () => {
+    const context = await hostContext('<div id="card" class="chip"></div>');
+    const card = context.document.getElementById('card');
+    if (!card) throw new Error('#card is missing from the fixture');
+
+    // The control: an ordinary token is added, and the list is a real `DOMTokenList` that
+    // de-duplicates. So the two below are about token *validation* rather than `add` being a no-op.
+    card.classList.add('is-open');
+    card.classList.add('is-open');
+    expect(card.getAttribute('class')).toBe('chip is-open');
+
+    // Chrome throws `SyntaxError` for the empty token and `InvalidCharacterError` for the one with a
+    // space in it, and adds nothing. Measured twice through the production `createIframeHost`. Here
+    // both are accepted, and the second is split into two tokens -- so a challenge asserting either
+    // throw would be green here and wrong in a browser, and `attributes/classThreeWays.ts` only
+    // discusses them in prose.
+    card.classList.add('');
+    card.classList.add('a b');
+    expect(card.getAttribute('class')).toBe('chip is-open a b');
+  });
+
+  it('ignores a dashed CSS property written as an index, and returns nothing from removeProperty', async () => {
+    const context = await hostContext('<div id="card" style="height: 8px; --tone: teal"></div>');
+    const card = context.document.getElementById('card');
+    if (!card) throw new Error('#card is missing from the fixture');
+
+    // The controls: the camelCase property and `setProperty` both work, including for a custom
+    // property, and the declaration block is parsed rather than held as text.
+    expect(card.style).toHaveLength(2);
+    card.style.marginTop = '3px';
+    card.style.setProperty('--tone', 'plum');
+    expect(card.style.getPropertyValue('margin-top')).toBe('3px');
+    expect(card.style.getPropertyValue('--tone')).toBe('plum');
+
+    // CSSOM defines a *dashed attribute* for every property whose name contains a dash, so
+    // `style['margin-bottom'] = …` is a real declaration in Chrome, and `removeProperty` returns the
+    // value it removed (`''` when there was none). Measured twice through the production
+    // `createIframeHost`. Both are the safe direction -- this engine rejects a correct answer rather
+    // than accepting a wrong one -- but `attributes/styleAttribute.ts` avoids both spellings so that
+    // a learner's browser-correct answer is not graded differently by the two hosts.
+    Reflect.set(card.style, 'margin-bottom', '5px');
+    expect(card.style.getPropertyValue('margin-bottom')).toBe('');
+    expect(card.style.removeProperty('height')).toBe(undefined);
+  });
+
+  it('gives the host frame a real location origin, where a srcdoc frame reports "null"', async () => {
+    const context = await hostContext('<a id="link" href="/docs/page">docs</a>');
+    const link = context.document.getElementById('link');
+    if (!link) throw new Error('#link is missing from the fixture');
+
+    // The control: URL decomposition works, and an absolute href decomposes identically in both
+    // engines because none of it depends on the base URL.
+    expect(link.getAttribute('href')).toBe('/docs/page');
+    expect(link.pathname).toBe('/docs/page');
+
+    // The production host is an `about:srcdoc` frame, whose *document* inherits the parent's origin
+    // while its `location.origin` is the string `"null"` -- measured twice through the production
+    // `createIframeHost`, where every link in the frame therefore compared as cross-origin and two
+    // `mailto:` links compared as same-origin. Here `location.origin` is the memory host's URL, so
+    // the comparison works. That is the dangerous direction, and it is why no challenge in this
+    // category tests a link against `location.origin`.
+    expect(context.window.location.origin).toBe('https://challenges.local');
+    expect(link.origin).toBe(context.window.location.origin);
+  });
 });
