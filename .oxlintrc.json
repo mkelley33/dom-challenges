@@ -1,0 +1,146 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["dist", "coverage", "node_modules", "**/node_modules/**", "server/db.json"],
+  "plugins": ["typescript", "react", "react-perf", "jsx-a11y", "import", "unicorn", "oxc", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+    "react/react-in-jsx-scope": "off",
+    // Enabled implicitly by the "correctness" category. Side-effect-only imports are
+    // intentional for CSS entrypoints (src/main.tsx -> ./index.css) and the Vitest/jest-dom
+    // matcher setup (src/test/setup.ts) -- there is nothing to assign. Allowlist those two
+    // import sources instead of disabling the rule outright.
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css", "@testing-library/jest-dom/vitest"] }]
+  },
+  "overrides": [
+    {
+      // Enabled implicitly by the "correctness" category, and right in general: `new Function` is
+      // arbitrary code execution built from a string. Running arbitrary code from a string is what
+      // this file is *for* -- `loadModule` compiles the learner's submission, and it uses the
+      // host's own `win.Function` so that `document` and `window` inside it resolve through the
+      // frame's scope chain rather than the app's. It appears exactly once, at `harness.ts:77`.
+      //
+      // Was globbed over `src/runner/**/*.ts` until the merge-gating review: the only glob-scoped
+      // override in the file, in a file where four other blocks argue "Listed rather than globbed",
+      // and the only one with no comment. Both are fixed here.
+      "files": ["src/runner/harness.ts"],
+      "rules": {
+        "no-new-func": "off"
+      }
+    },
+    {
+      // Enabled implicitly by the "perf" category, which suggests collecting the promises and
+      // awaiting them with `Promise.all`. That is exactly what the harness must not do: every
+      // iteration of the loop resets the one shared host, so running tests concurrently would
+      // destroy the per-test DOM isolation the harness exists to provide. Sequential await is
+      // the requirement, not an oversight.
+      "files": ["src/runner/harness.ts"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    },
+    {
+      // Same rule, same reason, different subject. This file walks the mobile tab bar one tab at a
+      // time and reads the layout back after each click; the awaits are `userEvent` interactions,
+      // which are a sequence a learner performs, not work to parallelise. `Promise.all` would fire
+      // three clicks at one control at once and assert against whatever state they landed in.
+      // Listed rather than globbed so the rule stays on for every other test file.
+      "files": ["src/components/challenge/ChallengePage.test.tsx"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    },
+    {
+      // Enabled implicitly by the "suspicious" category. Every file in this repo that is allowed an
+      // unsafe assertion is listed here, in one block, so the rule's whole blast radius is five
+      // files and can be read in one place. It was two separate blocks until the merge-gating
+      // review, which meant neither said how wide the exemption actually was.
+      //
+      // Each file holds exactly one kind of boundary where a value arrives untyped and an assertion
+      // is the only way across:
+      //
+      //   createMemoryHost.ts  happy-dom's `Window` is structurally distinct from lib.dom's
+      //   harness.ts           `new win.Function(...)` is typed only as `Function`
+      //   harness.test.ts      a learner's `exports` bag is `Record<string, unknown>`
+      //   iframeHost.ts        lib.dom types `iframe.contentWindow` as plain `Window`, which omits
+      //                        the global-scope members -- `Function`, `setTimeout` -- that
+      //                        `HostContext.window` promises as `Window & typeof globalThis`
+      //   client.ts            `response.json()` resolves to `any` by the DOM lib's own typing, and
+      //                        `apiFetch<T>` is the one HTTP boundary every call in src/api goes
+      //                        through
+      //
+      // The rule stays on everywhere else, including the rest of src/runner, the rest of src/api
+      // and the rest of src/test -- listing files rather than globbing keeps it that way as
+      // helpers are added.
+      "files": [
+        "src/api/client.ts",
+        "src/runner/harness.ts",
+        "src/runner/harness.test.ts",
+        "src/runner/iframeHost.ts",
+        "src/test/createMemoryHost.ts"
+      ],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
+      // Enabled implicitly by the "suspicious" category, and correct about the mechanics: a type
+      // parameter used only in return position is `as T` written as a function, which is exactly
+      // what `TestContext.fn` is. That is the point of it. Submitted code is typed `unknown` by
+      // construction -- nothing is known about it until it runs -- so the unsound step has to
+      // happen somewhere, and the choice is between one occurrence here and one in every challenge
+      // module that calls an export. The rule's own remedy (return `unknown`, let the caller
+      // assert) *is* the ~100-file pattern this accessor exists to delete. Listed rather than
+      // globbed, and limited to the declaration and its single implementation.
+      "files": ["src/types/challenge.ts", "src/runner/harness.ts"],
+      "rules": {
+        "typescript/no-unnecessary-type-parameters": "off"
+      }
+    },
+    {
+      // Enabled implicitly by the "correctness" category, and right about a *static* separator:
+      // `<hr>` is the tag for a thematic break. `PaneResizer` is not one. It is the ARIA window
+      // splitter -- a focusable separator carrying `aria-valuenow` and answering the arrow keys --
+      // and no element satisfies all four of oxlint's own a11y rules at once. Verified by running
+      // each variant through `pnpm lint`:
+      //
+      //   <div role="separator" tabIndex={0} ...>  -> only this rule fires
+      //   <hr tabIndex={0} ...>                    -> no-noninteractive-tabindex,
+      //                                               no-noninteractive-element-interactions
+      //   <hr role="separator" tabIndex={0} ...>   -> no-redundant-roles,
+      //                                               no-noninteractive-element-to-interactive-role
+      //
+      // The first is the pattern the ARIA authoring practices specify, so it is the one that is
+      // kept. Listed rather than globbed: every other file in the repo still has the rule on, and a
+      // second resizer would have to be added here deliberately.
+      "files": ["src/components/challenge/PaneResizer.tsx"],
+      "rules": {
+        "jsx-a11y/prefer-tag-over-role": "off"
+      }
+    },
+    {
+      // Enabled implicitly by the "correctness" category. `import/default` resolves a module's
+      // physical exports to check the import against them, but `?worker` is a Vite-only query
+      // suffix: Vite's worker plugin synthesizes a default export (a Worker constructor) for it
+      // at build/transform time, and the raw `editor.worker.js`/`ts.worker.js` files it points at
+      // have no such export on disk. `tsc` accepts these imports (via vite/client's `*?worker`
+      // ambient module declarations) and `vite build` actually resolves and chunks them --
+      // oxlint's static resolver is simply the one part of the toolchain that does not know this
+      // Vite-specific convention. Listed rather than globbed, and limited to the one file with
+      // `?worker` imports.
+      "files": ["src/lib/monaco.ts"],
+      "rules": {
+        "import/default": "off"
+      }
+    }
+  ]
+}

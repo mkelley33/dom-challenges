@@ -1,0 +1,31 @@
+import type { Challenge } from '@/types/challenge';
+
+import { attributeSelectors } from './attributeSelectors';
+import { childrenVsChildNodes } from './childrenVsChildNodes';
+import { closestRow } from './closestRow';
+import { containsAndPosition } from './containsAndPosition';
+import { firstElementChild } from './firstElementChild';
+import { liveVsStatic } from './liveVsStatic';
+import { queryAll } from './queryAll';
+import { queryBasics } from './queryBasics';
+import { scopedQuery } from './scopedQuery';
+import { shadowBoundary } from './shadowBoundary';
+import { siblingTraversal } from './siblingTraversal';
+import { templateContent } from './templateContent';
+import { treeWalker } from './treeWalker';
+
+export const selectionChallenges: Challenge[] = [
+  queryBasics,
+  closestRow,
+  liveVsStatic,
+  queryAll,
+  scopedQuery,
+  attributeSelectors,
+  childrenVsChildNodes,
+  firstElementChild,
+  siblingTraversal,
+  containsAndPosition,
+  treeWalker,
+  templateContent,
+  shadowBoundary,
+];
