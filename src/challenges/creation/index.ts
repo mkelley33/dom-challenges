@@ -63,6 +63,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./cloneDepth').then((module) => module.cloneDepth),
   },
   {
+    id: 'creation-insert-at-index',
+    slug: 'insert-at-index',
+    title: 'Insert it at position n, not near it',
+    category: 'creation',
+    difficulty: 'intermediate',
+    concepts: ['insertBefore', 'before', 'children versus childNodes', 'append'],
+    relatedIds: ['selection-children-vs-childnodes'],
+    load: () => import('./insertAtIndex').then((module) => module.insertAtIndex),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
