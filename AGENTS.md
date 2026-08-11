@@ -118,11 +118,16 @@ script's _side effect_ passes in the browser and fails under Vitest, and — wor
 blind to the whole category. Assert on the script element and its text node, which both hosts have; never on
 `win.someGlobalTheScriptSet`.
 
-### Three things a challenge may never do, because the two engines disagree
+### What a challenge may never do, because the two engines disagree
 
 Each was measured in both hosts during Phase 2's reconnaissance, and each is invisible to the content suite — the suite
-agrees with whichever engine it runs on. `src/test/happyDomGaps.test.ts` pins all three from the engine side, so a
-dependency bump reports itself instead of quietly widening what is allowed.
+agrees with whichever engine it runs on. `src/test/happyDomGaps.test.ts` pins them from the engine side, so a
+dependency bump reports itself instead of quietly widening what is allowed. Every negative there carries a positive
+control in the same document; §5 explains why that is not optional.
+
+The list below is the cross-cutting form. **The measured detail lives in each category's `index.ts` docblock**, which
+is where an author of that category will actually be looking — read it before authoring in a category, and put what
+you measure there.
 
 - **Never patch a prototype from a challenge test.** happy-dom shares **one class table across every `Window` it
   creates** — verified: patching `w1.Element.prototype` is observed by an element built in `w2` — so a prototype patch
@@ -139,8 +144,43 @@ dependency bump reports itself instead of quietly widening what is allowed.
   outside the prefix are yours, and are yours to remove in a `finally`; `storage/filterState.ts` is the worked example.
 - **Never assert a `MutationRecord`'s `previousSibling` or `nextSibling`.** On a `childList` addition Chrome reports the
   preceding element and happy-dom reports `null`. Everything else about `MutationObserver` matches record for record —
-  batching, `attributeOldValue`, `characterDataOldValue`, `addedNodes`/`removedNodes`, `takeRecords`, `disconnect` — so
-  this one field is the whole exception and it is easy to reach for.
+  callback batching, `attributeOldValue`, `characterDataOldValue`, `addedNodes`/`removedNodes`, `takeRecords`,
+  `disconnect` — so this one field is the whole exception and it is easy to reach for.
+- **Never assert that an insertion was batched.** Chrome queues **one** `childList` record carrying every child of an
+  inserted `DocumentFragment` (and of an `innerHTML` assignment); happy-dom queues one per child, so a fragment and a
+  loop of `append` calls are indistinguishable here. "Prove you batched your inserts" is therefore unauthorable, which
+  is a real loss to the `creation` category and not a small one.
+- **Never assert a `getComputedStyle` value outside the portable subset.** The cascade itself is faithful — specificity,
+  inheritance, `!important` over inline, `insertRule`, `var()` — but the _serialisation_ is not. Portable: **px lengths
+  written as px**, and a custom property read off the element that **declares** it. Not portable, in the "green here,
+  wrong in a browser" direction every time: colours (`red` and `#0000ff` stay as written instead of computing to
+  `rgb(...)`), shorthands built from longhands, `em` and `%`, UA defaults, pseudo-elements, `var()` fallbacks, and an
+  inherited custom property read off the element that inherits it. Read the longhand the `var()` fed instead.
+- **Never build a Forms challenge on `minlength`, `maxlength`, a browser-supplied `validationMessage`, or
+  `:invalid`/`:valid`/`:required`.** The length attributes apply only to a user-edited value and happy-dom ignores that
+  condition, so they look like they work here and do nothing in a browser; `validationMessage` is `''` here for every
+  built-in failure, so only a message the challenge set with `setCustomValidity` is assertable; the validity
+  pseudo-classes never match at all. The rest of the Constraint Validation API is faithful, including `checkValidity`,
+  the `validity` flags, the `invalid` event, `setCustomValidity`, `willValidate`, `noValidate`, `FormData` and
+  `requestSubmit`.
+- **Never write ARIA state through the IDL properties.** happy-dom implements the `ARIAMixin` (`ariaExpanded`,
+  `ariaSelected`, `ariaChecked`, …) as plain JavaScript properties that reflect **nothing**, so a solution written that
+  way is right in a browser and invisible to every attribute selector in the suite. Use `setAttribute`/`getAttribute`.
+  `element.role` is the one that does reflect.
+- **Never assert focus on an element that is not natively focusable, and never assert `:focus-within` or
+  `:focus-visible`.** `focus()` succeeds on a plain `<div>` here and is refused in Chrome; `:focus-within` never
+  matches here; `:focus-visible` happens to agree in both, for a reason that recommends nothing — its heuristic is
+  defined over **real** user input and the harness can only dispatch untrusted events. Focus itself is otherwise
+  faithful, including `activeElement` moving when the app realm calls `focus()` on an element inside the frame.
+- **Never assert `event.target` across a shadow boundary.** Chrome retargets an escaping event to the host; happy-dom
+  does not, which makes `event.target.closest(...)` — the natural wrong answer — work here and fail in a browser. Nor a
+  closed root's truncated `composedPath` (5 entries in Chrome, 7 here), nor `composedPath()` read after dispatch has
+  ended (`[]` in Chrome, stale here), nor a listener attached with an already-aborted `AbortSignal` (never attached in
+  Chrome, attached and fired here). `composedPath()` **during** dispatch is portable, contents and order, and so is the
+  walk through `parentNode`/`ShadowRoot.host` — but never a `ShadowRoot`'s `nodeName`.
+- **Never assert a resolved URL.** `a.href` and `img.src` resolve against the document's base, which is
+  `https://challenges.local/` here and the **app's current route** in the `about:srcdoc` frame. The
+  relative-versus-absolute distinction is fine to teach; the resolved string is not assertable.
 
 ### Verify host-divergent challenges in a real browser
 
