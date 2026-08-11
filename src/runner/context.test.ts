@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
+import { createMemoryHost } from '@/test/createMemoryHost';
+
 import { createEventHelpers, createTick } from './context';
+
+/**
+ * A form with two submit buttons.
+ *
+ * Two rather than one so that "the button that was passed" is distinguishable from "the only
+ * button there was" -- an implementation that reported `form.querySelector('button')` would
+ * satisfy a one-button fixture.
+ */
+function submitFixture(): { form: HTMLFormElement; save: HTMLButtonElement; draft: HTMLButtonElement } {
+  document.body.innerHTML =
+    '<form id="f"><button id="save" type="submit">save</button><button id="draft" type="submit">draft</button></form>';
+  const form = document.getElementById('f');
+  const save = document.getElementById('save');
+  const draft = document.getElementById('draft');
+  if (!(form instanceof HTMLFormElement) || !(save instanceof HTMLButtonElement)) throw new Error('fixture missing');
+  if (!(draft instanceof HTMLButtonElement)) throw new Error('fixture missing');
+  return { form, save, draft };
+}
 
 describe('createTick', () => {
   it('flushes pending microtasks', async () => {
@@ -159,5 +179,97 @@ describe('createEventHelpers', () => {
     });
     createEventHelpers(window).submit(form);
     expect(submitted).toBe(1);
+  });
+
+  it('reports the button that submitted the form', () => {
+    const { form, save } = submitFixture();
+
+    const submitters: (Element | null)[] = [];
+    form.addEventListener('submit', (event) => {
+      submitters.push(event.submitter);
+    });
+    createEventHelpers(window).submit(form, save);
+    expect(submitters).toEqual([save]);
+  });
+
+  it('reports a null submitter when nothing submitted the form', () => {
+    const { form } = submitFixture();
+
+    // `null`, not `undefined`: a form submitted with no submitter -- `form.requestSubmit()`, or a
+    // scripted dispatch -- is the case `event.submitter === null` exists to describe, and a
+    // challenge that branches on it has to be able to reach that branch. A bare `Event` has no
+    // `submitter` property at all, which reads as `undefined` and makes the two indistinguishable.
+    const submitters: (Element | null)[] = [];
+    form.addEventListener('submit', (event) => {
+      submitters.push(event.submitter);
+    });
+    createEventHelpers(window).submit(form);
+    expect(submitters).toEqual([null]);
+  });
+
+  it('lets the submitter argument win over a submitter smuggled in through init', () => {
+    const { form, save, draft } = submitFixture();
+
+    const events: SubmitEvent[] = [];
+    form.addEventListener('submit', (event) => {
+      events.push(event);
+    });
+
+    // The same ordering `keydown` documents at `key`, for the same reason: `init` shapes the rest
+    // of the event, it does not replace the helper's own argument. Getting this backwards is
+    // invisible -- the form submits, the handler runs, only the wrong button arrives, and "which
+    // button submitted this form" is the lesson the Forms category is authored around.
+    createEventHelpers(window).submit(form, save, { submitter: draft, cancelable: false });
+
+    expect(events.map((event) => event.submitter)).toEqual([save]);
+    // Paired so that "init is ignored entirely" cannot pass as "the argument wins".
+    expect(events.map((event) => event.cancelable)).toEqual([false]);
+  });
+
+  it('falls back to a submitter given only through init', () => {
+    const { form, draft } = submitFixture();
+
+    // The other half of the ordering: the argument wins when there is one, but dropping `init`'s
+    // submitter when there is not would be the same silent failure in the other direction.
+    const submitters: (Element | null)[] = [];
+    form.addEventListener('submit', (event) => {
+      submitters.push(event.submitter);
+    });
+    createEventHelpers(window).submit(form, undefined, { submitter: draft });
+    expect(submitters).toEqual([draft]);
+  });
+
+  it("builds the event with the challenge realm's constructor", async () => {
+    // The realm rule of AGENTS.md §3, from the engine side. Challenge code runs in the host's
+    // realm and this helper is handed that host's window, so a bare `new SubmitEvent(...)` would
+    // build the event from the *app's* class table. happy-dom shares one class table across its
+    // windows, so such a bug passes every other test in this file and fails only in a real
+    // browser -- where the content suite cannot see it. Tagging the host window's constructor is
+    // what makes the two realms distinguishable here at all.
+    const host = createMemoryHost();
+    try {
+      const { window: hostWin, document: hostDoc } = await host.reset(
+        '<form id="f"><button id="save" type="submit">save</button></form>',
+      );
+      // A locally declared class, not a bare global: `toBeInstanceOf` is exact against it, which is
+      // precisely what makes it able to tell the app's `SubmitEvent` from the host's.
+      class TaggedSubmitEvent extends hostWin.SubmitEvent {}
+      hostWin.SubmitEvent = TaggedSubmitEvent;
+
+      const form = hostDoc.getElementById('f');
+      const save = hostDoc.getElementById('save');
+      if (!(form instanceof hostWin.HTMLFormElement) || !save) throw new Error('fixture missing');
+
+      const events: Event[] = [];
+      form.addEventListener('submit', (event) => {
+        events.push(event);
+      });
+      createEventHelpers(hostWin).submit(form, save);
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toBeInstanceOf(TaggedSubmitEvent);
+    } finally {
+      host.dispose();
+    }
   });
 });

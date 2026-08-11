@@ -58,8 +58,23 @@ export function createEventHelpers(win: Window & typeof globalThis): EventHelper
       // helper's own argument. Spread the other way round and a stale `init.key` silently wins.
       target.dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init, key }));
     },
-    submit(form) {
-      form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+    submit(form, submitter, init) {
+      // A `SubmitEvent`, not an `Event`, because `event.submitter` is the whole of "which button
+      // submitted this form" -- a core Forms & Validation lesson, and one a bare `Event` reports as
+      // `undefined` for every case including the genuinely submitter-less one.
+      //
+      // `submitter` last for the reason `keydown` spells out at `key`: `init` is there to shape the
+      // rest of the event, not to replace the helper's own argument. The `??` chain rather than a
+      // plain override is what stops the mirror-image failure -- a submitter passed only through
+      // `init` being silently dropped.
+      form.dispatchEvent(
+        new win.SubmitEvent('submit', {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+          submitter: submitter ?? init?.submitter ?? null,
+        }),
+      );
     },
   };
 }

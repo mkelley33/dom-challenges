@@ -21,7 +21,14 @@ export interface EventHelpers {
   click(target: Element, init?: MouseEventInit): void;
   input(target: HTMLInputElement | HTMLTextAreaElement, value: string): void;
   keydown(target: Element, key: string, init?: KeyboardEventInit): void;
-  submit(form: HTMLFormElement): void;
+  /**
+   * Dispatches a `SubmitEvent`, whose `submitter` is the element that submitted the form.
+   *
+   * Omitting `submitter` reports `null` rather than `undefined` -- the shape a form submitted with
+   * no submitter really has, so a challenge can branch on it. `submitter` wins over
+   * `init.submitter`; `init` is only consulted for it when the argument is absent.
+   */
+  submit(form: HTMLFormElement, submitter?: HTMLElement, init?: SubmitEventInit): void;
 }
 
 export interface TestContext {
