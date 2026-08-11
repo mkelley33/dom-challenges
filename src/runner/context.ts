@@ -63,16 +63,16 @@ export function createEventHelpers(win: Window & typeof globalThis): EventHelper
       // submitted this form" -- a core Forms & Validation lesson, and one a bare `Event` reports as
       // `undefined` for every case including the genuinely submitter-less one.
       //
-      // `submitter` last for the reason `keydown` spells out at `key`: `init` is there to shape the
-      // rest of the event, not to replace the helper's own argument. The `??` chain rather than a
-      // plain override is what stops the mirror-image failure -- a submitter passed only through
-      // `init` being silently dropped.
+      // `init` is typed `EventInit`, not `SubmitEventInit`, so there is no `init.submitter` for the
+      // argument to have to win against -- the collision `keydown` can only document as an ordering
+      // rule at `key` cannot be written here at all. `submitter` still comes last so the guarantee
+      // survives an `init` that carries the field at run time without declaring it in its type.
       form.dispatchEvent(
         new win.SubmitEvent('submit', {
           bubbles: true,
           cancelable: true,
           ...init,
-          submitter: submitter ?? init?.submitter ?? null,
+          submitter: submitter ?? null,
         }),
       );
     },

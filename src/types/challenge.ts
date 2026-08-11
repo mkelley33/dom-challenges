@@ -25,10 +25,16 @@ export interface EventHelpers {
    * Dispatches a `SubmitEvent`, whose `submitter` is the element that submitted the form.
    *
    * Omitting `submitter` reports `null` rather than `undefined` -- the shape a form submitted with
-   * no submitter really has, so a challenge can branch on it. `submitter` wins over
-   * `init.submitter`; `init` is only consulted for it when the argument is absent.
+   * no submitter really has, so a challenge can branch on it.
+   *
+   * `init` is `EventInit`, not `SubmitEventInit`, and the narrowing is the point: the two differ by
+   * exactly one field, `submitter`, which this helper already owns as an argument. Typed this way,
+   * "the explicit argument versus a submitter smuggled through `init`" is not an ordering rule
+   * anyone has to remember -- it is a compile error. `keydown` cannot do the same for `key`, since
+   * `KeyboardEventInit` carries modifiers a challenge genuinely needs, which is why it documents
+   * the ordering instead.
    */
-  submit(form: HTMLFormElement, submitter?: HTMLElement, init?: SubmitEventInit): void;
+  submit(form: HTMLFormElement, submitter?: HTMLElement, init?: EventInit): void;
 }
 
 export interface TestContext {

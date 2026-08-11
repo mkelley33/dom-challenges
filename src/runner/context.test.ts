@@ -207,36 +207,46 @@ describe('createEventHelpers', () => {
     expect(submitters).toEqual([null]);
   });
 
-  it('lets the submitter argument win over a submitter smuggled in through init', () => {
+  it('applies init to the event without disturbing the submitter', () => {
+    const { form, save } = submitFixture();
+
+    // `init` shapes the rest of the event and nothing else. It cannot reach `submitter`, because it
+    // is typed `EventInit` rather than `SubmitEventInit` and those differ by exactly that field --
+    // so "the argument versus a submitter smuggled through init", which `keydown` can only document
+    // as an ordering rule at `key`, is a compile error here and needs no test.
+    //
+    // What is still a run-time question is whether `init` reaches the event at all. Without this
+    // the parameter would be decorative, and `{ cancelable: false }` is a real Forms lesson in its
+    // own right: `preventDefault()` does nothing to an event that is not cancelable.
+    const events: SubmitEvent[] = [];
+    form.addEventListener('submit', (event) => {
+      events.push(event);
+    });
+    createEventHelpers(window).submit(form, save, { cancelable: false });
+
+    expect(events.map((event) => event.cancelable)).toEqual([false]);
+    // Paired, so that an `init` spread that clobbered the submitter could not pass as "init works".
+    expect(events.map((event) => event.submitter)).toEqual([save]);
+  });
+
+  it('keeps the submitter its own argument even when init carries the field at run time', () => {
     const { form, save, draft } = submitFixture();
+
+    // `EventInit` has no `submitter`, so nothing well-typed can smuggle one -- but a type is not a
+    // run-time barrier. An init that is assembled rather than written as a literal skips the excess
+    // property check and arrives carrying whatever it was assembled from, and that is the one
+    // remaining way the `keydown` bug could reappear here. It is also what the spread order in
+    // `submit` is for: without this test, that ordering is a claim in a comment that no
+    // implementation has to honour.
+    const assembled: EventInit = Object.assign({ cancelable: false }, { submitter: draft });
 
     const events: SubmitEvent[] = [];
     form.addEventListener('submit', (event) => {
       events.push(event);
     });
-
-    // The same ordering `keydown` documents at `key`, for the same reason: `init` shapes the rest
-    // of the event, it does not replace the helper's own argument. Getting this backwards is
-    // invisible -- the form submits, the handler runs, only the wrong button arrives, and "which
-    // button submitted this form" is the lesson the Forms category is authored around.
-    createEventHelpers(window).submit(form, save, { submitter: draft, cancelable: false });
+    createEventHelpers(window).submit(form, save, assembled);
 
     expect(events.map((event) => event.submitter)).toEqual([save]);
-    // Paired so that "init is ignored entirely" cannot pass as "the argument wins".
-    expect(events.map((event) => event.cancelable)).toEqual([false]);
-  });
-
-  it('falls back to a submitter given only through init', () => {
-    const { form, draft } = submitFixture();
-
-    // The other half of the ordering: the argument wins when there is one, but dropping `init`'s
-    // submitter when there is not would be the same silent failure in the other direction.
-    const submitters: (Element | null)[] = [];
-    form.addEventListener('submit', (event) => {
-      submitters.push(event.submitter);
-    });
-    createEventHelpers(window).submit(form, undefined, { submitter: draft });
-    expect(submitters).toEqual([draft]);
   });
 
   it("builds the event with the challenge realm's constructor", async () => {
