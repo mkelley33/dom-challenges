@@ -122,6 +122,20 @@ describe('ChallengeList', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(challenges.length);
   });
 
+  it('points each entry at its own challenge, in the order the registry lists them', async () => {
+    renderCategory();
+
+    // Title and href together, as pairs. Reading only the text -- which is all this file did until
+    // now -- leaves the destination unasserted anywhere in the suite: point every entry at one
+    // hard-coded slug and nothing goes red, while every link on the page but one 404s. The
+    // Dashboard's category links have always asserted their href; these are the ones a learner
+    // actually clicks.
+    const links = await screen.findAllByRole('link');
+    expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual(
+      challenges.map((challenge) => [challenge.title, `/challenge/${challenge.slug}`]),
+    );
+  });
+
   it('matches the search text against the title', async () => {
     // The first eight characters of a title, which is a learner typing the beginning of one they
     // half-remember rather than the whole thing.
