@@ -33,6 +33,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  */
 export const creationEntries: ChallengeEntry[] = [
   {
+    id: 'creation-create-and-append',
+    slug: 'create-and-append',
+    title: 'Build the note and put it on the page',
+    category: 'creation',
+    difficulty: 'novice',
+    concepts: ['createElement', 'append', 'textContent', 'detached nodes'],
+    relatedIds: [],
+    load: () => import('./createAndAppend').then((module) => module.createAndAppend),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',

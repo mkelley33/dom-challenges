@@ -1,17 +1,6 @@
 import type { ChallengeContent } from '@/types/challenge';
 
-/**
- * Reads an element the challenge markup is supposed to contain, throwing a message that names it.
- *
- * Local rather than in a `support.ts` because this category has one challenge: a helper shared
- * between two of them earns its own file, a helper used by one belongs beside its only caller --
- * the same rule `selection/shadowBoundary.ts` follows for `requireShadowRoot`.
- */
-function requireElement(doc: Document, id: string): HTMLElement {
-  const element = doc.getElementById(id);
-  if (!element) throw new Error(`#${id} is missing from the challenge markup`);
-  return element;
-}
+import { requireElement } from './support';
 
 /**
  * The template's own `DocumentFragment`, for the test that checks it survived being cloned.
