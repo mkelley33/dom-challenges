@@ -109,4 +109,14 @@ export const attributesEntries: ChallengeEntry[] = [
     relatedIds: ['attributes-class-three-ways'],
     load: () => import('./styleAttribute').then((module) => module.styleAttribute),
   },
+  {
+    id: 'attributes-enumerated-state',
+    slug: 'enumerated-state',
+    title: 'Absent is not the same as false',
+    category: 'attributes',
+    difficulty: 'advanced',
+    concepts: ['enumerated attributes', 'aria-expanded', 'toggleAttribute', 'hidden', 'boolean attributes'],
+    relatedIds: ['attributes-boolean-attributes', 'attributes-empty-or-absent'],
+    load: () => import('./enumeratedState').then((module) => module.enumeratedState),
+  },
 ];
