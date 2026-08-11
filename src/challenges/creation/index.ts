@@ -176,6 +176,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./tableContext').then((module) => module.tableContext),
   },
   {
+    id: 'creation-svg-namespace',
+    slug: 'svg-namespace',
+    title: 'The circle that never appears',
+    category: 'creation',
+    difficulty: 'advanced',
+    concepts: ['createElementNS', 'namespaceURI', 'SVG', 'cloneNode', 'createElement'],
+    relatedIds: ['creation-clone-depth', 'creation-table-context'],
+    load: () => import('./svgNamespace').then((module) => module.svgNamespace),
+  },
+  {
     id: 'creation-remove-while-iterating',
     slug: 'remove-while-iterating',
     title: 'The rows a live collection lets you skip',
