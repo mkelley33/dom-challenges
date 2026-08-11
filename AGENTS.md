@@ -128,6 +128,14 @@ way round first in six of `creation`'s eleven challenges. The same applies to te
 (`#text "Before "` describes both sides equally) and to `doc.getElementById('list')` against a
 captured element, which reads `null` when something removed the container.
 
+**The rule only covers failures that _detach_ the held node, and that gap is not theoretical — it is
+how `insert-at-index` shipped with the rule in force.** A solution that inserts in the wrong
+_position_ leaves every node attached, so the legible form has nothing to report and the comparison
+prints `Expected <li> to be <li>` anyway. When the failure being caught is positional, assert the
+position as a **value** before asserting identity — `expect(stepTexts(list)).toEqual([…])`, or
+`expect([...list.children].indexOf(rinse)).toBe(2)` — or give the markup ids so `describeElement` can
+tell the nodes apart at all. Identity then catches only what it alone can see.
+
 Not a matcher bug to fix in passing — `expect.test.ts` pins those messages deliberately.
 
 ### `<script>` inside a challenge's `html`
