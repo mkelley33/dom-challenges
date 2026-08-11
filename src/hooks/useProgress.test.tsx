@@ -9,6 +9,7 @@ import type { ProgressRecord } from '@/types/progress';
 
 import {
   emptyProgress,
+  findChallengeProgress,
   isUnrecorded,
   PROGRESS_QUERY_KEY,
   useChallengeProgress,
@@ -27,6 +28,32 @@ const solved: ProgressRecord = {
   lastCode: null,
   updatedAt: '2026-08-09T10:00:00.000Z',
 };
+
+/** A row for some other challenge, distinguishable from `solved` by every field a caller reads. */
+function otherRecord(challengeId: string): ProgressRecord {
+  return {
+    id: `row-${challengeId}`,
+    challengeId,
+    status: 'attempted',
+    attempts: 4,
+    solvedAt: null,
+    revealedAt: '2026-08-08T09:00:00.000Z',
+    lastCode: '// someone else',
+    updatedAt: '2026-08-08T09:00:00.000Z',
+  };
+}
+
+/**
+ * A learner three challenges in, opening a fourth. The wanted row is neither first nor last, and
+ * every other row differs from it in `status`, `attempts`, `solvedAt` and `revealedAt` -- so a
+ * lookup that returns a position rather than a match is wrong in a way an assertion can see.
+ */
+const manyRecords: ProgressRecord[] = [
+  otherRecord('selection-closest-row'),
+  otherRecord('selection-query-all'),
+  solved,
+  otherRecord('selection-tree-walker'),
+];
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -81,6 +108,26 @@ describe('useProgressQuery', () => {
   });
 });
 
+describe('findChallengeProgress', () => {
+  // The lookup both writers depend on: `useChallengeRun`'s whole-record write is built from what it
+  // returns, and `solutionAccess` gates the solutions panel on it. Returning a neighbour's row
+  // unlocks solutions the learner never earned and sends the next PATCH at the wrong challenge.
+  it('returns the row matching the challenge, not whichever row happens to be first', () => {
+    expect(findChallengeProgress(manyRecords, 'selection-query-basics')).toEqual(solved);
+  });
+
+  it('synthesises a placeholder when none of several rows is this challenge', () => {
+    const found = findChallengeProgress(manyRecords, 'selection-sibling-traversal');
+
+    expect(found.challengeId).toBe('selection-sibling-traversal');
+    expect(isUnrecorded(found)).toBe(true);
+  });
+
+  it('synthesises a placeholder when the records have not arrived', () => {
+    expect(isUnrecorded(findChallengeProgress(undefined, 'selection-query-basics'))).toBe(true);
+  });
+});
+
 describe('useChallengeProgress', () => {
   it('synthesises an unattempted record when none exists', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 })));
@@ -95,10 +142,10 @@ describe('useChallengeProgress', () => {
     expect(result.current.revealedAt).toBeNull();
   });
 
-  it('returns the stored record when one exists', async () => {
+  it('returns the stored record when one exists, picked out of a list of several', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify([solved]), { status: 200 })),
+      vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(manyRecords), { status: 200 })),
     );
     const { result } = renderHook(() => useChallengeProgress('selection-query-basics'), { wrapper });
     await waitFor(() => {
