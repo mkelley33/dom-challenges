@@ -99,4 +99,14 @@ export const attributesEntries: ChallengeEntry[] = [
     relatedIds: ['attributes-empty-or-absent', 'attributes-class-three-ways'],
     load: () => import('./reflectedProperties').then((module) => module.reflectedProperties),
   },
+  {
+    id: 'attributes-style-attribute',
+    slug: 'style-attribute',
+    title: 'What writing the style attribute throws away',
+    category: 'attributes',
+    difficulty: 'advanced',
+    concepts: ['style attribute', 'CSSStyleDeclaration', 'setProperty', 'custom properties', 'removeProperty'],
+    relatedIds: ['attributes-class-three-ways'],
+    load: () => import('./styleAttribute').then((module) => module.styleAttribute),
+  },
 ];
