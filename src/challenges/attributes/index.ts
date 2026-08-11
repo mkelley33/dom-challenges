@@ -60,6 +60,16 @@ export const attributesEntries: ChallengeEntry[] = [
     load: () => import('./booleanAttributes').then((module) => module.booleanAttributes),
   },
   {
+    id: 'attributes-class-three-ways',
+    slug: 'class-three-ways',
+    title: 'One class attribute, three ways in',
+    category: 'attributes',
+    difficulty: 'intermediate',
+    concepts: ['classList', 'className', 'DOMTokenList', 'toggle force', 'reflection'],
+    relatedIds: ['attributes-boolean-attributes', 'selection-attribute-selectors'],
+    load: () => import('./classThreeWays').then((module) => module.classThreeWays),
+  },
+  {
     id: 'attributes-dirty-value',
     slug: 'dirty-value',
     title: 'The value on screen and the value in the markup',
