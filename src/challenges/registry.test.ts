@@ -118,3 +118,38 @@ describe('the real registry', () => {
     expect(challengesInCategory('selection').length).toBeGreaterThan(1);
   });
 });
+
+/**
+ * The number of challenges the *eagerly imported* registry is allowed to carry.
+ *
+ * Pinned at what the branch shipped. `Dashboard` imports the whole registry, so every challenge
+ * module -- prompt, `html`, `starterCode`, every solution's prose, and the test functions -- lands
+ * in the landing page's static closure at a measured 6,756 B each (AGENTS.md §10).
+ */
+const EAGER_REGISTRY_LIMIT = 13;
+
+describe('eager registry scale', () => {
+  it('has not outgrown the count the eager registry was measured at', () => {
+    // `scripts/routeBudget.ts` guards the same problem from the other end, and is the better
+    // instrument for measuring it -- but a byte budget can be satisfied by deleting weight that
+    // has nothing to do with challenges. The unused `ui/` components and CSS tokens already on
+    // the Phase 2 list would free more than a challenge's worth of headroom on `/` without anyone
+    // touching the registry, which would silently disarm it. This assertion cannot be paid off
+    // that way: it counts the thing the rule is actually about.
+    //
+    // `tests` is read as the witness that these are whole challenge modules rather than an index
+    // of `{id, slug, title, category, difficulty}`. When the refactor lands, `allChallenges` stops
+    // carrying it, this line stops compiling, and whoever did the work is sent here -- which is
+    // when this whole block should be deleted rather than renumbered.
+    const eagerlyLoaded = allChallenges.filter((challenge) => challenge.tests.length > 0);
+
+    // Pinned first: `filter` over an empty registry is an empty array, and every bound below would
+    // hold vacuously for a registry that loaded nothing at all.
+    expect(eagerlyLoaded.length).toBeGreaterThan(0);
+    expect(eagerlyLoaded).toHaveLength(allChallenges.length);
+    expect(
+      eagerlyLoaded.length,
+      'Another challenge is another ~6.8 kB on the first paint of a page that shows only counts and titles. Do the eager-registry refactor -- a generated index module plus a per-challenge dynamic import -- and delete this test. Raising this number instead is the decision AGENTS.md §10 says to stop making.',
+    ).toBeLessThanOrEqual(EAGER_REGISTRY_LIMIT);
+  });
+});
