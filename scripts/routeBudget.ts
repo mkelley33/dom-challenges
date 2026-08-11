@@ -18,15 +18,24 @@
  * helper is generated from -- resolved per route rather than summed whole, which is the mistake
  * that made those earlier claims wrong.
  */
-import { readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
+const DIST_DIR = join(ROOT_DIR, 'dist');
 const MANIFEST_PATH = join(DIST_DIR, '.vite', 'manifest.json');
+const CHALLENGES_DIR = join(ROOT_DIR, 'src', 'challenges');
 
 /** The manifest key of the HTML entry, whose closure every route pays for. */
 const HTML_ENTRY_KEY = 'index.html';
+
+/**
+ * The two files in a category directory that are not a challenge: the registration index, which is
+ * eager by design, and the shared test helpers, which ride along inside the challenge chunks that
+ * use them. Everything else in there is content and must reach the browser only on demand.
+ */
+const NON_CHALLENGE_MODULES = new Set(['index.ts', 'support.ts']);
 
 interface RouteBudget {
   route: string;
@@ -38,21 +47,20 @@ interface RouteBudget {
 /**
  * Measured figures plus roughly 2.5%.
  *
- * `/`'s headroom is 12,053 B, which at the measured 6,756 B per challenge (AGENTS.md §10) is a
- * little under two — so this trips on the *second* challenge authored, not the first.
+ * A challenge now costs `/` its index entry and nothing else: 5,385 B for the 13 that exist, or
+ * about 414 B each, measured by emptying `selectionEntries` and rebuilding (AGENTS.md §10). So the
+ * headroom here is around twenty challenges of ordinary growth -- and a single challenge module
+ * that stopped being lazy would cost between 2,424 B and 9,356 B, which is why a jump of kilobytes
+ * on `/` means something went eager rather than that the library grew.
  *
- * That is the backstop, not the guard. This check measures bytes, and bytes are a proxy: the rule
- * is "do not author a second category while the registry is statically imported", and 12 kB freed
- * anywhere at all buys another challenge without anyone going near the registry. The unused `ui/`
- * components and CSS tokens on the Phase 2 list would each do it, as a side effect of cleanup that
- * has nothing to do with challenges. The ungameable half is the pinned count in
- * `src/challenges/registry.test.ts`, which counts challenges rather than bytes and trips on the
- * first one. Keep both; they fail for different reasons and say different things.
+ * The structural half of that rule is `assertChallengesAreLazy` below, which does not depend on the
+ * numbers here at all: it fails when a challenge module stops being a chunk of its own, whatever
+ * the byte total says.
  */
 const BUDGETS: RouteBudget[] = [
-  { route: '/', lazyKey: null, maxBytes: 465_000 },
-  { route: '/category/:categoryId', lazyKey: 'src/components/browse/ChallengeList.tsx', maxBytes: 635_000 },
-  { route: '/challenge/:slug', lazyKey: 'src/components/challenge/ChallengePage.tsx', maxBytes: 890_000 },
+  { route: '/', lazyKey: null, maxBytes: 380_000 },
+  { route: '/category/:categoryId', lazyKey: 'src/components/browse/ChallengeList.tsx', maxBytes: 550_000 },
+  { route: '/challenge/:slug', lazyKey: 'src/components/challenge/ChallengePage.tsx', maxBytes: 805_000 },
 ];
 
 interface ManifestChunk {
@@ -130,9 +138,59 @@ function format(bytes: number): string {
   return bytes.toLocaleString('en-US');
 }
 
+/** Every challenge module on disk, as the manifest key it would be emitted under. */
+function challengeModuleKeys(): string[] {
+  const keys: string[] = [];
+
+  for (const category of readdirSync(CHALLENGES_DIR, { withFileTypes: true })) {
+    if (!category.isDirectory()) continue;
+    for (const file of readdirSync(join(CHALLENGES_DIR, category.name))) {
+      if (!file.endsWith('.ts') || file.endsWith('.test.ts') || NON_CHALLENGE_MODULES.has(file)) continue;
+      keys.push(`src/challenges/${category.name}/${file}`);
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * Fails when a challenge's content stops being fetched on demand.
+ *
+ * The structural counterpart to the byte budgets, and the one that does not depend on a number
+ * anybody can raise. A module reached only through `import()` is emitted as a chunk of its own and
+ * appears in the manifest under its source path; a module someone statically imported is folded
+ * into whatever imported it and vanishes from the manifest entirely, leaving nothing behind but a
+ * slightly larger entry chunk. Reading the expected set from disk rather than from the manifest is
+ * what makes the disappearance visible -- and what makes this scale to a hundred challenges with
+ * nothing to re-baseline, unlike the challenge count this replaced.
+ *
+ * The second half catches the rarer shape: a chunk that is still emitted but has also been pulled
+ * into a route's static import graph, which the manifest reports as an ordinary import.
+ */
+function assertChallengesAreLazy(manifest: Map<string, ManifestChunk>, eagerScripts: Set<string>): string[] {
+  const problems: string[] = [];
+
+  for (const key of challengeModuleKeys()) {
+    const chunk = manifest.get(key);
+    if (chunk === undefined) {
+      problems.push(
+        `"${key}" is not a chunk of its own, so something statically imports it: challenge content must be reached only through the \`load\` in its category index`,
+      );
+      continue;
+    }
+    if (eagerScripts.has(chunk.file)) {
+      problems.push(`"${key}" is preloaded by a route, so its content is fetched before anyone opens that challenge`);
+    }
+  }
+
+  return problems;
+}
+
 const manifest = readManifest();
 const failures: string[] = [];
 const lines: string[] = [];
+/** Every script any route pulls in eagerly, pooled so the lazy check can be made once. */
+const eagerScripts = new Set<string>();
 let stylesheetBytes = 0;
 
 for (const { route, lazyKey, maxBytes } of BUDGETS) {
@@ -147,6 +205,7 @@ for (const { route, lazyKey, maxBytes } of BUDGETS) {
   const roots = lazyKey === null ? [HTML_ENTRY_KEY] : [HTML_ENTRY_KEY, lazyKey].filter((key) => manifest.has(key));
   const closure = eagerClosure(manifest, roots);
   const bytes = totalBytes(closure.scripts);
+  for (const script of closure.scripts) eagerScripts.add(script);
   stylesheetBytes = Math.max(stylesheetBytes, totalBytes(closure.stylesheets));
 
   const share = Math.round((bytes / maxBytes) * 100);
@@ -165,23 +224,25 @@ process.stdout.write(`${lines.join('\n')}\n\n`);
 // per-route number that would count it three times.
 process.stdout.write(`  one shared stylesheet: ${format(stylesheetBytes)} B\n\n`);
 
+failures.push(...assertChallengesAreLazy(manifest, eagerScripts));
+
 // Named inline rather than left to the reader. Someone who has just authored a challenge reads
-// "/ is 1,234 B over its 465,000 B budget" and the most available fix is a bigger number -- which
-// the following line forbids without saying why. Naming the eager registry is what makes refusing
-// the obvious fix reasonable rather than merely prohibited.
+// "/ is 1,234 B over its 380,000 B budget" and the most available fix is a bigger number -- which
+// the following line forbids without saying why. Naming what actually moves the number is what
+// makes refusing the obvious fix reasonable rather than merely prohibited.
 const OVER_BUDGET_GUIDANCE = [
-  'On `/` the usual cause is the eager registry: `Dashboard` imports every challenge module, so each',
-  'challenge authored puts another ~6.8 kB on the first paint of a page that shows only counts and',
-  'titles. The fix is the one AGENTS.md §10 describes -- a generated index module plus a per-challenge',
-  'dynamic import -- not a bigger number here. `src/challenges/registry.test.ts` pins the same rule by',
-  'count, and it trips a challenge earlier than this does.',
+  'A challenge costs `/` about 414 B -- its index entry, and nothing else -- so twenty of them move',
+  'this number by less than one percent. A jump of kilobytes is a challenge module that stopped being',
+  'lazy, or an import that dragged something from the challenge route into the entry; either way the',
+  'answer is to find it, not to raise the number. AGENTS.md §10 describes the shape the registry is',
+  'meant to have.',
   '',
   'For anything else, measure before changing a number: AGENTS.md §7 has the method, and this check is',
   'what it says to use.',
 ].join('\n');
 
 if (failures.length > 0) {
-  process.stdout.write(`Over budget:\n${failures.map((failure) => `  - ${failure}`).join('\n')}\n\n`);
+  process.stdout.write(`Failed:\n${failures.map((failure) => `  - ${failure}`).join('\n')}\n\n`);
   process.stdout.write(`${OVER_BUDGET_GUIDANCE}\n\n`);
   process.exit(1);
 }
