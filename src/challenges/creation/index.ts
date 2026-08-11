@@ -83,6 +83,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./adjacentPositions').then((module) => module.adjacentPositions),
   },
   {
+    id: 'creation-inner-html-cost',
+    slug: 'inner-html-cost',
+    title: 'What innerHTML += throws away',
+    category: 'creation',
+    difficulty: 'advanced',
+    concepts: ['innerHTML', 'insertAdjacentHTML', 'event listeners', 'reparsing', 'XSS'],
+    relatedIds: ['creation-adjacent-positions', 'creation-create-and-append'],
+    load: () => import('./innerHtmlCost').then((module) => module.innerHtmlCost),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
