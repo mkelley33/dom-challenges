@@ -46,6 +46,59 @@ describe('createTick', () => {
     expect(order).toEqual(['raf']);
   });
 
+  it('waits for a slow first frame instead of timing out into the fallback', async () => {
+    // A freshly created `srcdoc` iframe -- which is what `reset()` hands every single test -- does
+    // not deliver its first frame in one 60Hz interval. Measured through the production host under
+    // the real evaluate workload: p50 21.7ms, p90 24.9ms over 200 warm runs, with a sporadic tail
+    // reaching 94.1ms. So a 50ms fallback sat *inside* the tail it was written to clear -- the timer
+    // won and `tick()` returned with no frame having run, at 3 of 60 runs here and 6 of 40 for the
+    // reviewer who found it, in both cases the same runs in which the batcher had not fired.
+    //
+    // 80ms here is above the old constant and far below the new one, so this test fails against the
+    // single-hop race and passes against a `tick()` that waits for a frame it has seen serviced.
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback: FrameRequestCallback): number => window.setTimeout(() => callback(0), 80);
+
+    try {
+      const ran: string[] = [];
+      // Registered before `tick()`, exactly as a learner's own frame callback is: it must have run
+      // by the time `tick()` resolves, or the assertion that follows a `tick()` reads a DOM the
+      // learner's code has not touched yet.
+      window.requestAnimationFrame(() => ran.push('frame'));
+      await createTick(window)();
+
+      expect(ran).toEqual(['frame']);
+    } finally {
+      window.requestAnimationFrame = original;
+    }
+  });
+
+  it('re-arms the escape timer once a frame proves the document is rendering', async () => {
+    // 150ms a frame, against a 250ms escape. One frame fits inside the budget and two do not, so
+    // this passes only if reaching the first hop *restarts* the timer rather than letting the
+    // budget already spent proving the document renders be charged against the second hop too.
+    //
+    // The observable is a learner-shaped frame chain: a `requestAnimationFrame` that schedules
+    // another one, which is what any re-arming scheduler does. Without the re-arm the timer wins at
+    // 250ms and `tick()` resolves having seen only the first.
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback: FrameRequestCallback): number =>
+      window.setTimeout(() => callback(0), 150);
+
+    try {
+      const ran: string[] = [];
+      window.requestAnimationFrame(() => {
+        ran.push('first');
+        window.requestAnimationFrame(() => ran.push('second'));
+      });
+      await createTick(window)();
+
+      expect(ran).toEqual(['first', 'second']);
+    } finally {
+      window.requestAnimationFrame = original;
+    }
+  });
+
   it('falls back to a timer when the document never services animation frames', async () => {
     // Animation-frame callbacks run only for documents the browser is rendering. A hidden tab
     // stops servicing them until it is shown again; an iframe inside a `display: none` container
