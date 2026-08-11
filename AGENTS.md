@@ -454,6 +454,18 @@ is the entire guarantee**. Three tests discriminated only because an unrelated `
 for the buggy write to land. Always wait on a condition that strictly _implies_ the thing whose absence you are
 asserting has had its chance to happen.
 
+**"I ran the wrong answer" must mean the exact code, not one that rhymes with it.** The most expensive content defect
+so far was authored by someone who _did_ run a wrong solution and _did_ see it rejected — but ran a variant. In
+`detach-and-reattach`, rebuilding the list and returning a hand-built copy is caught; rebuilding the list and returning
+the **real detached node** passes all five tests while silently destroying every other row. The two spellings differ
+only in what they return, and that difference is the entire challenge. The rejection of one was generalised into a
+claim about the other, and the report said the technique had been tested. It had not.
+
+So: run the specific code a learner would write, one variant at a time, and record the failure message each one
+produces. Where a challenge's thesis is "operation X preserves the rest of the document", **at least one test must
+assert on the nodes the wrong answer would have replaced** — held by reference before the call. Five of the six
+challenges around it already did; the one that did not is the one that shipped a hole.
+
 **A vacuous assertion is worse than none.** `.filter(...)` over an empty array is an empty array, and a `describe.each`
 over an empty list expands to no tests at all — so "nothing failed" and "nothing ran" look identical. Pin the counts:
 `content.test.ts` asserts the registry is non-empty and that the result count equals the test count, precisely so those
