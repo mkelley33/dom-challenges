@@ -10,6 +10,7 @@ import { queryAll } from './queryAll';
 import { queryBasics } from './queryBasics';
 import { scopedQuery } from './scopedQuery';
 import { siblingTraversal } from './siblingTraversal';
+import { templateContent } from './templateContent';
 import { treeWalker } from './treeWalker';
 
 export const selectionChallenges: Challenge[] = [
@@ -24,4 +25,5 @@ export const selectionChallenges: Challenge[] = [
   siblingTraversal,
   containsAndPosition,
   treeWalker,
+  templateContent,
 ];
