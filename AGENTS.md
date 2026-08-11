@@ -477,8 +477,15 @@ claim about the other, and the report said the technique had been tested. It had
 
 So: run the specific code a learner would write, one variant at a time, and record the failure message each one
 produces. Where a challenge's thesis is "operation X preserves the rest of the document", **at least one test must
-assert on the nodes the wrong answer would have replaced** — held by reference before the call. Five of the six
-challenges around it already did; the one that did not is the one that shipped a hole.
+assert on the nodes the wrong answer would have replaced** — held by reference before the call.
+
+**And the count in the paragraph above was itself wrong, in the same way.** It originally read "five of the six
+challenges around it already did; the one that did not is the one that shipped a hole" — a generalisation from one
+sweep, written by the same hand, inside the rule against generalising from one run. A reviewer then ran the variants
+against the whole category and found **three** challenges with the hole, not one: `detach-and-reattach`,
+`move-not-copy` (surviving rows asserted by `id`) and `table-context` (the header asserted with `toEqual`, which never
+discriminates nodes — see below). Two of the three were written _after_ the rule was, by an author who had just
+written it. Reading a rule is not the same as having applied it; the check is the run, every time.
 
 **A vacuous assertion is worse than none.** `.filter(...)` over an empty array is an empty array, and a `describe.each`
 over an empty list expands to no tests at all — so "nothing failed" and "nothing ran" look identical. Pin the counts:
