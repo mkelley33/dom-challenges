@@ -242,6 +242,12 @@ describe('ClearButton', () => {
       expect(clearButton()).toHaveFocus();
     });
     expect(clearButton()).toHaveAttribute('aria-disabled', 'true');
+    // And it *looks* unavailable, which the ARIA attribute alone does not deliver: keeping the
+    // button focusable means Base UI omits the native `disabled` attribute, and `buttonVariants`
+    // dims and un-hovers through `disabled:` variants that compile to `&:disabled`. Without the
+    // `aria-disabled:` pair a learner who just confirmed a destructive action watches the dialog
+    // close and is left with a button that still looks live and does nothing.
+    expect(clearButton()).toHaveClass('aria-disabled:opacity-50', 'aria-disabled:pointer-events-none');
 
     // Focusable, but genuinely inert: a second confirm would delete a row the first one is already
     // deleting, and the second DELETE 404s and rolls the cache back over the first.

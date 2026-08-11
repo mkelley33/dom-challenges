@@ -98,12 +98,14 @@ export function ClearButton({ challengeId, onCleared }: ClearButtonProps) {
     <>
       {/* Two decisions about the in-flight state.
           The label stays "Clear solution" rather than swapping to "Clearing…": a control whose
-          accessible name changes under a screen reader mid-action is disorienting, and the disabled
-          state says the same thing without moving the name.
+          accessible name changes under a screen reader mid-action is disorienting, and the button
+          says it is unavailable through its state instead -- announced as `aria-disabled` and, from
+          `buttonVariants`, dimmed and un-hovered by the matching `aria-disabled:` utilities.
           `focusableWhenDisabled` because the dialog restores focus to this button as it closes, and
-          on a cold deep-link the read behind the clear is still a whole request long. A plainly
-          disabled button cannot take that focus, so it would drop to <body>. Base UI still blocks
-          activation -- inert, but findable. */}
+          the clear behind it is two requests long on a cold deep-link. A plainly disabled button
+          cannot take that focus, so it would drop to <body>. Base UI still blocks activation --
+          inert, but findable. It also omits the native `disabled` attribute, which is why the look
+          cannot come from the `disabled:` variants. */}
       <Button variant="destructive" size="sm" onClick={handleOpen} disabled={isClearing} focusableWhenDisabled>
         Clear solution
       </Button>
