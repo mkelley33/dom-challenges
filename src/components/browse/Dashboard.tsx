@@ -17,21 +17,31 @@ export function Dashboard() {
     <div className="p-8">
       <h1 className="text-xl font-semibold">Your progress</h1>
 
-      <Progress value={summary.solved} max={summary.total} className="mt-6 max-w-md">
-        {/* Both halves of the bar's accessible identity: `ProgressLabel` becomes its
-            `aria-labelledby`, and value/max become `aria-valuenow`/`aria-valuemax`. A bar with a
-            percentage and no name announces a number nobody can attribute to anything. */}
-        <ProgressLabel>Overall progress</ProgressLabel>
-        <ProgressValue />
-      </Progress>
+      {/* Guarded the same way the tiers and the category cards are: a bar over nothing is a
+          measurement of nothing, and "0 of 0 solved" reads as a broken counter. Unreachable while
+          the registry has challenges in it -- which is the point of guarding it rather than
+          leaving the one renderer on this page that would produce a degenerate bar. */}
+      {summary.total === 0 ? (
+        <p className="mt-6 text-sm text-muted">No challenges yet</p>
+      ) : (
+        <>
+          <Progress value={summary.solved} max={summary.total} className="mt-6 max-w-md">
+            {/* Both halves of the bar's accessible identity: `ProgressLabel` becomes its
+                `aria-labelledby`, and value/max become `aria-valuenow`/`aria-valuemax`. A bar with
+                a percentage and no name announces a number nobody can attribute to anything. */}
+            <ProgressLabel>Overall progress</ProgressLabel>
+            <ProgressValue />
+          </Progress>
 
-      <p className="mt-2 text-sm text-muted">
-        {summary.solved} of {summary.total} solved
-      </p>
-      {summary.revealed > 0 && (
-        <p className="mt-1 text-sm text-muted">
-          {summary.revealed} {summary.revealed === 1 ? 'solution' : 'solutions'} revealed
-        </p>
+          <p className="mt-2 text-sm text-muted">
+            {summary.solved} of {summary.total} solved
+          </p>
+          {summary.revealed > 0 && (
+            <p className="mt-1 text-sm text-muted">
+              {summary.revealed} {summary.revealed === 1 ? 'solution' : 'solutions'} revealed
+            </p>
+          )}
+        </>
       )}
 
       {/* Ordered by `DIFFICULTIES`, which is ordered by `DIFFICULTY_LABELS`' own declaration --
@@ -51,8 +61,12 @@ export function Dashboard() {
                 {bucket.total === 0 ? (
                   <>
                     <span className="text-sm">{label}</span>
-                    {/* No bar for an empty tier: `max={0}` makes Base UI call it complete, so an
-                        untouched tier would announce as finished the moment it appeared. */}
+                    {/* No bar for an empty tier. `max={0}` gives `aria-valuemax="0"` and an
+                        `aria-valuetext` Base UI clamps from the resulting NaN to "0%", over an
+                        indicator rendered 0% wide -- a control that announces a measurement of
+                        nothing. (It also computes `status: 'complete'`, but that surfaces only as
+                        `data-complete`, which nothing here styles or reads.) "0 of 0 solved" reads
+                        as a broken counter, the same reason the category cards below say this. */}
                     <p className="text-sm text-muted">No challenges yet</p>
                   </>
                 ) : (
