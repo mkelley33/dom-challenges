@@ -47,15 +47,17 @@ interface RouteBudget {
 /**
  * Measured figures plus roughly 2.5%.
  *
- * A challenge now costs `/` its index entry and nothing else: 5,385 B for the 13 that exist, or
- * about 414 B each, measured by emptying `selectionEntries` and rebuilding (AGENTS.md §10). So the
- * headroom here is around twenty challenges of ordinary growth -- and a single challenge module
- * that stopped being lazy would cost between 2,424 B and 9,356 B, which is why a jump of kilobytes
- * on `/` means something went eager rather than that the library grew.
+ * `/`'s headroom is 9,500 B. A challenge costs it 414 B -- its index entry, and nothing else,
+ * measured by emptying `selectionEntries` and rebuilding (AGENTS.md §10) -- so this number has to
+ * be re-baselined about every twenty-two challenges, and that is ordinary growth rather than a
+ * regression. Twenty challenges is 8,280 B, which is 2.2% of the budget and 87% of the headroom:
+ * do not read a jump of kilobytes here as proof that something went eager.
  *
- * The structural half of that rule is `assertChallengesAreLazy` below, which does not depend on the
- * numbers here at all: it fails when a challenge module stops being a chunk of its own, whatever
- * the byte total says.
+ * **This check cannot see a challenge going lazy-to-eager at all**, and the numbers say so rather
+ * than the reasoning. Statically importing the cheapest module, `queryBasics`, puts `/` at
+ * 372,678 B; the most expensive, `treeWalker`, puts it at 379,724 B of 380,000 -- 100% of budget,
+ * and still passing. Both measured. `assertChallengesAreLazy` below is what catches that, and it
+ * does not depend on these numbers at all.
  */
 const BUDGETS: RouteBudget[] = [
   { route: '/', lazyKey: null, maxBytes: 380_000 },
@@ -157,12 +159,19 @@ function challengeModuleKeys(): string[] {
  * Fails when a challenge's content stops being fetched on demand.
  *
  * The structural counterpart to the byte budgets, and the one that does not depend on a number
- * anybody can raise. A module reached only through `import()` is emitted as a chunk of its own and
- * appears in the manifest under its source path; a module someone statically imported is folded
- * into whatever imported it and vanishes from the manifest entirely, leaving nothing behind but a
- * slightly larger entry chunk. Reading the expected set from disk rather than from the manifest is
- * what makes the disappearance visible -- and what makes this scale to a hundred challenges with
- * nothing to re-baseline, unlike the challenge count this replaced.
+ * anybody can raise -- which matters, because the budgets cannot see this at all: the most
+ * expensive challenge module going eager lands at 100% of `/`'s budget and passes.
+ *
+ * A module reached only through `import()` is emitted as a chunk of its own and appears in the
+ * manifest under its source path; a module someone statically imported is folded into whatever
+ * imported it and vanishes from the manifest entirely, leaving nothing behind but a slightly larger
+ * entry chunk. Reading the expected set from disk rather than from the manifest is what makes the
+ * disappearance visible -- and what makes this scale to a hundred challenges with nothing to
+ * re-baseline, unlike the challenge count this replaced.
+ *
+ * A file in a category directory that no index registers fails the same way, since it is absent
+ * from the manifest for its own reason. That is deliberate: it is the only thing keeping "every
+ * challenge on disk" equal to "every challenge in the index".
  *
  * The second half catches the rarer shape: a chunk that is still emitted but has also been pulled
  * into a route's static import graph, which the manifest reports as an ordinary import.
@@ -173,8 +182,10 @@ function assertChallengesAreLazy(manifest: Map<string, ManifestChunk>, eagerScri
   for (const key of challengeModuleKeys()) {
     const chunk = manifest.get(key);
     if (chunk === undefined) {
+      // Two causes, and the message names both because the fixes are opposites. A module folded
+      // into a static importer and a module nothing imports at all are the same absence here.
       problems.push(
-        `"${key}" is not a chunk of its own, so something statically imports it: challenge content must be reached only through the \`load\` in its category index`,
+        `"${key}" has no chunk of its own. Either something statically imports it -- challenge content must be reached only through the \`load\` in its category index -- or no index registers it, in which case add the entry or delete the file`,
       );
       continue;
     }
@@ -231,11 +242,16 @@ failures.push(...assertChallengesAreLazy(manifest, eagerScripts));
 // the following line forbids without saying why. Naming what actually moves the number is what
 // makes refusing the obvious fix reasonable rather than merely prohibited.
 const OVER_BUDGET_GUIDANCE = [
-  'A challenge costs `/` about 414 B -- its index entry, and nothing else -- so twenty of them move',
-  'this number by less than one percent. A jump of kilobytes is a challenge module that stopped being',
-  'lazy, or an import that dragged something from the challenge route into the entry; either way the',
-  'answer is to find it, not to raise the number. AGENTS.md §10 describes the shape the registry is',
-  'meant to have.',
+  "A challenge costs `/` about 414 B -- its index entry, and nothing else -- so `/`'s 9,500 B of",
+  'headroom is roughly twenty-two of them, and re-baselining after that much authoring is the honest',
+  'answer rather than a defeat. What is not honest is re-baselining without knowing which of the two',
+  'happened, because the other cause is an import that dragged weight from a lazy route into the',
+  'entry, and that arrives in one step rather than over twenty commits.',
+  '',
+  'Do not read this number as the laziness check. A single challenge module that stopped being lazy',
+  'costs between 2,178 B and 9,224 B and fits inside the headroom either way -- measured, with the',
+  'most expensive one landing at 379,724 B of 380,000. `assertChallengesAreLazy` is what sees that,',
+  'and AGENTS.md §10 describes the shape it is holding.',
   '',
   'For anything else, measure before changing a number: AGENTS.md §7 has the method, and this check is',
   'what it says to use.',

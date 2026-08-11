@@ -386,14 +386,18 @@ JavaScript on `/` rather than ~1.05 MB.
 
 **Two checks hold this, and they fail for different reasons.** `pnpm build` runs both:
 
-- `scripts/routeBudget.ts` budgets each route's eager bytes. At 414 B per challenge the headroom is about twenty
-  challenges of ordinary growth, so a jump of kilobytes means something went eager — not that the library grew.
+- `scripts/routeBudget.ts` budgets each route's eager bytes. `/`'s headroom is 9,500 B, or about twenty-two challenges
+  at 414 B each, so this number legitimately needs re-baselining as the library grows: twenty challenges is 8,280 B,
+  2.2% of the budget and 87% of the headroom. **Do not read it as the laziness check** — it cannot see a challenge
+  going eager at all. Measured: statically importing the cheapest module (`queryBasics`) puts `/` at 372,678 B, and the
+  most expensive (`treeWalker`) at 379,724 B of 380,000 — 100% of budget, still passing. What this budget does catch is
+  the step change: a dependency dragged out of a lazy route into the entry.
 - `assertChallengesAreLazy` in the same script reads every challenge module off disk and requires each to be its own
   chunk in the build manifest. A module reached only through `import()` is emitted as a chunk under its own source
   path; one that someone statically imported is folded into its importer and disappears from the manifest entirely.
-  **This is the ungameable half.** Verified by mutation: replacing one `load` with a static import and
-  `Promise.resolve` moved `/` by 2,178 B — comfortably inside the budget's headroom, invisible to it, and caught by
-  this check naming the file.
+  **This is the ungameable half**, and per the figures above it is the only half that can see this regression. Verified
+  by mutation against both ends of the size range; each time it failed naming the file. A challenge file that no index
+  registers fails it too, which is what keeps "every challenge on disk" equal to "every challenge in the index".
 
 `src/challenges/loader.test.ts` covers the same rule from the source side: it asserts an index entry's keys
 **exhaustively**, so a `{...challenge, load}` spread fails rather than passing every "it has a title" assertion. Both
