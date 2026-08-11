@@ -57,6 +57,30 @@ const CHALLENGE_INDEX_ENTRY_BYTES = 414;
 const HOME_SLACK_BYTES = 9_500;
 
 /**
+ * `/category/:categoryId`'s ceiling: committed, not derived.
+ *
+ * Measured at 536,655 B with the 13 challenges here and 531,094 B with the category emptied, so it
+ * pays 5,561/13 = **427.8 B** per challenge -- the same index entry `/` pays, since its closure
+ * contains the entry chunk too, plus re-chunking. 13,345 B of headroom, which at its own
+ * coefficient is **31 challenges**, not the 32 that `/`'s 414 B would suggest.
+ *
+ * Not derived, because that needs a floor and a coefficient someone has reproduced, and 427.8 is
+ * not the clean 414 -- the excess is re-chunking, not a mechanism, and a fuse should not be built
+ * on a coefficient nobody can explain. Pinned by `budgets.test.ts` in the meantime, so moving this
+ * number means editing a test that records a measurement rather than editing one digit here.
+ */
+const CATEGORY_ROUTE_MAX_BYTES = 550_000;
+
+/**
+ * `/challenge/:slug`'s ceiling: committed, not derived, for the same reasons.
+ *
+ * Measured at 784,772 B with 13 challenges and 779,076 B with the category emptied: 5,696/13 =
+ * **438.2 B** per challenge, and 20,228 B of headroom, which is **46 challenges** at that
+ * coefficient rather than the 48 that `/`'s would give.
+ */
+const CHALLENGE_ROUTE_MAX_BYTES = 805_000;
+
+/**
  * Every challenge module on disk, as the manifest key it would be emitted under.
  *
  * Both checks in `routeBudget.ts` read the set from here, so they cannot come to disagree about
@@ -110,12 +134,12 @@ export function challengeModuleKeys(rootDir: string = ROOT_DIR): string[] {
  * the derivation hand an eager module any room: a challenge raises the ceiling by 414 B and the
  * entry by 414 B, so going eager still has to fit inside the fixed slack.
  *
- * `/category/:categoryId` and `/challenge/:slug` stay literals. Their closures contain the entry
- * chunk too, so they pay the same per-challenge cost -- measured on this branch at 536,655 B and
- * 784,786 B, which is 13,345 B and 20,214 B of headroom, or roughly 32 and 48 challenges. They will
- * need this same treatment, and it is left undone deliberately: their floors were measured once,
- * here, and a coefficient no reviewer has reproduced is the same unchecked number this change
- * exists to remove. Measure them properly, then derive them.
+ * `/category/:categoryId` and `/challenge/:slug` stay literals, and their constants above carry
+ * their own measurements: 31 and 46 challenges of headroom, computed at each route's own
+ * coefficient rather than `/`'s 414 B, because a number whose whole job is to be an early warning
+ * takes the conservative one. They will need this same treatment before the first full category is
+ * authored, not after one of them goes red. Until then they are pinned by value, which is the
+ * friction `/` gets from being derived: neither can be re-baselined without editing a test.
  */
 export function routeBudgets(rootDir: string = ROOT_DIR): RouteBudget[] {
   const challengeCount = challengeModuleKeys(rootDir).length;
@@ -126,7 +150,15 @@ export function routeBudgets(rootDir: string = ROOT_DIR): RouteBudget[] {
       lazyKey: null,
       maxBytes: HOME_FLOOR_BYTES + CHALLENGE_INDEX_ENTRY_BYTES * challengeCount + HOME_SLACK_BYTES,
     },
-    { route: '/category/:categoryId', lazyKey: 'src/components/browse/ChallengeList.tsx', maxBytes: 550_000 },
-    { route: '/challenge/:slug', lazyKey: 'src/components/challenge/ChallengePage.tsx', maxBytes: 805_000 },
+    {
+      route: '/category/:categoryId',
+      lazyKey: 'src/components/browse/ChallengeList.tsx',
+      maxBytes: CATEGORY_ROUTE_MAX_BYTES,
+    },
+    {
+      route: '/challenge/:slug',
+      lazyKey: 'src/components/challenge/ChallengePage.tsx',
+      maxBytes: CHALLENGE_ROUTE_MAX_BYTES,
+    },
   ];
 }

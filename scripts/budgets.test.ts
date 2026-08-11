@@ -84,17 +84,27 @@ describe('routeBudgets', () => {
     expect(split).toBe(together);
   });
 
-  it('leaves the two split routes on committed literals', () => {
+  it('holds the two split routes at their measured literals, whatever the challenge count', () => {
     const few = repoWithChallenges({ selection: challengeFiles(1) });
     const many = repoWithChallenges({ selection: challengeFiles(40) });
 
-    // Deliberate, and not an oversight: their closures contain the entry chunk too, so they do pay
-    // the same 414 B per challenge -- but the floors that would make a derivation honest have not
-    // been measured with a reviewer reproducing them, and a coefficient nobody reproduced is the
-    // same unchecked number this change exists to remove. Their headroom is recorded in
-    // `routeBudget.ts` in challenges rather than bytes, so the next person can see it coming.
-    expect(budgetFor('/category/:categoryId', many)).toBe(budgetFor('/category/:categoryId', few));
-    expect(budgetFor('/challenge/:slug', many)).toBe(budgetFor('/challenge/:slug', few));
+    // Two things at once, and both are load-bearing.
+    //
+    // That these do not move with the challenge count is the deliberate asymmetry with `/`: their
+    // closures contain the entry chunk, so they really do pay per challenge, but at 427.8 B and
+    // 438.2 B rather than `/`'s clean 414 B. The excess is re-chunking rather than a mechanism, and
+    // deriving a ceiling from a coefficient nobody can explain would be the unchecked number this
+    // file exists to remove, wearing a formula.
+    //
+    // That they are *these* numbers is the friction `/` gets from being derived, extended to the
+    // routes that could not have it. Until this line existed, a silent 550,000 -> 600,000 passed
+    // every gate in the repository -- which is the whole defect, still open on two routes of three.
+    // The values are written out here rather than imported, or the assertion would be the constant
+    // compared with itself.
+    expect(budgetFor('/category/:categoryId', few)).toBe(550_000);
+    expect(budgetFor('/category/:categoryId', many)).toBe(550_000);
+    expect(budgetFor('/challenge/:slug', few)).toBe(805_000);
+    expect(budgetFor('/challenge/:slug', many)).toBe(805_000);
   });
 });
 

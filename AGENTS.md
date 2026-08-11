@@ -267,9 +267,14 @@ entry and now buys back 414 B of ceiling, so ordinary authoring never needs a re
 routine re-baseline is indistinguishable from someone raising a number to bury a regression. The floor (365,115 B, `/`
 with the one populated category emptied) and the slack (a fixed 9,500 B, for growth that is not challenges) are
 measured constants pinned by `scripts/budgets.test.ts`, so moving one means editing a test that records a measurement.
-`/category/:categoryId` and `/challenge/:slug` pay the same 414 B per challenge — their closures contain the entry
-chunk too — and are still literals with roughly 32 and 48 challenges of headroom; deriving them needs their floors
-measured the same way first.
+`/category/:categoryId` and `/challenge/:slug` pay per challenge too — their closures contain the entry chunk — but at
+a measured 427.8 B and 438.2 B rather than `/`'s clean 414 B, the excess being re-chunking rather than a mechanism.
+That is why they are still literals: a ceiling derived from a coefficient nobody can explain is the unchecked number
+this arrangement exists to remove, wearing a formula. They are instead **pinned by value** in
+`scripts/budgets.test.ts`, so neither can be re-baselined without editing a test either. Their headroom is roughly 31
+and 46 challenges — counted at their own coefficients, not `/`'s, because a number whose job is to be an early warning
+takes the conservative one. Derive them once their floors have been measured and reproduced, before the first full
+category is authored rather than after one of them goes red.
 
 **`chunkSizeWarningLimit` is raised to 7500 kB, and is not a budget.** Every build warned before that, always about
 the same Monaco workers — chunks no route references and no learner downloads until the editor opens — and a build
