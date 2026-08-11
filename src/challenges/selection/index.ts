@@ -8,6 +8,7 @@ import { liveVsStatic } from './liveVsStatic';
 import { queryAll } from './queryAll';
 import { queryBasics } from './queryBasics';
 import { scopedQuery } from './scopedQuery';
+import { siblingTraversal } from './siblingTraversal';
 
 export const selectionChallenges: Challenge[] = [
   queryBasics,
@@ -18,4 +19,5 @@ export const selectionChallenges: Challenge[] = [
   attributeSelectors,
   childrenVsChildNodes,
   firstElementChild,
+  siblingTraversal,
 ];
