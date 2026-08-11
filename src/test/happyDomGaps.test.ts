@@ -180,6 +180,40 @@ describe('APIs present but not faithful', () => {
     expect(order).toEqual(['frame', 'timer']);
   });
 
+  it('hands back specified rather than computed values from getComputedStyle', async () => {
+    const context = await hostContext(
+      [
+        '<style>',
+        '  #named { color: red; padding-left: 4px; --tone: rgb(1, 2, 3); }',
+        '  #child { outline-color: var(--missing, rgb(3, 3, 3)); }',
+        '</style>',
+        '<div id="named"><i id="child">c</i></div>',
+      ].join('\n'),
+    );
+    const named = context.document.getElementById('named');
+    const child = context.document.getElementById('child');
+    if (!named || !child) throw new Error('the fixture is missing an element');
+
+    const namedStyle = context.window.getComputedStyle(named);
+
+    // The control: the cascade genuinely ran. A px length written as px, and a custom property read
+    // off the element that declares it, both come back correct -- which is the portable subset
+    // `src/challenges/styles/index.ts` records, and what makes the failures below about
+    // *serialisation* rather than about the stylesheet having been ignored.
+    expect(namedStyle.paddingLeft).toBe('4px');
+    expect(namedStyle.getPropertyValue('--tone')).toBe('rgb(1, 2, 3)');
+
+    // Chrome computes `red` to `rgb(255, 0, 0)`; happy-dom hands the specified token back.
+    expect(namedStyle.color).toBe('red');
+    // Chrome builds the shorthand out of the longhands: `0px 0px 0px 4px`.
+    expect(namedStyle.padding).toBe('');
+    // Chrome reports the inherited custom property on the descendant; happy-dom reports nothing,
+    // even though the same value resolves correctly through `var()`.
+    expect(context.window.getComputedStyle(child).getPropertyValue('--tone')).toBe('');
+    // Chrome takes the `var()` fallback and reports `rgb(3, 3, 3)`.
+    expect(context.window.getComputedStyle(child).outlineColor).toBe('');
+  });
+
   it('queues one childList record per child of an inserted fragment, where a browser queues one', async () => {
     const context = await hostContext('<ul id="list"></ul>');
     const list = context.document.getElementById('list');

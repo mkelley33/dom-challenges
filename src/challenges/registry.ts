@@ -7,6 +7,7 @@ import { observersEntries } from './observers';
 import { performanceEntries } from './performance';
 import { selectionEntries } from './selection';
 import { storageEntries } from './storage';
+import { stylesEntries } from './styles';
 import { webApisEntries } from './web-apis';
 
 export const CATEGORY_META: Record<CategoryId, { title: string; blurb: string }> = {
@@ -90,6 +91,7 @@ export const challengeIndex: readonly ChallengeEntry[] = [
   ...byAscendingDifficulty(selectionEntries),
   ...byAscendingDifficulty(creationEntries),
   ...byAscendingDifficulty(attributesEntries),
+  ...byAscendingDifficulty(stylesEntries),
   ...byAscendingDifficulty(observersEntries),
   ...byAscendingDifficulty(performanceEntries),
   ...byAscendingDifficulty(asyncEntries),
