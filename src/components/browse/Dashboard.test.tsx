@@ -4,8 +4,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as RegistryModule from '@/challenges/registry';
-import { allChallenges, CATEGORY_META } from '@/challenges/registry';
-import type { Challenge } from '@/types/challenge';
+import { allChallenges, CATEGORY_META, DIFFICULTIES, DIFFICULTY_LABELS } from '@/challenges/registry';
+import type { Challenge, Difficulty } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
 
 import { Dashboard } from './Dashboard';
@@ -64,9 +64,41 @@ function countIn(category: Challenge['category']): number {
   return allChallenges.filter((challenge) => challenge.category === category).length;
 }
 
-/** One solve in each of the two populated categories, so no single number can stand in for both. */
-const SOLVED_IN_SELECTION = 0;
-const SOLVED_IN_EVENTS = 3;
+function firstIn(category: Challenge['category']): Challenge {
+  const challenge = allChallenges.find((entry) => entry.category === category);
+  if (!challenge) throw new Error(`the registry has no ${category} challenge`);
+  return challenge;
+}
+
+/**
+ * One solve in each of the two populated categories, so no single number can stand in for both.
+ *
+ * Chosen by category rather than by position: an index that meant "the first events challenge" on
+ * the day it was written comes to mean something else the moment the registry grows, and the
+ * fixture would go on solving *a* challenge while the test's reason for solving that one is gone.
+ */
+const SOLVED_IN_SELECTION = firstIn('selection');
+const SOLVED_IN_EVENTS = firstIn('events');
+const SOLVED_IDS = new Set([SOLVED_IN_SELECTION.id, SOLVED_IN_EVENTS.id]);
+
+function totalInTier(level: Difficulty): number {
+  return allChallenges.filter((challenge) => challenge.difficulty === level).length;
+}
+
+function solvedInTier(level: Difficulty): number {
+  return allChallenges.filter((challenge) => challenge.difficulty === level && SOLVED_IDS.has(challenge.id)).length;
+}
+
+/**
+ * What a tier's row reads once the fixture's records have landed -- derived, because every one of
+ * these figures moves whenever a challenge is written. Hard-coding them makes writing content
+ * break a dashboard test, which then gets "fixed" by pasting in the new numbers, and the assertion
+ * stops describing anything.
+ */
+function tierText(level: Difficulty): string {
+  const total = totalInTier(level);
+  return total === 0 ? 'No challenges yet' : `${solvedInTier(level)} of ${total} solved`;
+}
 
 const SOLVED_AT = '2026-01-02T00:00:00.000Z';
 const REVEALED_AT = '2026-01-03T00:00:00.000Z';
@@ -101,11 +133,11 @@ function difficultyRows(): string[] {
     .map((item) => item.textContent ?? '');
 }
 
-/** Both solves land in the fixture's two populated tiers, one each. */
+/** Both solves land in a different tier from each other, one each. */
 function stubOneSolvePerPopulatedTier(): void {
   stubProgress([
-    makeRecord(challengeAt(SOLVED_IN_SELECTION).id, { status: 'solved', solvedAt: SOLVED_AT }),
-    makeRecord(challengeAt(SOLVED_IN_EVENTS).id, { status: 'solved', solvedAt: SOLVED_AT }),
+    makeRecord(SOLVED_IN_SELECTION.id, { status: 'solved', solvedAt: SOLVED_AT }),
+    makeRecord(SOLVED_IN_EVENTS.id, { status: 'solved', solvedAt: SOLVED_AT }),
   ]);
 }
 
@@ -119,16 +151,13 @@ afterEach(() => {
 
 describe('Dashboard', () => {
   it('names the overall progress bar and gives it the solved count as its value', async () => {
-    stubProgress([
-      makeRecord(challengeAt(SOLVED_IN_SELECTION).id, { status: 'solved', solvedAt: SOLVED_AT }),
-      makeRecord(challengeAt(SOLVED_IN_EVENTS).id, { status: 'solved', solvedAt: SOLVED_AT }),
-    ]);
+    stubOneSolvePerPopulatedTier();
 
     renderDashboard();
 
     const bar = await overallBar();
     await waitFor(() => {
-      expect(bar).toHaveAttribute('aria-valuenow', '2');
+      expect(bar).toHaveAttribute('aria-valuenow', String(SOLVED_IDS.size));
     });
     // A bar carrying a percentage with no maximum tells a screen reader "40%" and nothing about
     // how many challenges that is; the pair is what makes the figure readable.
@@ -136,10 +165,7 @@ describe('Dashboard', () => {
   });
 
   it('links to each category and counts the solves inside that category, not overall', async () => {
-    stubProgress([
-      makeRecord(challengeAt(SOLVED_IN_SELECTION).id, { status: 'solved', solvedAt: SOLVED_AT }),
-      makeRecord(challengeAt(SOLVED_IN_EVENTS).id, { status: 'solved', solvedAt: SOLVED_AT }),
-    ]);
+    stubOneSolvePerPopulatedTier();
 
     renderDashboard();
 
@@ -148,8 +174,8 @@ describe('Dashboard', () => {
     expect(selection).toHaveAttribute('href', '/category/selection');
     expect(events).toHaveAttribute('href', '/category/events');
 
-    // Two solves out of five overall, but one out of three here and one out of two there. A card
-    // handed the global summary would read "2 of 5 solved" on both.
+    // Two solves overall, one inside each of these two categories. A card handed the global
+    // summary would read the same "2 of <everything> solved" on both.
     await waitFor(() => {
       expect(selection).toHaveTextContent(`1 of ${countIn('selection')} solved`);
     });
@@ -164,9 +190,12 @@ describe('Dashboard', () => {
     await screen.findByRole('region', { name: 'By difficulty' });
 
     // Read only once the records have landed. Every tier shows 0 solved on the first paint, so
-    // rows snapshotted before this wait would agree with a dashboard that never reads them.
+    // rows snapshotted before this wait would agree with a dashboard that never reads them --
+    // which only holds because the first tier is one of the two the fixture solves in. Pinned,
+    // because a fixture that stopped solving there would turn the wait below into a no-op.
+    expect(solvedInTier('novice'), 'the first tier must hold one of the solved fixtures').toBe(1);
     await waitFor(() => {
-      expect(difficultyRows()[0]).toContain('1 of 1 solved');
+      expect(difficultyRows()[0]).toContain(tierText('novice'));
     });
     const [novice, intermediate, advanced, expert] = difficultyRows();
 
@@ -180,12 +209,19 @@ describe('Dashboard', () => {
       expect.stringContaining('Expert'),
     ]);
 
-    // The fixture gives all four tiers different shapes on purpose: one fully cleared, one part
-    // way, one untouched, one empty. A row rendering the overall figure would read "2 of 5" four
-    // times over.
-    expect(intermediate).toContain('1 of 3 solved');
-    expect(advanced).toContain('0 of 1 solved');
-    expect(expert).toContain('No challenges yet');
+    // Each row carries its own tier's figures, derived from the registry the way the summary
+    // derives them -- one tier part way through, the others untouched. What makes that an
+    // assertion rather than a restatement is the check below: a row rendering the overall figure
+    // would read the same string in all four.
+    expect(novice).toContain(tierText('novice'));
+    expect(intermediate).toContain(tierText('intermediate'));
+    expect(advanced).toContain(tierText('advanced'));
+    expect(expert).toContain(tierText('expert'));
+
+    const overall = `${SOLVED_IDS.size} of ${allChallenges.length} solved`;
+    for (const row of [novice, intermediate, advanced, expert]) {
+      expect(row, `a tier row is showing the overall figure: ${overall}`).not.toContain(overall);
+    }
   });
 
   it('names each difficulty bar and gives it that tier’s own value and maximum', async () => {
@@ -195,19 +231,41 @@ describe('Dashboard', () => {
 
     const intermediate = await screen.findByRole('progressbar', { name: 'Intermediate' });
     // Gated on the tier's own value: every bar reads 0 until the records land, so asserting the
-    // maximum alone would pass against a dashboard that never reads them.
+    // maximum alone would pass against a dashboard that never reads them. That gate needs this
+    // tier to hold a solve, which is why the count is pinned before the wait rather than after.
+    expect(solvedInTier('intermediate'), 'the gated tier must hold one of the solved fixtures').toBe(1);
     await waitFor(() => {
-      expect(intermediate).toHaveAttribute('aria-valuenow', '1');
+      expect(intermediate).toHaveAttribute('aria-valuenow', String(solvedInTier('intermediate')));
     });
-    expect(intermediate).toHaveAttribute('aria-valuemax', '3');
 
-    const novice = screen.getByRole('progressbar', { name: 'Novice' });
-    expect(novice).toHaveAttribute('aria-valuenow', '1');
-    expect(novice).toHaveAttribute('aria-valuemax', '1');
+    // Every tier at once, as one table compared against one derived from the registry: each bar
+    // carries its own value and its own maximum, and a tier with nothing in it gets no bar at all
+    // rather than one whose maximum is zero, which announces as complete the moment it appears.
+    // Compared wholesale rather than asserted per tier inside the loop, so the absent-bar case is
+    // a value in the table instead of a branch around an assertion.
+    //
+    // While the registry populates all four tiers the `null` row is unreachable here, and
+    // `Dashboard.emptyRegistry.test.tsx` is what holds that line; this covers it again the moment
+    // a tier does empty.
+    const rendered = DIFFICULTIES.map((level) => {
+      const bar = screen.queryByRole('progressbar', { name: DIFFICULTY_LABELS[level] });
+      return {
+        level,
+        now: bar?.getAttribute('aria-valuenow') ?? null,
+        max: bar?.getAttribute('aria-valuemax') ?? null,
+      };
+    });
 
-    // An empty tier gets no bar at all rather than one whose maximum is zero, which announces as
-    // complete the moment it appears.
-    expect(screen.queryByRole('progressbar', { name: 'Expert' })).not.toBeInTheDocument();
+    expect(rendered).toEqual(
+      DIFFICULTIES.map((level) => {
+        const total = totalInTier(level);
+        return {
+          level,
+          now: total === 0 ? null : String(solvedInTier(level)),
+          max: total === 0 ? null : String(total),
+        };
+      }),
+    );
   });
 
   it('says a category with nothing written yet has no challenges rather than showing 0 of 0', async () => {

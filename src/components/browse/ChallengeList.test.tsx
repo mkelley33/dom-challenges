@@ -110,12 +110,20 @@ describe('ChallengeList', () => {
 
   it('keeps only the chosen difficulty', async () => {
     const wanted = challengeAt(2);
+    // Derived, because the category grows: the expectation is "every challenge in this tier and
+    // nothing else", and a hard-coded single title turns writing a second challenge at the same
+    // difficulty into a failure of the *filter* test.
+    const sameTier = challenges.filter((challenge) => challenge.difficulty === wanted.difficulty);
     setFilters({ difficulty: wanted.difficulty });
 
     renderCategory();
 
     expect(await screen.findByRole('link', { name: wanted.title })).toBeInTheDocument();
-    expect(linkNames()).toEqual([wanted.title]);
+    // The filter has to actually exclude something, or a list that ignores the difficulty passes.
+    expect(sameTier.length, 'the chosen tier holds the whole category, so this filters nothing').toBeLessThan(
+      challenges.length,
+    );
+    expect(linkNames()).toEqual(sameTier.map((challenge) => challenge.title));
   });
 
   it('drops the challenges the progress records say are solved', async () => {

@@ -24,6 +24,16 @@ function challengeAt(index: number): Challenge {
   return challenge;
 }
 
+function inTier(difficulty: Challenge['difficulty']): Challenge[] {
+  return challenges.filter((challenge) => challenge.difficulty === difficulty);
+}
+
+function firstInTier(difficulty: Challenge['difficulty']): Challenge {
+  const challenge = inTier(difficulty)[0];
+  if (!challenge) throw new Error(`the selection category has no ${difficulty} challenge`);
+  return challenge;
+}
+
 function solvedRecord(challengeId: string): ProgressRecord {
   return {
     id: `row-${challengeId}`,
@@ -240,6 +250,12 @@ describe('FilterBar', () => {
 
   it('writes the chosen difficulty into the stored filters and narrows the list to it', async () => {
     const user = userEvent.setup();
+    // Derived from the category rather than counted by hand: the tier's size is content, and a
+    // literal here makes writing another advanced challenge fail a test about the filter bar.
+    const advanced = inTier('advanced');
+    expect(advanced.length, 'the advanced tier holds the whole category, so this narrows nothing').toBeLessThan(
+      challenges.length,
+    );
     renderCategory();
 
     await user.click(await screen.findByRole('combobox', { name: 'Difficulty' }));
@@ -249,9 +265,9 @@ describe('FilterBar', () => {
       expect(storedFilters().difficulty).toBe('advanced');
     });
     await waitFor(() => {
-      expect(screen.getAllByRole('listitem')).toHaveLength(1);
+      expect(screen.getAllByRole('listitem')).toHaveLength(advanced.length);
     });
-    expect(screen.getByRole('link', { name: challengeAt(2).title })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: firstInTier('advanced').title })).toBeInTheDocument();
   });
 
   it('starts from the filters the store was already holding', async () => {
