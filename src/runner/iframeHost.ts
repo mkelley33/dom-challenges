@@ -1,3 +1,4 @@
+import { protectAppStorage } from './appStorage';
 import type { HostContext, HostHandle } from './harness';
 
 const BASE_STYLES = `
@@ -38,7 +39,10 @@ export class HostDisposedError extends Error {
  *
  * No `sandbox` attribute: the harness needs to pass live function references and read
  * `contentDocument` directly. Isolation here means DOM isolation — a broken solution
- * cannot corrupt the app shell — not a security boundary against untrusted code.
+ * cannot corrupt the app shell — not a security boundary against untrusted code, **and not storage
+ * isolation**: same-origin means the frame and the app share one `localStorage` area, so submitted
+ * code can empty the app's persisted drafts. `protectAppStorage` below is what puts them back; see
+ * its docblock for why no frame arrangement avoids the sharing in the first place.
  */
 export function createIframeHost(container: HTMLElement): HostHandle {
   let frame: HTMLIFrameElement | null = null;
@@ -59,7 +63,9 @@ export function createIframeHost(container: HTMLElement): HostHandle {
     cancel?.(new HostDisposedError());
   };
 
-  return {
+  // Wrapped here rather than at the call site so a second caller cannot forget it: the sharing this
+  // repairs is created by the frame, so the repair belongs to whoever creates the frame.
+  return protectAppStorage({
     reset(html: string): Promise<HostContext> {
       // Rebuilding rather than rewriting is the whole point: window listeners, timers and
       // observers registered by the previous attempt die with the frame that owned them.
@@ -98,5 +104,5 @@ export function createIframeHost(container: HTMLElement): HostHandle {
       });
     },
     dispose: destroy,
-  };
+  });
 }
