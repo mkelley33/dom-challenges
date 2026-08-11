@@ -180,6 +180,44 @@ describe('APIs present but not faithful', () => {
     expect(order).toEqual(['frame', 'timer']);
   });
 
+  it('queues one childList record per child of an inserted fragment, where a browser queues one', async () => {
+    const context = await hostContext('<ul id="list"></ul>');
+    const list = context.document.getElementById('list');
+    if (!list) throw new Error('#list is missing from the fixture');
+
+    const records: MutationRecord[] = [];
+    let callbacks = 0;
+    const observer = new context.window.MutationObserver((batch) => {
+      callbacks += 1;
+      records.push(...batch);
+    });
+    observer.observe(list, { childList: true });
+
+    const fragment = context.document.createDocumentFragment();
+    for (const name of ['a', 'b', 'c']) {
+      const item = context.document.createElement('li');
+      item.textContent = name;
+      fragment.append(item);
+    }
+    list.append(fragment);
+
+    await settle(context.window);
+    observer.disconnect();
+
+    // The controls: the insertion happened, and delivery is batched into a single callback exactly
+    // as it is in a browser. So what follows is about record *granularity*, not about the observer
+    // having missed anything or having been read too early.
+    expect(list.children).toHaveLength(3);
+    expect(callbacks).toBe(1);
+
+    // Chrome queues ONE record carrying all three nodes, because a fragment is spliced in as a
+    // single operation. happy-dom queues one per child, which makes a fragment insertion
+    // indistinguishable from three separate `append` calls -- so no challenge can assert that a
+    // batch was batched. Measured in both. See `src/challenges/creation/index.ts`.
+    expect(records).toHaveLength(3);
+    expect(records.map((record) => record.addedNodes.length)).toEqual([1, 1, 1]);
+  });
+
   it('reports a null previousSibling on a childList record where a browser names the element', async () => {
     const context = await hostContext('<ul id="list"><li id="first">first</li></ul>');
     const list = context.document.getElementById('list');
