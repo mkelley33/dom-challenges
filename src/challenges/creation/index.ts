@@ -43,6 +43,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./createAndAppend').then((module) => module.createAndAppend),
   },
   {
+    id: 'creation-move-not-copy',
+    slug: 'move-not-copy',
+    title: 'Moving a node, not copying it',
+    category: 'creation',
+    difficulty: 'novice',
+    concepts: ['prepend', 'move semantics', 'one parent', 'remove'],
+    relatedIds: ['creation-create-and-append'],
+    load: () => import('./moveNotCopy').then((module) => module.moveNotCopy),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
