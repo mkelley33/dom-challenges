@@ -73,6 +73,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./insertAtIndex').then((module) => module.insertAtIndex),
   },
   {
+    id: 'creation-adjacent-positions',
+    slug: 'adjacent-positions',
+    title: 'Four places around one element',
+    category: 'creation',
+    difficulty: 'intermediate',
+    concepts: ['insertAdjacentHTML', 'before', 'after', 'prepend', 'append'],
+    relatedIds: ['creation-create-and-append'],
+    load: () => import('./adjacentPositions').then((module) => module.adjacentPositions),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
