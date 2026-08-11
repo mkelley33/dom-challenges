@@ -79,4 +79,14 @@ export const attributesEntries: ChallengeEntry[] = [
     relatedIds: [],
     load: () => import('./dirtyValue').then((module) => module.dirtyValue),
   },
+  {
+    id: 'attributes-data-attributes',
+    slug: 'data-attributes',
+    title: 'The setting spelled two different ways',
+    category: 'attributes',
+    difficulty: 'intermediate',
+    concepts: ['dataset', 'data-*', 'attribute names', 'getAttributeNames', 'string values'],
+    relatedIds: ['attributes-property-not-attribute', 'attributes-dirty-value'],
+    load: () => import('./dataAttributes').then((module) => module.dataAttributes),
+  },
 ];
