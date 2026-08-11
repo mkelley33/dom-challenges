@@ -53,6 +53,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./moveNotCopy').then((module) => module.moveNotCopy),
   },
   {
+    id: 'creation-clone-depth',
+    slug: 'clone-depth',
+    title: 'What a shallow clone leaves behind',
+    category: 'creation',
+    difficulty: 'intermediate',
+    concepts: ['cloneNode', 'deep versus shallow', 'after', 'outerHTML'],
+    relatedIds: ['creation-move-not-copy'],
+    load: () => import('./cloneDepth').then((module) => module.cloneDepth),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
