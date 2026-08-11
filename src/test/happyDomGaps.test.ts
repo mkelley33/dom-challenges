@@ -568,7 +568,7 @@ describe('APIs present but not faithful', () => {
 
   it('gives the host frame a real location origin, where a srcdoc frame reports "null"', async () => {
     const context = await hostContext('<a id="link" href="/docs/page">docs</a>');
-    const link = context.document.getElementById('link');
+    const link = context.document.querySelector<HTMLAnchorElement>('a#link');
     if (!link) throw new Error('#link is missing from the fixture');
 
     // The control: URL decomposition works, and an absolute href decomposes identically in both

@@ -11,11 +11,21 @@ type Snapshot = (form: HTMLElement) => string;
  * and `#notes` into the document, and `doc.querySelector('#title')` answers with the first in
  * document order -- the original, still holding the state the test just set. Written that way,
  * every assertion below would pass against a `snapshot` that returned an empty string.
+ *
+ * Two functions rather than one generic helper: a type parameter used once in a signature is an
+ * assertion wearing inference's clothes, and `no-unnecessary-type-parameters` says so. Here the
+ * generic belongs to `querySelector`, and the tag name in the selector is what makes it true.
  */
-function control<T extends Element>(root: ParentNode, selector: string): T {
-  const element = root.querySelector<T>(selector);
-  if (!element) throw new Error(`no element matching "${selector}" was found where one was expected`);
-  return element;
+function inputIn(root: ParentNode, selector: string): HTMLInputElement {
+  const input = root.querySelector<HTMLInputElement>(selector);
+  if (!input) throw new Error(`no <input> matching "${selector}" was found where one was expected`);
+  return input;
+}
+
+function areaIn(root: ParentNode, selector: string): HTMLTextAreaElement {
+  const area = root.querySelector<HTMLTextAreaElement>(selector);
+  if (!area) throw new Error(`no <textarea> matching "${selector}" was found where one was expected`);
+  return area;
 }
 
 /**
@@ -70,20 +80,20 @@ export const formStateSnapshot: ChallengeContent = {
 
         const holder = restore(doc, fn<Snapshot>('snapshot')(requireElement(doc, 'draft')));
 
-        expect(control<HTMLInputElement>(holder, 'input#title').value).toBe('Q4 report');
+        expect(inputIn(holder, 'input#title').value).toBe('Q4 report');
       },
     },
     {
       name: 'a textarea is written out too, and its default is not an attribute',
       run: ({ doc, fn, expect }) => {
-        control<HTMLTextAreaElement>(doc, '#draft textarea#notes').value = 'Ship on Friday.';
+        areaIn(doc, '#draft textarea#notes').value = 'Ship on Friday.';
 
         const holder = restore(doc, fn<Snapshot>('snapshot')(requireElement(doc, 'draft')));
 
         // A `<textarea>` has no `value` attribute at all: its default is the text between the tags.
         // `setAttribute('value', …)` on one writes an attribute nothing reads, and the restored copy
         // still shows the server's text.
-        expect(control<HTMLTextAreaElement>(holder, 'textarea#notes').value).toBe('Ship on Friday.');
+        expect(areaIn(holder, 'textarea#notes').value).toBe('Ship on Friday.');
       },
     },
     {
@@ -97,8 +107,8 @@ export const formStateSnapshot: ChallengeContent = {
         // Both directions matter, and they fail differently: the markup says `checked` for one box
         // and says nothing for the other, so a snapshot that only ever *adds* the attribute gets the
         // second right and the first wrong.
-        expect(control<HTMLInputElement>(holder, 'input#public').checked).toBe(false);
-        expect(control<HTMLInputElement>(holder, 'input#pinned').checked).toBe(true);
+        expect(inputIn(holder, 'input#public').checked).toBe(false);
+        expect(inputIn(holder, 'input#pinned').checked).toBe(true);
       },
     },
     {
@@ -108,8 +118,8 @@ export const formStateSnapshot: ChallengeContent = {
 
         const holder = restore(doc, fn<Snapshot>('snapshot')(requireElement(doc, 'draft')));
 
-        expect(control<HTMLInputElement>(holder, 'input#public').checked).toBe(true);
-        expect(control<HTMLTextAreaElement>(holder, 'textarea#notes').value).toBe('Nothing yet.');
+        expect(inputIn(holder, 'input#public').checked).toBe(true);
+        expect(areaIn(holder, 'textarea#notes').value).toBe('Nothing yet.');
       },
     },
     {

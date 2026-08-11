@@ -1,17 +1,20 @@
 import type { ChallengeContent } from '@/types/challenge';
 
-import { requireElement } from './support';
-
 type ApplyAlt = (image: HTMLImageElement, text: string | null) => void;
 type AltState = (image: HTMLImageElement) => string;
 
 /**
- * `HTMLElement` rather than `HTMLImageElement`: `requireElement` returns the wider type, the tests
- * only read attributes off it, and the submitted functions are declared over whatever they like.
- * Narrowing here would buy an assertion and nothing else.
+ * The `<img>` a test needs, typed by the selector that found it.
+ *
+ * `querySelector<HTMLImageElement>` with the tag name written into the selector rather than
+ * `requireElement` plus a cast: the generic tells the compiler which element the selector names, and
+ * the `img` in the selector is what makes that claim true at run time too. The narrow type is what
+ * lets the tests hand these straight to functions declared over `HTMLImageElement`.
  */
-function requireImage(doc: Document, id: string): HTMLElement {
-  return requireElement(doc, id);
+function requireImage(doc: Document, id: string): HTMLImageElement {
+  const image = doc.querySelector<HTMLImageElement>(`img#${id}`);
+  if (!image) throw new Error(`#${id} is missing from the challenge markup, or is not an <img>`);
+  return image;
 }
 
 export const emptyOrAbsent: ChallengeContent = {
