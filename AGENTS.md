@@ -69,7 +69,13 @@ Consequences worth knowing before you touch the runner:
 - **Two overlapping `reset` calls reject the first.** `runChallenge` awaits sequentially so it cannot hit this; any
   other caller must `await` or `.catch()`.
 - **The frame is same-origin with no `sandbox` attribute, deliberately.** The harness passes live function references
-  and reads `contentDocument`. This is DOM isolation, not a security boundary — do not describe it as one.
+  and reads `contentDocument`. This is DOM isolation, not a security boundary — do not describe it as one. **It is not
+  storage isolation either**, and that one is not merely a wording matter: same-origin means the frame and the app share
+  one `localStorage` area — two `Storage` objects over one backing store — so `localStorage.clear()` in submitted code
+  empties `dom-challenges-editor`, which holds every challenge's drafts and has no copy anywhere else. Measured through
+  the production host. `src/runner/appStorage.ts` snapshots and repairs around every run and at teardown; its docblock
+  records why no reachable frame arrangement avoids the sharing (`sandbox="allow-scripts"` fixes it by dropping
+  `allow-same-origin`, which nulls `contentDocument` and breaks this whole interface).
 
 ---
 
@@ -111,6 +117,26 @@ runs the script; the memory host assigns `innerHTML`, which per spec never execu
 script's _side effect_ passes in the browser and fails under Vitest, and — worse — the content suite is structurally
 blind to the whole category. Assert on the script element and its text node, which both hosts have; never on
 `win.someGlobalTheScriptSet`.
+
+### Three things a challenge may never do, because the two engines disagree
+
+Each was measured in both hosts during Phase 2's reconnaissance, and each is invisible to the content suite — the suite
+agrees with whichever engine it runs on. `src/test/happyDomGaps.test.ts` pins all three from the engine side, so a
+dependency bump reports itself instead of quietly widening what is allowed.
+
+- **Never patch a prototype from a challenge test.** happy-dom shares **one class table across every `Window` it
+  creates** — verified: patching `w1.Element.prototype` is observed by an element built in `w2` — so a prototype patch
+  escapes the challenge and applies to the rest of the Vitest process, including the app's own tests. Instrument
+  per-element instead: `element.getBoundingClientRect = fn` is an own property, it shadows the prototype, it dies with
+  the document, and it needs no restoring. `performance/layoutThrash.ts` is the worked example.
+- **Never assert ordering between two schedulers.** A `setTimeout(0)` scheduled alongside a `requestAnimationFrame`
+  runs `micro → timeout0 → raf` in Chrome and `micro → raf → timeout0` under happy-dom, which models frames with
+  `setImmediate`. Ordering _within_ one scheduler is fine; across two it is a coin flip that lands the same way every
+  time on whichever engine you happened to check.
+- **Never assert a `MutationRecord`'s `previousSibling` or `nextSibling`.** On a `childList` addition Chrome reports the
+  preceding element and happy-dom reports `null`. Everything else about `MutationObserver` matches record for record —
+  batching, `attributeOldValue`, `characterDataOldValue`, `addedNodes`/`removedNodes`, `takeRecords`, `disconnect` — so
+  this one field is the whole exception and it is easy to reach for.
 
 ### Verify host-divergent challenges in a real browser
 
@@ -181,6 +207,24 @@ width where the column is actually parked.
 - Verified in **Chrome only**, on a layout whose target user is on iOS Safari. WebKit shipped `inert` in 15.5 with
   nested-navigable propagation, so it is expected to hold — but this is the one behaviour in the app whose target
   platform is not the one that was tested.
+
+**A browser probe whose answer is "X never happened" needs a positive control, in the same document, over the same
+wait.** This is the general form of the focus trap below, and it has now produced a confident wrong reading twice. The
+second time, a first pass reported that `IntersectionObserver`, `ResizeObserver` and `requestAnimationFrame` were all
+dead **in real Chrome** — the tab was merely backgrounded, and a document the browser is not rendering services no
+frames and delivers no observer entries. Re-run foregrounded, every one of them worked.
+
+The obvious mitigation — check `document.visibilityState` first — is necessary and **not sufficient**, on two measured
+counts. Visibility is not the only suppressor: a `display: none` subtree stops frames while `visibilityState` stays
+`visible`, which is the very thing the paragraph above this one is about. And it reads the wrong document — measured at
+one instant, the top document was `visible` with `hasFocus(): true` while the frame's `document.hasFocus()` was
+`false`, and it is the _frame's_ focus that makes `navigator.clipboard.writeText()` reject with `NotAllowedError`.
+
+So the rule is not a checklist item, it is a shape: **show that a known-good channel did fire, in the same document, at
+the same moment, before recording that another one did not.** "It never fired" and "the wait was too short" are the
+same observation until something separates them. `src/test/happyDomGaps.test.ts` writes every one of its negatives this
+way, and a mutation that stops its control channel from firing turns those tests red — which is the check that the
+control is load-bearing rather than decorative.
 
 **How to probe focus, and the trap that produced a wrong reading first time.** A script running _inside_ a frame can
 set the inner document's `activeElement` while `contentDocument.hasFocus()` stays `false`. In a **backgrounded** tab
