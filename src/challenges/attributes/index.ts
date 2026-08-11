@@ -89,4 +89,14 @@ export const attributesEntries: ChallengeEntry[] = [
     relatedIds: ['attributes-property-not-attribute', 'attributes-dirty-value'],
     load: () => import('./dataAttributes').then((module) => module.dataAttributes),
   },
+  {
+    id: 'attributes-reflected-properties',
+    slug: 'reflected-properties',
+    title: 'The property that is not spelled like its attribute',
+    category: 'attributes',
+    difficulty: 'intermediate',
+    concepts: ['reflection', 'htmlFor', 'colSpan', 'attribute name lowercasing', 'expando properties'],
+    relatedIds: ['attributes-empty-or-absent', 'attributes-class-three-ways'],
+    load: () => import('./reflectedProperties').then((module) => module.reflectedProperties),
+  },
 ];
