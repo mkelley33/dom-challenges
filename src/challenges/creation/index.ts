@@ -93,6 +93,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./innerHtmlCost').then((module) => module.innerHtmlCost),
   },
   {
+    id: 'creation-fragment-is-emptied',
+    slug: 'fragment-is-emptied',
+    title: 'The fragment you can only use once',
+    category: 'creation',
+    difficulty: 'advanced',
+    concepts: ['DocumentFragment', 'cloneNode', 'replaceChildren', 'one parent'],
+    relatedIds: ['creation-move-not-copy', 'creation-template-rows'],
+    load: () => import('./fragmentIsEmptied').then((module) => module.fragmentIsEmptied),
+  },
+  {
     id: 'creation-template-rows',
     slug: 'template-rows',
     title: 'Stamp the rows out of a template',
