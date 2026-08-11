@@ -67,12 +67,32 @@ const SHARED_FLOOR_BYTES = 365_115;
  * index and ~269 B once the one entry in the N=1 build is charged at the going rate. Net that out
  * and Phase 2's entries cost ~393.5 B each, not 414.2.
  *
- * The constant is nonetheless still sound, for a better reason than the one originally given: it
- * exceeds what an entry has ever measured. ~393.5 B then, and 365.6 B for the 23 real entries added
- * between the N=1 and N=24 builds -- the honest figure, since both ends of that subtraction are
- * structurally the same build. 414 is the generous side of both. Rounding down from a number that
- * was itself inflated is not what makes it safe, and the margin is real rather than the ~0.2 B once
- * claimed.
+ * **414 is a mean, not a ceiling on one entry, and that correction is measured.** It was previously
+ * justified here as exceeding what an entry had ever measured -- ~393.5 B for Phase 2's entries and
+ * 365.6 B for the 23 added between the N=1 and N=24 builds. Filling out `attributes` falsified it.
+ * Measured by emptying one category's array **and moving its modules out of the tree**, so that the
+ * entry count and the module count move together and `assertChallengesAreLazy` still passes, against
+ * a 46-challenge build in which `/` is 384,011 B:
+ *
+ * | category emptied      | entries | `/` without it | delta   | per entry   |
+ * | --------------------- | ------: | -------------: | ------: | ----------: |
+ * | `selection`           |      13 |      379,045 B | 4,966 B |   382.0 B   |
+ * | `attributes`          |      11 |      379,015 B | 4,996 B |   454.2 B   |
+ *
+ * Both ends of each subtraction are structurally the same build, so these are honest figures. What
+ * moves them is the length of the metadata itself -- `attributes` has longer ids and slugs
+ * (`attributes-form-state-snapshot`), five concepts an entry, and two or three `relatedIds` each,
+ * where `selection` has shorter ids and often none. There is no threshold anywhere in the build that
+ * this crosses; the cost is the bytes of the strings.
+ *
+ * So the constant is sound as a **budgeting average rather than a bound**, and the fixed slack is
+ * what absorbs the variance in both directions: `attributes` consumes 442 B of it, `selection` hands
+ * 416 B back, and the whole library currently leaves 9,648 B of headroom on every route. The number
+ * stays at 414 because it is still close to the mean, because raising it would loosen every route's
+ * ceiling to describe metadata that is user-facing value, and because trimming real concepts and
+ * cross-links to hit a byte figure would be optimising the measurement rather than the app. What the
+ * budget exists to catch is a step change -- a dependency dragged into the entry -- and a few tens of
+ * bytes an entry either way does not hide one.
  *
  * One coefficient for three routes is a measurement, not an assumption. Registering a challenge
  * moves exactly one chunk in the whole build -- the one the index compiles into, which every route's

@@ -459,9 +459,17 @@ not a per-challenge term, and the library does not return to empty.
 **`/` pays that step too, so 414.2 was never a clean per-challenge figure either.** The same subtraction produced it,
 and `/`'s own 0 → 1 cost is at least 260 B measured directly outside the index chunk. Net it out and Phase 2's entries
 cost ~393.5 B; the 23 real entries added between the N=1 and N=24 builds — both structurally the same build, so an
-honest subtraction — cost 365.6 B. 414 stays because it exceeds every figure an entry has ever measured, not because
-it was rounded down from 414.2. When re-measuring either the floor or the coefficient, do not subtract a
+honest subtraction — cost 365.6 B. When re-measuring either the floor or the coefficient, do not subtract a
 zero-challenge build.
+
+**414 is a mean, not a bound on one entry.** It was justified here for a while as exceeding every figure an entry had
+ever measured; filling out `attributes` falsified that. Measured against a 46-challenge build by emptying one
+category's array and moving its modules out together, `selection`'s 13 entries cost **382.0 B** each and
+`attributes`' 11 cost **454.2 B** — the difference is the length of the ids, titles, concepts and `relatedIds`
+themselves, and nothing structural. The fixed slack absorbs the variance both ways (`attributes` takes 442 B of it,
+`selection` gives 416 B back, and every route still has 9,648 B left), so ordinary authoring still needs no
+re-baseline. Do not trim a challenge's metadata to hit the number: the budget exists to catch a step change, not a few
+tens of bytes of prose. `scripts/budgets.ts` carries the table.
 
 Deriving moved `/challenge/:slug` down 5,231 B and `/category/:categoryId` up 706 B from the round literals they
 replaced; all three now leave the same 10,217 B of headroom, so `pnpm build` prints remaining bytes as well as a
