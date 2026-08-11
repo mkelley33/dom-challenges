@@ -206,9 +206,35 @@ you measure there.
   ended (`[]` in Chrome, stale here), nor a listener attached with an already-aborted `AbortSignal` (never attached in
   Chrome, attached and fired here). `composedPath()` **during** dispatch is portable, contents and order, and so is the
   walk through `parentNode`/`ShadowRoot.host` — but never a `ShadowRoot`'s `nodeName`.
-- **Never assert a resolved URL.** `a.href` and `img.src` resolve against the document's base, which is
-  `https://challenges.local/` here and the **app's current route** in the `about:srcdoc` frame. The
-  relative-versus-absolute distinction is fine to teach; the resolved string is not assertable.
+- **Never assert a resolved URL, and never compare anything to the frame's `location`.** `a.href` and
+  `img.src` resolve against the document's base, which is `https://challenges.local/` here and the
+  **app's current route** in the `about:srcdoc` frame. Worse, that frame's **`location.origin` is the
+  string `"null"`** in Chrome and the memory host's URL here — so `link.origin !== location.origin`,
+  the correct way to ask "does this link leave the site", is `true` for every same-origin link in the
+  real host and `false` for a `mailto:`. Measured; it cost the Attributes category a challenge. The
+  relative-versus-absolute distinction is fine to teach, and an href written **absolute in the markup**
+  decomposes identically in both (`pathname`, `search`, `hash`, `origin`); a resolved string is not
+  assertable and neither is a same-origin test.
+- **Never iterate `element.attributes` while removing attributes from that element, and never ask a
+  challenge for bulk attribute removal.** Chrome's `NamedNodeMap` gets its iterator from its indexed
+  getter, so the walk advances an index while the map shrinks and **skips every other attribute**;
+  happy-dom's iterator snapshots and removes them all. The buggy loop is the one that passes here.
+  Reading the map without mutating it is portable, and so are `getAttributeNames()` (a snapshot), the
+  map's live `length`, and `[...element.attributes]`.
+- **Never index `dataset` with a dashed name.** `dataset['view-count']` reads `"3"` here and
+  `undefined` in Chrome; writing one sets `data-foo-bar` here and throws `SyntaxError` there. The
+  camelCase mapping itself agrees in both directions, as does the lowercasing of attribute names by
+  the HTML parser.
+- **Never assert that a class token was rejected.** `classList.add('')` throws `SyntaxError` in Chrome
+  and `classList.add('a b')` throws `InvalidCharacterError`; happy-dom accepts both and splits the
+  second into two tokens. Everything else about `DOMTokenList` matches, `toggle`'s `force` argument
+  and its de-duplication included.
+- **Never write a dashed CSS property as an index, and never read `removeProperty`'s return value.**
+  `style['margin-bottom'] = '5px'` is a real declaration in Chrome — CSSOM defines a dashed attribute
+  per hyphenated property — and a no-op here; `removeProperty` returns the removed value in Chrome and
+  `undefined` here. Both point the _safe_ way for the suite, but a learner writing either in the app
+  is graded differently by the two hosts. The rest of the inline-`style` model matches exactly,
+  including `setProperty` for custom properties, `style.length`, and the serialised attribute text.
 - **Never build an SVG element with `insertAdjacentHTML`, and never write an SVG element's class through
   `className`.** Both diverge, in opposite directions, and SVG built by script is not one category's problem —
   Styles, Accessibility, Web APIs and Performance can all reach for it. `svg.insertAdjacentHTML('beforeend',
