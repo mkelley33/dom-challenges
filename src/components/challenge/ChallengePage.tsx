@@ -227,7 +227,7 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
         >
           <PreviewFrame containerRef={previewRef} offScreen={previewOffScreen} />
           <div className={`${PANEL} min-h-40 flex-1`}>
-            <ResultPanel result={result} isRunning={isRunning} />
+            <ResultPanel result={result} isRunning={isRunning} offScreen={previewOffScreen} />
           </div>
         </div>
       </div>

@@ -3,6 +3,14 @@ import type { RunResult } from '@/runner/harness';
 export interface ResultPanelProps {
   result: RunResult | null;
   isRunning: boolean;
+  /**
+   * Whether the panel is currently parked off-screen with the preview it rides beside.
+   *
+   * Only the tab order depends on it. This panel is deliberately *not* made `inert` the way its
+   * sibling preview frame is, because an inert live region cannot announce -- and announcing the
+   * outcome of a run is the whole job of the thing.
+   */
+  offScreen?: boolean;
 }
 
 function summarise(result: RunResult | null, isRunning: boolean): string {
@@ -16,9 +24,22 @@ function summarise(result: RunResult | null, isRunning: boolean): string {
   return `${String(passedCount)} of ${String(result.results.length)} tests passing`;
 }
 
-export function ResultPanel({ result, isRunning }: ResultPanelProps) {
+export function ResultPanel({ result, isRunning, offScreen = false }: ResultPanelProps) {
   return (
-    <section aria-label="Test results" className="flex min-h-0 flex-col gap-2 overflow-auto p-3">
+    // `tabIndex={-1}` only while parked, and no attribute at all otherwise.
+    //
+    // Since Chrome 127 a scroll container whose content overflows and which contains nothing
+    // focusable becomes keyboard-focusable itself -- which is exactly this element, and which is the
+    // only way a keyboard user can scroll a long list of results. Left alone while parked, that is a
+    // Tab stop 200vw off-screen with its focus ring drawn where nobody can see it: the same defect
+    // as an `aria-hidden` focusable subtree, in the sibling the preview's `inert` deliberately does
+    // not cover. Opting out of the sequential order costs nothing here, and hardcoding `-1` would
+    // cost the on-screen panel the only keyboard scrolling it has.
+    <section
+      aria-label="Test results"
+      tabIndex={offScreen ? -1 : undefined}
+      className="flex min-h-0 flex-col gap-2 overflow-auto p-3"
+    >
       {/* `<output>` rather than a div with `aria-live`: it carries the implicit `status` role,
           which is a polite live region, so the run state is announced to a screen reader as it
           changes and is addressable by role rather than by class name. */}

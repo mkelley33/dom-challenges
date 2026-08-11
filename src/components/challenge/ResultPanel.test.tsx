@@ -34,7 +34,39 @@ const mixed: RunResult = {
   ],
 };
 
+function resultsRegion(): HTMLElement {
+  return screen.getByRole('region', { name: 'Test results' });
+}
+
 describe('ResultPanel', () => {
+  it('is keyboard-scrollable while it is on screen', () => {
+    render(<ResultPanel result={mixed} isRunning={false} />);
+
+    // No `tabindex` attribute, so Chrome's own rule applies: since Chrome 127 a scroll container
+    // whose content overflows and which holds nothing focusable becomes focusable itself, which is
+    // the only way a keyboard user can scroll a long list of results at all. Verified in Chrome 151
+    // against a plain <div> control: the same element focuses while its content overflows and does
+    // not when it stops.
+    expect(resultsRegion()).not.toHaveAttribute('tabindex');
+  });
+
+  it('takes itself out of the tab order while it is parked off-screen', () => {
+    render(<ResultPanel result={mixed} isRunning={false} offScreen />);
+
+    // Otherwise that same Chrome rule puts a Tab stop 200vw to the left, with its focus ring drawn
+    // where nobody can see it: the sibling preview is `inert`, but this panel deliberately is not,
+    // because an `inert` live region cannot announce. `-1` opts out of the sequential order and
+    // leaves programmatic focus -- and the announcement -- untouched.
+    expect(resultsRegion()).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('still announces its status while parked, which is why it is not inert', () => {
+    render(<ResultPanel result={mixed} isRunning={false} offScreen />);
+
+    expect(resultsRegion()).not.toHaveAttribute('inert');
+    expect(within(resultsRegion()).getByRole('status')).toHaveTextContent('1 of 2 tests passing');
+  });
+
   it('says nothing has run yet before the first run', () => {
     render(<ResultPanel result={null} isRunning={false} />);
 

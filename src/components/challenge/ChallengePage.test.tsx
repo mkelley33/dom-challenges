@@ -143,6 +143,10 @@ function viewTab(name: string): HTMLElement {
   return screen.getByRole('tab', { name });
 }
 
+function resultsRegion(): HTMLElement {
+  return screen.getByRole('region', { name: 'Test results' });
+}
+
 /** Scoped to the results region: a prompt is markdown, and markdown is free to contain lists. */
 function testResultItems(): HTMLElement[] {
   return within(screen.getByRole('region', { name: 'Test results' })).getAllByRole('listitem');
@@ -770,6 +774,38 @@ describe('ChallengePage', () => {
     expect(previewSection()).toHaveAttribute('aria-hidden', 'true');
   });
 
+  it('keeps the parked results panel out of the tab order without making it inert', async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    renderChallengePage(first.slug);
+    await editor();
+
+    await user.click(viewTab('Results'));
+    // On screen it keeps Chrome's own focusability, which is the only keyboard scrolling a long
+    // list of results has.
+    expect(resultsRegion()).not.toHaveAttribute('tabindex');
+
+    await user.click(viewTab('Problem'));
+
+    // Parked, it must not be a Tab stop -- but it must still be announceable, which is why `inert`
+    // covers the preview beside it and never this.
+    expect(resultsRegion()).toHaveAttribute('tabindex', '-1');
+    expect(resultsRegion()).not.toHaveAttribute('inert');
+  });
+
+  it('leaves the results panel in the tab order at desktop widths, whatever the phone tab says', async () => {
+    stubViewport(true);
+    useEditorStore.setState({ mobileTab: 'problem' });
+
+    renderChallengePage(first.slug);
+    await editor();
+
+    // Same reasoning as the preview's `aria-hidden`: above `lg` no column is parked, so keying this
+    // off the tab alone would strip keyboard scrolling from every desktop learner whose last phone
+    // tab was not "Results".
+    expect(resultsRegion()).not.toHaveAttribute('tabindex');
+  });
+
   it('names the column each tab controls, so the tablist is more than three labelled buttons', async () => {
     renderChallengePage(first.slug);
     await editor();
@@ -805,8 +841,7 @@ describe('ChallengePage', () => {
     // `role="status"` is a polite live region by definition, which is what `<output>` carries. The
     // point is that the outcome reaches a screen reader without anything stealing focus from the
     // editor the learner is still sitting in.
-    const results = screen.getByRole('region', { name: 'Test results' });
-    expect(within(results).getByRole('status')).toHaveTextContent('Not run yet');
+    expect(within(resultsRegion()).getByRole('status')).toHaveTextContent('Not run yet');
   });
 
   it('runs from the keyboard, under a name that does not change while it is running', async () => {
