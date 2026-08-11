@@ -64,6 +64,30 @@ describe('editor store', () => {
     expect(useEditorStore.getState().drafts['b']).toBe('code-b');
   });
 
+  it('keeps the persisted key present when the last draft is cleared', () => {
+    // **The runner reads an absent key as damage.** `protectAppStorage` repairs a missing
+    // `dom-challenges-*` key at the next reset, at dispose and on pagehide, because the preview
+    // frame shares this origin's storage and nothing in the app removes one of these keys. That
+    // "nothing" is the invariant, and this is what holds it: clearing the last draft has to write
+    // `{"drafts":{}}` rather than deleting the entry.
+    //
+    // If it ever deleted, a learner's deliberate erasure would be silently undone and would read as
+    // a persistence bug rather than a guard bug. See AGENTS.md §4.
+    useEditorStore.getState().setDraft('a', 'code-a');
+    useEditorStore.getState().clearDraft('a');
+
+    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+    expect(readPersistedState()['drafts']).toEqual({});
+  });
+
+  it('writes all three persisted slices unconditionally, so none can go missing', () => {
+    // `partialize` returning a slice conditionally would make an absent key ambiguous, which is the
+    // same invariant from the other side.
+    useEditorStore.getState().setDraft('a', 'code-a');
+
+    expect(Object.keys(readPersistedState()).toSorted()).toEqual(['drafts', 'filters', 'layout']);
+  });
+
   it('merges partial filter updates', () => {
     useEditorStore.getState().setFilters({ difficulty: 'expert' });
     expect(useEditorStore.getState().filters.difficulty).toBe('expert');

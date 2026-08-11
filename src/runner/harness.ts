@@ -1,6 +1,5 @@
 import type { Challenge } from '@/types/challenge';
 
-import { captureAppStorage } from './appStorage';
 import { createEventHelpers, createTick } from './context';
 import type { AssertionFailure } from './expect';
 import { AssertionError, expect } from './expect';
@@ -153,64 +152,54 @@ export async function runChallenge(
 
   const modules = options.modules ?? {};
   const results: TestResult[] = [];
-  // Armed before the first `reset` and released in the `finally` below, so the window in which a
-  // concurrent write by the app could be rolled back is exactly one run. The frame shares one
-  // storage area with the app; see `captureAppStorage`.
-  const appStorage = captureAppStorage();
 
-  try {
-    for (const test of challenge.tests) {
-      const startedAt = performance.now();
-      // A fresh host per test: no test can observe another's mutations, listeners, or timers.
-      const context = await host.reset(challenge.html);
+  for (const test of challenge.tests) {
+    const startedAt = performance.now();
+    // A fresh host per test: no test can observe another's mutations, listeners, or timers.
+    const context = await host.reset(challenge.html);
 
-      let exports: Record<string, unknown>;
-      try {
-        exports = evaluate(context.window, transpiled.code, modules);
-      } catch (error) {
-        return { passed: false, results, error: { phase: 'execute', message: messageOf(error) } };
-      }
-
-      try {
-        await withTimeout(
-          Promise.resolve(
-            test.run({
-              doc: context.document,
-              win: context.window,
-              expect,
-              exports,
-              fn: createExportAccessor(exports),
-              tick: createTick(context.window),
-              fire: createEventHelpers(context.window),
-            }),
-          ),
-          test.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-          test.name,
-        );
-        results.push({
-          name: test.name,
-          passed: true,
-          message: null,
-          detail: null,
-          durationMs: performance.now() - startedAt,
-        });
-      } catch (error) {
-        results.push({
-          name: test.name,
-          passed: false,
-          message: messageOf(error),
-          detail: error instanceof AssertionError ? error.detail : null,
-          durationMs: performance.now() - startedAt,
-        });
-      }
+    let exports: Record<string, unknown>;
+    try {
+      exports = evaluate(context.window, transpiled.code, modules);
+    } catch (error) {
+      return { passed: false, results, error: { phase: 'execute', message: messageOf(error) } };
     }
 
-    return { passed: results.length > 0 && results.every((result) => result.passed), results, error: null };
-  } finally {
-    // `finally`, not after the loop: the execute-error path returns from inside it, and a run
-    // cancelled by `dispose()` leaves through a rejected `reset`.
-    appStorage.restore();
+    try {
+      await withTimeout(
+        Promise.resolve(
+          test.run({
+            doc: context.document,
+            win: context.window,
+            expect,
+            exports,
+            fn: createExportAccessor(exports),
+            tick: createTick(context.window),
+            fire: createEventHelpers(context.window),
+          }),
+        ),
+        test.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        test.name,
+      );
+      results.push({
+        name: test.name,
+        passed: true,
+        message: null,
+        detail: null,
+        durationMs: performance.now() - startedAt,
+      });
+    } catch (error) {
+      results.push({
+        name: test.name,
+        passed: false,
+        message: messageOf(error),
+        detail: error instanceof AssertionError ? error.detail : null,
+        durationMs: performance.now() - startedAt,
+      });
+    }
   }
+
+  return { passed: results.length > 0 && results.every((result) => result.passed), results, error: null };
 }
 
 /**
@@ -233,17 +222,11 @@ export async function renderPreview(
   const transpiled = transpile(code);
   if (!transpiled.ok) return { phase: 'transpile', message: transpiled.message };
 
-  const appStorage = captureAppStorage();
   const context = await host.reset(challenge.html);
   try {
     evaluate(context.window, transpiled.code, options.modules ?? {});
     return null;
   } catch (error) {
     return { phase: 'execute', message: messageOf(error) };
-  } finally {
-    // The preview runs the same submitted code one more time, so it gets the same guard. What it
-    // cannot cover is anything that code *defers* past this point, since the frame outlives the
-    // call -- that is `protectAppStorage`'s half.
-    appStorage.restore();
   }
 }

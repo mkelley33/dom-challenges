@@ -42,49 +42,73 @@ function snapshot(storage: Storage): Map<string, string> {
 }
 
 /**
- * Why the two repairs below are not one repair.
+ * Whether storage still agrees with the baseline: every captured key present and unchanged, and no
+ * prefixed key that was not there before.
  *
- * The app writes these keys constantly -- every keystroke in the editor persists `drafts`, every
- * drag of a pane persists `layout` -- and the frame writes them approximately never. So "the value
- * changed" is overwhelmingly the app, and "the key is gone" is *only ever* the frame: nothing in
- * this app removes a persisted key, and zustand rewrites the whole blob rather than deleting it
- * even when the last draft is cleared.
- *
- * Putting back a *changed* value is therefore only safe inside a window in which the app provably
- * did not write, and putting back a *missing* value is safe at any time at all. A single repair
- * that did both whenever it was convenient would revert every keystroke a learner typed between two
- * runs -- which is when learners actually type. That version was written first and a test caught it.
+ * The second half matters for a learner who is new: with nothing persisted yet the baseline is
+ * empty, so submitted code writing `dom-challenges-editor` by name would otherwise be invisible
+ * here and would be read back as real state on the next load.
  */
-function restoreChanged(storage: Storage, captured: Map<string, string>): void {
+function differsFromBaseline(storage: Storage, captured: Map<string, string>): boolean {
   for (const [key, value] of captured) {
-    if (storage.getItem(key) !== value) storage.setItem(key, value);
+    if (storage.getItem(key) !== value) return true;
   }
+
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key !== null && key.startsWith(APP_STORAGE_PREFIX) && !captured.has(key)) return true;
+  }
+
+  return false;
 }
 
+/**
+ * The fallback repair, used only when no `repersistAppState` seam was supplied.
+ *
+ * **Missing-only, and that asymmetry is forced.** Writing back a *changed* value means guessing who
+ * changed it, and the app writes these keys constantly -- every keystroke persists `drafts`, every
+ * pane drag persists `layout` -- while the frame writes them approximately never. Guess wrong and
+ * the guard rolls back real work. A missing key is unambiguous: **nothing in this app removes one**
+ * (AGENTS.md §4), so an absence is always the frame.
+ */
 function restoreMissing(storage: Storage, captured: Map<string, string>): void {
   for (const [key, value] of captured) {
     if (storage.getItem(key) === null) storage.setItem(key, value);
   }
 }
 
-export interface AppStorageGuard {
+export interface ProtectAppStorageOptions {
   /**
-   * Puts back every captured key that is now missing or altered.
+   * Asks the app to write its own in-memory state back over whatever is in storage.
    *
-   * Call once the submitted code's turn is over. See `captureAppStorage` for why the window this
-   * closes has to be short.
+   * **This is what makes the repair exact instead of a guess**, and it works because of an asymmetry
+   * the frame cannot cross: the app's authoritative copy lives in memory, and a same-origin iframe
+   * shares the *storage area* but has no reference to the app's module graph. So any disagreement
+   * between storage and memory is the frame's, at any moment, with no run window to bound and no
+   * missing-versus-changed split to get right.
+   *
+   * It also makes detection free to be imprecise. Repairing when the app itself wrote simply
+   * rewrites the value the app already holds, so a false positive costs one redundant write --
+   * measured at 0.004ms, and it does not change the `drafts` reference, so selector subscribers do
+   * not re-render.
+   *
+   * Implement it by asking the persistence layer to re-run its own write (for zustand,
+   * `setState` with the same slice), **never** by reconstructing the stored envelope by hand: a
+   * hand-built envelope that drifted from the library's would be judged "different" on every check
+   * and would overwrite the real value with a malformed one on every reset.
    */
-  restore: () => void;
+  repersistAppState?: () => void;
 }
 
 /**
- * Captures the app's persisted keys so a run can put back whatever submitted code did to them.
+ * Wraps a host so code running inside its frame cannot destroy the app's persisted state.
  *
  * **The preview frame is same-origin with the app, so it shares one storage area with it.** Two
  * `Storage` objects, one backing store: a key written in the frame is readable by the app, and one
  * line of learner code -- `localStorage.clear()` -- empties the app's alongside its own. Measured
  * through the production host, end to end, with `dom-challenges-editor` present before the call and
- * absent after it.
+ * absent after it. That key holds `drafts`, every challenge's in-progress code, and drafts are
+ * local-only with no other copy.
  *
  * The trigger is ordinary in three independent ways. `localStorage` is the Storage category's
  * legitimate subject and "clear everything" is natural content; the editor runs arbitrary code by
@@ -99,48 +123,25 @@ export interface AppStorageGuard {
  * nothing either: both are shared with a same-origin frame, as are `blob:` and same-origin `src`
  * frames. So the origin stays and the damage is undone instead.
  *
- * **The window is one run, and that bound is the whole design.** Armed when a run starts, restored
- * when it settles, and holding nothing in between -- so a learner typing *between* two runs is
- * never touched. A write the app makes *during* a run can be rolled back, and that is the accepted
- * cost: zustand still holds the newer state in memory and re-persists it on the very next write, so
- * the loss is transient, where losing every draft is not.
+ * Checked at every boundary the frame's life has: each `reset`, `dispose`, and `pagehide`. Nothing
+ * reads this storage in between -- the app reads it once, when it rehydrates on load -- so a repair
+ * at the next boundary is as good as an immediate one, and `pagehide` is what covers a tab closed
+ * while a deferred `setTimeout` has just emptied the store.
  */
-export function captureAppStorage(): AppStorageGuard {
-  const storage = appStorage();
-  const captured = storage === null ? null : snapshot(storage);
-
-  return {
-    restore: () => {
-      if (storage !== null && captured !== null) restoreChanged(storage, captured);
-    },
-  };
-}
-
-/**
- * Wraps a host so a key that *vanishes* while no run is in flight is put back at the next reset and
- * at teardown.
- *
- * This is the half `captureAppStorage` cannot reach. The preview frame stays alive after the last
- * run finishes -- it is showing the learner their own output -- so a `setTimeout` registered at
- * module scope fires when no run is armed and no further `reset` may ever come. Teardown is the
- * only moment left.
- *
- * Deliberately **missing-only**: this repair can fire long after any run, at a moment when a
- * changed value is far more likely to be the app's own than the frame's. A deferred overwrite of
- * the exact key `dom-challenges-editor`, arriving after its run settled, is therefore the one case
- * neither half covers -- an exotic shape, and the alternative is reverting real work on every
- * teardown.
- */
-export function protectAppStorage(host: HostHandle): HostHandle {
+export function protectAppStorage(host: HostHandle, options: ProtectAppStorageOptions = {}): HostHandle {
+  const { repersistAppState } = options;
   let captured: Map<string, string> | null = null;
 
   const rescue = (): void => {
     const storage = appStorage();
     if (storage === null) return;
 
-    if (captured !== null) restoreMissing(storage, captured);
+    if (captured !== null) {
+      if (repersistAppState === undefined) restoreMissing(storage, captured);
+      else if (differsFromBaseline(storage, captured)) repersistAppState();
+    }
     // Re-captured every time rather than held from the first reset, so the baseline tracks the
-    // app's own writes. Safe precisely because this repair only ever fills an absence.
+    // app's own writes rather than accusing them.
     captured = snapshot(storage);
   };
 

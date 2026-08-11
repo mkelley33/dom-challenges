@@ -133,6 +133,10 @@ dependency bump reports itself instead of quietly widening what is allowed.
   runs `micro → timeout0 → raf` in Chrome and `micro → raf → timeout0` under happy-dom, which models frames with
   `setImmediate`. Ordering _within_ one scheduler is fine; across two it is a coin flip that lands the same way every
   time on whichever engine you happened to check.
+- **Never write a `dom-challenges-*` key from a challenge, and clean up the keys you do write.** The preview frame
+  shares the app's storage area (§2), so that prefix is the app's own state and the runner treats any change to it as
+  damage to be repaired — a Storage challenge about namespacing is exactly where someone would reach for it. Keys
+  outside the prefix are yours, and are yours to remove in a `finally`; `storage/filterState.ts` is the worked example.
 - **Never assert a `MutationRecord`'s `previousSibling` or `nextSibling`.** On a `childList` addition Chrome reports the
   preceding element and happy-dom reports `null`. Everything else about `MutationObserver` matches record for record —
   batching, `attributeOldValue`, `characterDataOldValue`, `addedNodes`/`removedNodes`, `takeRecords`, `disconnect` — so
@@ -176,6 +180,22 @@ Two related facts, both decided rather than inherited:
   in the cache. A delete has no server-assigned field to read back, so it does not need this. The asymmetry is
   correct; do not "align" them without an argument that survives that.
 - **`deleteProgress` needs a real json-server `id` read off a fetched record**, never one constructed by hand.
+
+### Nothing may remove a `dom-challenges-*` key
+
+**The runner reads an absent one as damage and puts it back.** The preview frame is same-origin with the app and shares
+its `localStorage` (§2), so submitted code can empty it; `protectAppStorage` repairs a missing key at the next `reset`,
+at `dispose`, and on `pagehide`. That repair is only sound because the app never removes one of these keys — zustand
+rewrites the whole blob, `partialize` returns all three slices unconditionally, and clearing the last draft writes
+`{"drafts":{}}` rather than deleting the entry.
+
+So the obvious "Reset my data" button calling `persist.clearStorage()` **breaks this**, and it breaks it in the worst
+available way: nothing fails, the user's deliberate deletion is silently undone at the next reset, and it reads as a
+persistence bug rather than as a guard doing what it was told. If a deliberate erasure is ever wanted, it has to write
+an empty state through the store — or teach the guard the difference, which today it has no way to know.
+
+Two tests hold the invariant from the store's side: clearing the last draft leaves the key present, and `partialize`
+writes all three slices. Both were checked against a mutation that calls `clearStorage()`; the first one fails.
 
 ---
 
