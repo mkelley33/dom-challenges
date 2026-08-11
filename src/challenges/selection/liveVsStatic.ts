@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 /**
  * The shape `capture()` hands back.
@@ -29,14 +29,7 @@ function appendRow(doc: Document): void {
   list.append(row);
 }
 
-export const liveVsStatic: Challenge = {
-  id: 'selection-live-vs-static',
-  slug: 'live-vs-static',
-  title: 'Live collections versus static lists',
-  category: 'selection',
-  difficulty: 'advanced',
-  concepts: ['HTMLCollection', 'NodeList', 'getElementsByClassName', 'querySelectorAll'],
-  relatedIds: ['selection-query-basics'],
+export const liveVsStatic: ChallengeContent = {
   prompt: [
     'The list below holds two `.row` items. Not every DOM query hands back the same kind of result:',
     'one kind keeps tracking the document as it changes, the other is a snapshot of the instant it',

@@ -1,8 +1,9 @@
 import type { CSSProperties } from 'react';
-import { useCallback, useId, useMemo, useRef } from 'react';
+import { use, useCallback, useId, useMemo, useRef } from 'react';
 import { useParams } from 'react-router';
 
-import { challengeBySlug } from '@/challenges/registry';
+import { loadChallenge } from '@/challenges/loader';
+import { entryBySlug } from '@/challenges/registry';
 import { MobileTabs } from '@/components/layout/MobileTabs';
 import { NotFound } from '@/components/NotFound';
 import { useChallengeRun } from '@/hooks/useChallengeRun';
@@ -11,7 +12,7 @@ import { useChallengeProgress, useSaveProgress, useStoredProgress } from '@/hook
 import { solutionAccess } from '@/lib/solutionAccess';
 import { cn } from '@/lib/utils';
 import { useEditorStore } from '@/store/editorStore';
-import type { Challenge } from '@/types/challenge';
+import type { Challenge, ChallengeEntry } from '@/types/challenge';
 
 import { ClearButton } from './ClearButton';
 import { EditorPanel } from './EditorPanel';
@@ -262,13 +263,37 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
   );
 }
 
+interface ChallengeContentGateProps {
+  entry: ChallengeEntry;
+}
+
+/**
+ * Suspends on the challenge's own module and renders the workspace once it is in hand.
+ *
+ * A component of its own rather than a `use` call in `ChallengePage`, so the unknown-slug branch
+ * below returns before anything suspends. `loadChallenge` caches by id, which is what makes the
+ * promise stable across renders -- `use` requires that, and an uncached promise would suspend the
+ * route forever.
+ *
+ * The failure path is `AppShell`'s error boundary, the same one a failed route chunk lands in: a
+ * challenge whose chunk cannot be fetched is the same problem as a route whose chunk cannot be
+ * fetched, and `RouteError` already offers the reload that answers both.
+ */
+function ChallengeContentGate({ entry }: ChallengeContentGateProps) {
+  const challenge = use(loadChallenge(entry));
+
+  return <ChallengeWorkspace key={challenge.id} challenge={challenge} />;
+}
+
 export function ChallengePage() {
   const { slug } = useParams();
-  const challenge = slug ? challengeBySlug(slug) : undefined;
+  // Answered against the index, so an unknown slug is a not-found page immediately rather than a
+  // loading state that resolves into one.
+  const entry = slug === undefined ? undefined : entryBySlug(slug);
 
-  if (!challenge) {
+  if (!entry) {
     return <NotFound />;
   }
 
-  return <ChallengeWorkspace key={challenge.id} challenge={challenge} />;
+  return <ChallengeContentGate entry={entry} />;
 }

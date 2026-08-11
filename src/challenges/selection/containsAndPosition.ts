@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
@@ -14,14 +14,7 @@ function firstTextNode(element: Element): Node {
   return text;
 }
 
-export const containsAndPosition: Challenge = {
-  id: 'selection-contains-and-position',
-  slug: 'contains-and-position',
-  title: 'Inside it, and in what order',
-  category: 'selection',
-  difficulty: 'advanced',
-  concepts: ['contains', 'compareDocumentPosition', 'document order', 'bitmask'],
-  relatedIds: ['selection-sibling-traversal'],
+export const containsAndPosition: ChallengeContent = {
   prompt: [
     'Two questions a click-outside handler and a range-selection helper ask constantly. Export both:',
     '',

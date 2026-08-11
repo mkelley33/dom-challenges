@@ -1,7 +1,7 @@
 import { useId, useMemo } from 'react';
 import { Link } from 'react-router';
 
-import { allChallenges, CATEGORY_IDS, CATEGORY_META, DIFFICULTIES, DIFFICULTY_LABELS } from '@/challenges/registry';
+import { CATEGORY_IDS, CATEGORY_META, challengeIndex, DIFFICULTIES, DIFFICULTY_LABELS } from '@/challenges/registry';
 import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
 import { useProgressQuery } from '@/hooks/useProgress';
 import { summarise } from '@/lib/progressSummary';
@@ -11,7 +11,7 @@ export function Dashboard() {
   const { data } = useProgressQuery();
   // `data` is a fresh array on every refetch, so memoising on it is what keeps the fold from
   // re-running for renders the records did not change in.
-  const summary = useMemo(() => summarise(allChallenges, data ?? []), [data]);
+  const summary = useMemo(() => summarise(challengeIndex, data ?? []), [data]);
 
   return (
     <div className="p-8">

@@ -15,7 +15,7 @@ import { Dashboard } from './Dashboard';
  */
 vi.mock('@/challenges/registry', async (importOriginal) => {
   const actual = await importOriginal<typeof RegistryModule>();
-  return { ...actual, allChallenges: [] };
+  return { ...actual, challengeIndex: [] };
 });
 
 function renderDashboard() {

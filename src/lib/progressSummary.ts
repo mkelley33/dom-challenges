@@ -1,5 +1,5 @@
 import { CATEGORY_META, DIFFICULTY_LABELS } from '@/challenges/registry';
-import type { CategoryId, Challenge, Difficulty } from '@/types/challenge';
+import type { CategoryId, ChallengeMeta, Difficulty } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
 
 export interface ProgressBucket {
@@ -44,7 +44,7 @@ function emptyBuckets<K extends string>(source: Record<K, unknown>): Record<K, P
  * id or a deleted challenge leaves a row on the server that nothing will ever clear, and a fold
  * over records would count it, reporting more solved challenges than exist.
  */
-export function summarise(challenges: readonly Challenge[], records: ProgressRecord[]): ProgressSummary {
+export function summarise(challenges: readonly ChallengeMeta[], records: ProgressRecord[]): ProgressSummary {
   const byChallengeId = new Map(records.map((record) => [record.challengeId, record]));
 
   const summary: ProgressSummary = {

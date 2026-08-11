@@ -4,8 +4,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as RegistryModule from '@/challenges/registry';
-import { allChallenges, CATEGORY_META, DIFFICULTIES, DIFFICULTY_LABELS } from '@/challenges/registry';
-import type { Challenge, Difficulty } from '@/types/challenge';
+import { CATEGORY_META, challengeIndex, DIFFICULTIES, DIFFICULTY_LABELS } from '@/challenges/registry';
+import type { ChallengeEntry, Difficulty } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
 
 import { Dashboard } from './Dashboard';
@@ -14,29 +14,30 @@ import { Dashboard } from './Dashboard';
  * The real registry currently holds one category, which would leave every per-category count equal
  * to the overall count -- a dashboard that put the global figures on every card would pass. Two
  * challenges in a second category are appended so the two can disagree, and the registry's own
- * challenges and metadata are kept so the wiring under test is still the real one.
+ * entries and metadata are kept so the wiring under test is still the real one.
  *
  * Built inside the factory rather than referenced from the file body: `vi.mock` is hoisted above
  * every import, so a module-level fixture would still be in its temporal dead zone here.
  */
 vi.mock('@/challenges/registry', async (importOriginal) => {
   const actual = await importOriginal<typeof RegistryModule>();
-  const extra: Challenge[] = ['events-delegation', 'events-custom'].map((id) => ({
+  const extra: ChallengeEntry[] = ['events-delegation', 'events-custom'].map((id) => ({
     id,
     slug: id,
     title: id,
     category: 'events',
     difficulty: 'intermediate',
-    prompt: '',
-    html: '',
-    starterCode: '',
-    tests: [],
-    solutions: [],
     concepts: [],
     relatedIds: [],
+    // The dashboard renders counts and titles and must never open a challenge. Throwing here rather
+    // than resolving something empty means a `Dashboard` that started loading content fails this
+    // file loudly instead of quietly costing every visitor the whole library.
+    load: () => {
+      throw new Error('the dashboard loaded a challenge module');
+    },
   }));
 
-  return { ...actual, allChallenges: [...actual.allChallenges, ...extra] };
+  return { ...actual, challengeIndex: [...actual.challengeIndex, ...extra] };
 });
 
 function makeRecord(challengeId: string, overrides: Partial<ProgressRecord> = {}): ProgressRecord {
@@ -54,18 +55,18 @@ function makeRecord(challengeId: string, overrides: Partial<ProgressRecord> = {}
 }
 
 /** The registry is the dashboard's own input, so the fixtures point at whatever is really in it. */
-function challengeAt(index: number): Challenge {
-  const challenge = allChallenges[index];
+function challengeAt(index: number): ChallengeEntry {
+  const challenge = challengeIndex[index];
   if (!challenge) throw new Error(`the registry has no challenge at index ${index}`);
   return challenge;
 }
 
-function countIn(category: Challenge['category']): number {
-  return allChallenges.filter((challenge) => challenge.category === category).length;
+function countIn(category: ChallengeEntry['category']): number {
+  return challengeIndex.filter((challenge) => challenge.category === category).length;
 }
 
-function firstIn(category: Challenge['category']): Challenge {
-  const challenge = allChallenges.find((entry) => entry.category === category);
+function firstIn(category: ChallengeEntry['category']): ChallengeEntry {
+  const challenge = challengeIndex.find((entry) => entry.category === category);
   if (!challenge) throw new Error(`the registry has no ${category} challenge`);
   return challenge;
 }
@@ -82,11 +83,11 @@ const SOLVED_IN_EVENTS = firstIn('events');
 const SOLVED_IDS = new Set([SOLVED_IN_SELECTION.id, SOLVED_IN_EVENTS.id]);
 
 function totalInTier(level: Difficulty): number {
-  return allChallenges.filter((challenge) => challenge.difficulty === level).length;
+  return challengeIndex.filter((challenge) => challenge.difficulty === level).length;
 }
 
 function solvedInTier(level: Difficulty): number {
-  return allChallenges.filter((challenge) => challenge.difficulty === level && SOLVED_IDS.has(challenge.id)).length;
+  return challengeIndex.filter((challenge) => challenge.difficulty === level && SOLVED_IDS.has(challenge.id)).length;
 }
 
 /**
@@ -161,7 +162,7 @@ describe('Dashboard', () => {
     });
     // A bar carrying a percentage with no maximum tells a screen reader "40%" and nothing about
     // how many challenges that is; the pair is what makes the figure readable.
-    expect(bar).toHaveAttribute('aria-valuemax', String(allChallenges.length));
+    expect(bar).toHaveAttribute('aria-valuemax', String(challengeIndex.length));
   });
 
   it('links to each category and counts the solves inside that category, not overall', async () => {
@@ -180,7 +181,7 @@ describe('Dashboard', () => {
       expect(selection).toHaveTextContent(`1 of ${countIn('selection')} solved`);
     });
     expect(events).toHaveTextContent(`1 of ${countIn('events')} solved`);
-    expect(selection).not.toHaveTextContent(`of ${allChallenges.length} solved`);
+    expect(selection).not.toHaveTextContent(`of ${challengeIndex.length} solved`);
   });
 
   it('breaks the totals down by difficulty, ascending, not in alphabetical order', async () => {
@@ -218,7 +219,7 @@ describe('Dashboard', () => {
     expect(advanced).toContain(tierText('advanced'));
     expect(expert).toContain(tierText('expert'));
 
-    const overall = `${SOLVED_IDS.size} of ${allChallenges.length} solved`;
+    const overall = `${SOLVED_IDS.size} of ${challengeIndex.length} solved`;
     for (const row of [novice, intermediate, advanced, expert]) {
       expect(row, `a tier row is showing the overall figure: ${overall}`).not.toContain(overall);
     }

@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 /**
  * The extra item belongs to the test, not to the learner.
@@ -16,14 +16,7 @@ function appendItem(doc: Document, text: string): void {
   menu.append(item);
 }
 
-export const queryAll: Challenge = {
-  id: 'selection-query-all',
-  slug: 'query-all',
-  title: 'Collect the text of every item',
-  category: 'selection',
-  difficulty: 'novice',
-  concepts: ['querySelectorAll', 'NodeList', 'Array.from', 'spread', 'textContent'],
-  relatedIds: ['selection-query-basics'],
+export const queryAll: ChallengeContent = {
   prompt: [
     'The menu below holds three `.item` elements and one separator that is not an item.',
     '',

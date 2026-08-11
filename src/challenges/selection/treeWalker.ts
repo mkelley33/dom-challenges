@@ -1,18 +1,11 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
 /** The distinctive string inside the `<script>`, so the assertion names what it is looking for. */
 const SCRIPT_TEXT = 'SCRIPT-TEXT-SHOULD-NOT-APPEAR';
 
-export const treeWalker: Challenge = {
-  id: 'selection-tree-walker',
-  slug: 'tree-walker',
-  title: 'Read the text a reader would see',
-  category: 'selection',
-  difficulty: 'expert',
-  concepts: ['TreeWalker', 'NodeFilter', 'createTreeWalker', 'text nodes'],
-  relatedIds: ['selection-children-vs-childnodes'],
+export const treeWalker: ChallengeContent = {
   prompt: [
     'Export a function `visibleText(root)` that collects the readable text under `root`.',
     '',

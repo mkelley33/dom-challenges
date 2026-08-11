@@ -62,17 +62,49 @@ export interface Solution {
   tradeoffs: string;
 }
 
-export interface Challenge {
+/**
+ * Everything the browsing pages know about a challenge without opening it.
+ *
+ * The split from `ChallengeContent` is what keeps `/` cheap: the dashboard renders counts and
+ * titles, the category listing searches titles and concepts, and neither has any use for a prompt,
+ * a starter, a solution's prose or a test function. See AGENTS.md §10.
+ *
+ * `relatedIds` sits here rather than in the content: it is a link between challenges, so
+ * `validateRegistry` can only check it against the whole set, and requiring 100+ modules to be
+ * loaded before a dangling link can be noticed would put that check out of reach of every consumer
+ * but the content suite.
+ */
+export interface ChallengeMeta {
   id: string;
   slug: string;
   title: string;
   category: CategoryId;
   difficulty: Difficulty;
+  concepts: string[];
+  relatedIds: string[];
+}
+
+/** The part of a challenge that only the challenge route needs, and only for the one it renders. */
+export interface ChallengeContent {
   prompt: string;
   html: string;
   starterCode: string;
   tests: ChallengeTest[];
   solutions: Solution[];
-  concepts: string[];
-  relatedIds: string[];
+}
+
+/**
+ * One challenge as the runner, the editor and the prompt panel see it: metadata joined to the
+ * content module `ChallengeEntry.load` fetched. Assembled by `loadChallenge`, never authored.
+ */
+export interface Challenge extends ChallengeMeta, ChallengeContent {}
+
+/**
+ * A challenge's metadata plus the dynamic import that fetches the rest of it.
+ *
+ * `load` lives on the entry rather than beside it so that the index is one list rather than two
+ * that could fall out of step -- and so a consumer holding an entry can always open it.
+ */
+export interface ChallengeEntry extends ChallengeMeta {
+  load: () => Promise<ChallengeContent>;
 }

@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
@@ -6,14 +6,7 @@ function idsOf(elements: Element[]): string[] {
   return elements.map((element) => element.id);
 }
 
-export const attributeSelectors: Challenge = {
-  id: 'selection-attribute-selectors',
-  slug: 'attribute-selectors',
-  title: 'Match on an attribute without matching too much',
-  category: 'selection',
-  difficulty: 'intermediate',
-  concepts: ['attribute selectors', 'data-*', 'classList', 'getAttribute'],
-  relatedIds: ['selection-scoped-query'],
+export const attributeSelectors: ChallengeContent = {
   prompt: [
     'The toolbar below is marked up with `data-role` attributes, links, and utility classes. Export',
     'three functions, each returning an `Element[]` in document order, each searching only inside the',
