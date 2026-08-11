@@ -129,4 +129,14 @@ export const attributesEntries: ChallengeEntry[] = [
     relatedIds: ['attributes-data-attributes', 'attributes-reflected-properties', 'creation-replace-in-place'],
     load: () => import('./copyAttributes').then((module) => module.copyAttributes),
   },
+  {
+    id: 'attributes-form-state-snapshot',
+    slug: 'form-state-snapshot',
+    title: 'The markup that does not know what you typed',
+    category: 'attributes',
+    difficulty: 'expert',
+    concepts: ['defaultValue', 'defaultChecked', 'dirty value flag', 'innerHTML', 'boolean attributes'],
+    relatedIds: ['attributes-dirty-value', 'attributes-boolean-attributes', 'creation-inner-html-cost'],
+    load: () => import('./formStateSnapshot').then((module) => module.formStateSnapshot),
+  },
 ];
