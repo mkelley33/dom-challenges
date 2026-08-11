@@ -76,8 +76,8 @@ describe('createIframeHost', () => {
     // These assertions describe the resolved context; they do not, on their own, prove the wait.
     // happy-dom applies `srcdoc` synchronously during `append`, so the seeded markup is already
     // in the frame's document by the time `reset` returns and a `reset` that resolved eagerly --
-    // without ever awaiting `load` -- would satisfy every assertion below. The test that
-    // discriminates is `does not resolve while the frame never loads`, further down; this one
+    // without ever awaiting `load` -- would satisfy every assertion below. The two tests that
+    // discriminate are the next one and `does not resolve while the frame never loads`; this one
     // pins the *shape* of what a successful load hands back.
     expect(frame).not.toBeNull();
     expect(context.document).toBe(frame?.contentDocument);
@@ -88,12 +88,40 @@ describe('createIframeHost', () => {
     expect(context.document.getElementById('hello')).not.toBeNull();
   });
 
+  it('resolves after the load event rather than on insertion, with the frame in the document', async () => {
+    // The arrangement a real browser produces, and the one the detached test below cannot make: the
+    // frame is connected, so `contentWindow` and the seeded document are already reachable the
+    // instant `append` returns -- everything an eager `resolve` would need. What has *not* happened
+    // yet is `load`, which happy-dom dispatches in a later task, and that gap is the whole
+    // guarantee. Resolve on insertion and 'resolved' is pushed from the first microtask, before
+    // 'load' is ever pushed; wait for the event and the two arrive in the order asserted below.
+    const order: string[] = [];
+    const { host, container } = mountHost();
+
+    const pending = host.reset('<p id="hello">hi</p>');
+    void pending.then(() => order.push('resolved'));
+
+    const frame = container.querySelector('iframe');
+    expect(frame?.contentWindow).not.toBeNull();
+    expect(frame?.contentDocument?.getElementById('hello')).not.toBeNull();
+    expect(order).toEqual([]);
+
+    // Registered after the host's own, so it runs after it: `resolve` has already been called by
+    // the time this pushes, which is exactly the ordering the assertion is about.
+    frame?.addEventListener('load', () => order.push('load'), { once: true });
+
+    await pending;
+
+    expect(order).toEqual(['load', 'resolved']);
+  });
+
   it('does not resolve while the frame never loads', async () => {
-    // The falsifiable half of the load-wait guarantee. A frame inside a detached subtree never
-    // navigates, so it never fires `load` -- which makes this the one arrangement where an eager
-    // `reset` is distinguishable from a waiting one under happy-dom, whose synchronous `srcdoc`
-    // hides the difference everywhere else. An implementation that resolves without awaiting
-    // `load` settles here; the real one stays pending until the timer below wins the race.
+    // The other half of the load-wait guarantee: a frame that never navigates never settles at all.
+    // A frame inside a detached subtree is how that state is reached under happy-dom -- it never
+    // fires `load`, and `contentWindow` stays null with it. That second fact is why this test alone
+    // is not enough: an eager `resolve` has nothing to resolve *with* here, so it stays pending too,
+    // and the test above is the one that rules it out. This one rules out settling by any other
+    // route, which is what `dispose` below depends on.
     const { host } = trackHost(document.createElement('div'));
 
     // Both outcomes are folded into one label so that a rejection cannot pass as "pending", and
