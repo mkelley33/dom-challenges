@@ -1,5 +1,5 @@
 /**
- * Fails the build when a route's eager JavaScript grows past its committed budget.
+ * Fails the build when a route's eager JavaScript grows past its budget in `./budgets.ts`.
  *
  * This is the signal `chunkSizeWarningLimit` cannot give. That limit is a single global number
  * compared against one chunk at a time, so on this project it only ever names Monaco's lazy
@@ -18,52 +18,18 @@
  * helper is generated from -- resolved per route rather than summed whole, which is the mistake
  * that made those earlier claims wrong.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { challengeModuleKeys, routeBudgets } from './budgets.ts';
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST_DIR = join(ROOT_DIR, 'dist');
 const MANIFEST_PATH = join(DIST_DIR, '.vite', 'manifest.json');
-const CHALLENGES_DIR = join(ROOT_DIR, 'src', 'challenges');
 
 /** The manifest key of the HTML entry, whose closure every route pays for. */
 const HTML_ENTRY_KEY = 'index.html';
-
-/**
- * The two files in a category directory that are not a challenge: the registration index, which is
- * eager by design, and the shared test helpers, which ride along inside the challenge chunks that
- * use them. Everything else in there is content and must reach the browser only on demand.
- */
-const NON_CHALLENGE_MODULES = new Set(['index.ts', 'support.ts']);
-
-interface RouteBudget {
-  route: string;
-  /** The module a `React.lazy` call reaches for, or `null` when the route is in the entry chunk. */
-  lazyKey: string | null;
-  maxBytes: number;
-}
-
-/**
- * Measured figures plus roughly 2.5%.
- *
- * `/`'s headroom is 9,500 B. A challenge costs it 414 B -- its index entry, and nothing else,
- * measured by emptying `selectionEntries` and rebuilding (AGENTS.md §10) -- so this number has to
- * be re-baselined about every twenty-two challenges, and that is ordinary growth rather than a
- * regression. Twenty challenges is 8,280 B, which is 2.2% of the budget and 87% of the headroom:
- * do not read a jump of kilobytes here as proof that something went eager.
- *
- * **This check cannot see a challenge going lazy-to-eager at all**, and the numbers say so rather
- * than the reasoning. Statically importing the cheapest module, `queryBasics`, puts `/` at
- * 372,678 B; the most expensive, `treeWalker`, puts it at 379,724 B of 380,000 -- 100% of budget,
- * and still passing. Both measured. `assertChallengesAreLazy` below is what catches that, and it
- * does not depend on these numbers at all.
- */
-const BUDGETS: RouteBudget[] = [
-  { route: '/', lazyKey: null, maxBytes: 380_000 },
-  { route: '/category/:categoryId', lazyKey: 'src/components/browse/ChallengeList.tsx', maxBytes: 550_000 },
-  { route: '/challenge/:slug', lazyKey: 'src/components/challenge/ChallengePage.tsx', maxBytes: 805_000 },
-];
 
 interface ManifestChunk {
   file: string;
@@ -140,21 +106,6 @@ function format(bytes: number): string {
   return bytes.toLocaleString('en-US');
 }
 
-/** Every challenge module on disk, as the manifest key it would be emitted under. */
-function challengeModuleKeys(): string[] {
-  const keys: string[] = [];
-
-  for (const category of readdirSync(CHALLENGES_DIR, { withFileTypes: true })) {
-    if (!category.isDirectory()) continue;
-    for (const file of readdirSync(join(CHALLENGES_DIR, category.name))) {
-      if (!file.endsWith('.ts') || file.endsWith('.test.ts') || NON_CHALLENGE_MODULES.has(file)) continue;
-      keys.push(`src/challenges/${category.name}/${file}`);
-    }
-  }
-
-  return keys;
-}
-
 /**
  * Fails when a challenge's content stops being fetched on demand.
  *
@@ -204,7 +155,7 @@ const lines: string[] = [];
 const eagerScripts = new Set<string>();
 let stylesheetBytes = 0;
 
-for (const { route, lazyKey, maxBytes } of BUDGETS) {
+for (const { route, lazyKey, maxBytes } of routeBudgets()) {
   // A split route whose module is no longer a chunk of its own has been folded into whatever
   // imported it -- almost always the entry, by someone replacing a `lazy()` with a plain import.
   // Named here rather than left to show up as an unexplained jump in another route's number,
@@ -242,15 +193,20 @@ failures.push(...assertChallengesAreLazy(manifest, eagerScripts));
 // the following line forbids without saying why. Naming what actually moves the number is what
 // makes refusing the obvious fix reasonable rather than merely prohibited.
 const OVER_BUDGET_GUIDANCE = [
-  "A challenge costs `/` about 414 B -- its index entry, and nothing else -- so `/`'s 9,500 B of",
-  'headroom is roughly twenty-two of them, and re-baselining after that much authoring is the honest',
-  'answer rather than a defeat. What is not honest is re-baselining without knowing which of the two',
-  'happened, because the other cause is an import that dragged weight from a lazy route into the',
-  'entry, and that arrives in one step rather than over twenty commits.',
+  "`/`'s budget is derived rather than committed: a measured floor, 414 B of ceiling for every",
+  'registered challenge, and a fixed 9,500 B of slack (`scripts/budgets.ts`). Authoring is therefore',
+  'already paid for, and this line tripping is not a library that grew. It is a challenge that got',
+  'more expensive than an index entry, or an import that dragged weight from a lazy route into the',
+  'entry. Measure which, rather than editing a constant: `scripts/budgets.test.ts` pins them, so',
+  'raising one means editing a test that records a measurement -- which is the friction it is for.',
   '',
-  'Do not read this number as the laziness check. A single challenge module that stopped being lazy',
-  'costs between 2,178 B and 9,224 B and fits inside the headroom either way -- measured, with the',
-  'most expensive one landing at 379,724 B of 380,000. `assertChallengesAreLazy` is what sees that,',
+  'The two split routes are still literals, and for those a re-baseline is the honest answer to',
+  'ordinary growth: roughly every 32 challenges on /category/:categoryId and every 48 on',
+  '/challenge/:slug. Deriving them the same way is the better fix and needs their floors measured.',
+  '',
+  'Do not read any of these numbers as the laziness check. A single challenge module that stopped',
+  'being lazy costs between 2,178 B and 9,224 B and fits inside the slack either way -- measured,',
+  'with the most expensive one landing at 379,724 B. `assertChallengesAreLazy` is what sees that,',
   'and AGENTS.md §10 describes the shape it is holding.',
   '',
   'For anything else, measure before changing a number: AGENTS.md §7 has the method, and this check is',

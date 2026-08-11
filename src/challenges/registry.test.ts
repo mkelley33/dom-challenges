@@ -56,6 +56,24 @@ describe('the real registry', () => {
     expect(validateRegistry(challengeIndex)).toEqual([]);
   });
 
+  it('has exactly one entry for every challenge module on disk', () => {
+    // `/`'s byte budget is derived from a count of challenge *files* (`scripts/budgets.ts`), for
+    // the plain reason that a Node build script cannot import this index. That substitution is
+    // only legitimate while the two counts are equal, and this is what holds them equal from the
+    // source side -- `assertChallengesAreLazy` holds the same line from the build side, but only
+    // once a build has run.
+    //
+    // The filter duplicates the build script's, which AGENTS.md §8 permits exactly when both
+    // directions of divergence fail loudly: a file one of them counts and the other does not shows
+    // up here as a mismatch either way round.
+    const modules = Object.keys(import.meta.glob('./*/*.ts')).filter(
+      (path) => !path.endsWith('/index.ts') && !path.endsWith('/support.ts') && !path.endsWith('.test.ts'),
+    );
+
+    expect(modules.length).toBeGreaterThan(0);
+    expect(modules.length).toBe(challengeIndex.length);
+  });
+
   it('looks up a registered challenge by slug', () => {
     expect(entryBySlug('query-basics')?.id).toBe('selection-query-basics');
   });
