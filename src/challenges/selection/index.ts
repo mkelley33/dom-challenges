@@ -9,6 +9,7 @@ import { liveVsStatic } from './liveVsStatic';
 import { queryAll } from './queryAll';
 import { queryBasics } from './queryBasics';
 import { scopedQuery } from './scopedQuery';
+import { shadowBoundary } from './shadowBoundary';
 import { siblingTraversal } from './siblingTraversal';
 import { templateContent } from './templateContent';
 import { treeWalker } from './treeWalker';
@@ -26,4 +27,5 @@ export const selectionChallenges: Challenge[] = [
   containsAndPosition,
   treeWalker,
   templateContent,
+  shadowBoundary,
 ];
