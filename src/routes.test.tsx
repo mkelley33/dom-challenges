@@ -84,6 +84,32 @@ describe('routing', () => {
     expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
   });
 
+  it('keeps the shell on screen while the split category route loads', async () => {
+    // Same cold-load reproduction as the challenge route above, for the same reason: the category
+    // route carries the filter bar, whose select and switch drag Base UI's popup machinery and the
+    // lucide icon set behind them. Statically imported that is ~162 kB every visitor downloads
+    // before they have chosen a category -- and the dashboard, which is what they actually land on,
+    // uses none of it.
+    vi.resetModules();
+    const { routeDefinitions: coldRoutes } = await import('./routes');
+    const router = createMemoryRouter(coldRoutes, { initialEntries: ['/category/selection'] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    // Before any `await`, so a statically imported route -- which resolves synchronously and would
+    // have its heading on screen right here -- cannot pass.
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /dom challenges/i })).toBeInTheDocument();
+
+    expect(await screen.findByRole('heading', { name: /selection & traversal/i })).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+  });
+
   it('renders a not-found page for an unknown slug', async () => {
     renderAt('/challenge/does-not-exist');
     expect(await screen.findByText(/couldn't find that challenge/i)).toBeInTheDocument();
