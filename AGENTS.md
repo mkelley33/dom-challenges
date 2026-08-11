@@ -157,10 +157,16 @@ JavaScript only decides the parts CSS cannot express.
 
 **Use `inert` on the parked column, not `aria-hidden`.** `aria-hidden` over a live `<iframe>` whose content renders
 real buttons and links leaves those controls in the sequential focus order — a phone learner tabbing past Clear loses
-focus 200vw off-screen. `inert` removes them, and its inertness propagates into a nested navigable. Verified in Chrome
-with real Tab keypresses: the walk was `before-A → before-B → after-C → before-A`, and the **wrap after three stops**
-is the discriminator — it proves both parked stops were removed from the order rather than focus landing somewhere
-invisible. `iframe.focus()` from the parent is a no-op under an inert ancestor.
+focus 200vw off-screen. `inert` removes them, and its inertness propagates into a nested navigable. `iframe.focus()`
+from the parent is a no-op under an inert ancestor. Verified in Chrome with real Tab keypresses.
+
+**The evidence is the wrap, not a stop count.** Tab from the last focusable control before the parked column and keep
+going: the walk must reach the first control after it, and must eventually come back round to where it started,
+without ever landing inside the parked column. Wrapping having visited only what is outside is what distinguishes
+"those stops were removed from the order" from "focus went somewhere invisible" — the second is exactly the failure
+being ruled out, and it is silent. This was originally recorded as a literal three-stop sequence, which only
+reproduces against the precise set of focusable controls the page had on the day; re-derive the walk instead, at the
+width where the column is actually parked.
 
 - **Do not add `tabindex="-1"` to the preview iframe.** `createIframeHost` builds the frame imperatively, so a static
   `-1` would apply on desktop too and cost the _visible_ preview its keyboard reachability. In an app that teaches the

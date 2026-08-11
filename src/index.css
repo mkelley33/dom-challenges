@@ -134,8 +134,8 @@
  * names they both define -- --color-muted and --color-accent -- resolve to our values here,
  * not shadcn's (its @theme inline block maps --color-muted to a near-white --muted, and
  * --color-accent to a near-white --accent; ours are the load-bearing brand tokens the shell
- * and later tasks read via `text-muted`, `bg-accent`, etc.). See task-10-report.md for the
- * verified collision and why this ordering -- not a rename -- is the fix.
+ * and later tasks read via `text-muted`, `bg-accent`, etc.). See AGENTS.md §6 for the verified
+ * collision and why this ordering -- not a rename -- is the fix.
  */
 @theme {
   --color-surface: oklch(99% 0.002 260);

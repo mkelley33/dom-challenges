@@ -4244,10 +4244,6 @@ git commit -m "docs: add readme license and project instruction files"
 
 ---
 
-## Phase 1 Done When
-
----
-
 ### Task 20: Wire the desktop pane resizer
 
 **ADDED after Task 19.** Spec §8 requires "three resizable panes: prompt, editor, results. Pane
@@ -4286,6 +4282,8 @@ Requirements:
 Commit separately from any other work.
 
 ---
+
+## Phase 1 Done When
 
 - `pnpm typecheck && pnpm lint && pnpm test` is green.
 - `pnpm dev` serves an app where all 13 Selection & Traversal challenges can be solved, cleared, resubmitted, and revealed.
