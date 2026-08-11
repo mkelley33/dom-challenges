@@ -40,6 +40,16 @@ export const attributesEntries: ChallengeEntry[] = [
     load: () => import('./emptyOrAbsent').then((module) => module.emptyOrAbsent),
   },
   {
+    id: 'attributes-property-not-attribute',
+    slug: 'property-not-attribute',
+    title: 'The selection the stylesheet cannot see',
+    category: 'attributes',
+    difficulty: 'novice',
+    concepts: ['setAttribute', 'hasAttribute', 'data-*', 'expando properties', 'cloneNode'],
+    relatedIds: ['attributes-empty-or-absent', 'selection-attribute-selectors'],
+    load: () => import('./propertyNotAttribute').then((module) => module.propertyNotAttribute),
+  },
+  {
     id: 'attributes-dirty-value',
     slug: 'dirty-value',
     title: 'The value on screen and the value in the markup',
