@@ -40,7 +40,7 @@ export function ClearButton({ challengeId, onCleared }: ClearButtonProps) {
   const [failed, setFailed] = useState(false);
   const clearDraft = useEditorStore((state) => state.clearDraft);
   const readStoredProgress = useStoredProgress(challengeId);
-  const { mutate: clearProgress } = useClearProgress();
+  const { mutateAsync: clearProgress } = useClearProgress();
 
   useEffect(() => {
     // Warmed on mount so the boundary below is a formality by the time a learner has read the copy
@@ -68,23 +68,30 @@ export function ClearButton({ challengeId, onCleared }: ClearButtonProps) {
       try {
         const stored = await readStoredProgress();
         if (stored === null) {
-          // Nothing is cleared at all, not even the draft: a half-clear would take the learner's
-          // code and leave the record that says they solved it. Reported rather than swallowed --
-          // they confirmed a destructive action and are owed an answer either way.
+          // Nothing is cleared at all, not even the draft. Reported rather than swallowed -- they
+          // confirmed a destructive action and are owed an answer either way.
           setFailed(true);
           return;
         }
 
-        clearDraft(challengeId);
         // No row to delete, which is not a failure: the placeholder's `id` is the challenge id, so
         // a DELETE for it would 404 on a record that was never there.
         if (!isUnrecorded(stored)) {
-          clearProgress(stored.id, {
-            onError: () => {
-              setFailed(true);
-            },
-          });
+          try {
+            // `mutateAsync`, not `mutate`: nothing local is cleared until the row is actually gone.
+            // Fire-and-forget would clear the draft optimistically, and a rejected DELETE would then
+            // roll the record back into place while the learner's code stayed deleted -- the exact
+            // half-clear the branch above refuses to make, keeping the unrecoverable half. Waiting
+            // costs no new affordance: the flow already awaits the read, behind the same in-flight
+            // state, and on success the learner sees the same order either way.
+            await clearProgress(stored.id);
+          } catch {
+            setFailed(true);
+            return;
+          }
         }
+
+        clearDraft(challengeId);
         onCleared();
       } finally {
         setIsClearing(false);

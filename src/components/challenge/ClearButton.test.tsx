@@ -9,19 +9,17 @@ import type { ProgressRecord } from '@/types/progress';
 
 import { ClearButton } from './ClearButton';
 
-type ClearOptions = { onError?: (error: Error) => void };
-
 const clearDraft = vi.hoisted(() => vi.fn<(challengeId: string) => void>());
 const readStoredProgress = vi.hoisted(() => vi.fn<() => Promise<ProgressRecord | null>>());
 const useStoredProgress = vi.hoisted(() => vi.fn<(challengeId: string) => () => Promise<ProgressRecord | null>>());
-const clearProgress = vi.hoisted(() => vi.fn<(recordId: string, options?: ClearOptions) => void>());
+const clearProgress = vi.hoisted(() => vi.fn<(recordId: string) => Promise<unknown>>());
 
 // The real module minus its two hooks: `emptyProgress` and the placeholder-recognising predicate
 // behind it stay real, so the "no row to delete" tests below run against the same values
 // `findChallengeProgress` actually synthesises rather than a hand-made lookalike.
 vi.mock('@/hooks/useProgress', async (importOriginal) => {
   const actual = await importOriginal<typeof ProgressHooks>();
-  return { ...actual, useStoredProgress, useClearProgress: () => ({ mutate: clearProgress }) };
+  return { ...actual, useStoredProgress, useClearProgress: () => ({ mutateAsync: clearProgress }) };
 });
 
 // Mocked rather than driven for real: this file is about what the button orchestrates, and a spy
@@ -83,6 +81,7 @@ function firstCallOrder(fn: Mock): number {
 beforeEach(() => {
   useStoredProgress.mockReturnValue(readStoredProgress);
   readStoredProgress.mockResolvedValue(storedRecord());
+  clearProgress.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -113,7 +112,7 @@ describe('ClearButton', () => {
     expect(onCleared).not.toHaveBeenCalled();
   });
 
-  it('clears the draft, deletes the stored row and hands back to the caller, in that order', async () => {
+  it('deletes the stored row first, then clears the draft and hands back to the caller', async () => {
     const user = userEvent.setup();
     const { onCleared } = renderClearButton();
 
@@ -130,10 +129,11 @@ describe('ClearButton', () => {
     // mutation rolls back, and the learner is left looking at an unchanged page.
     expect(clearProgress.mock.calls[0]?.[0]).toBe('server-assigned-id');
     expect(clearProgress.mock.calls[0]?.[0]).not.toBe(CHALLENGE_ID);
-    // Order matters to the tests below as much as to the flow: they wait on `onCleared` and then
-    // assert a delete did *not* happen, which is only a guarantee while the delete comes first.
-    expect(firstCallOrder(clearDraft)).toBeLessThan(firstCallOrder(clearProgress));
-    expect(firstCallOrder(clearProgress)).toBeLessThan(firstCallOrder(onCleared));
+    // The delete leads, and the local resets follow only once it has landed -- see the failing-delete
+    // test below for what that ordering buys. `onCleared` still runs last, which is what lets the
+    // tests below wait on it and then assert a delete did *not* happen.
+    expect(firstCallOrder(clearProgress)).toBeLessThan(firstCallOrder(clearDraft));
+    expect(firstCallOrder(clearDraft)).toBeLessThan(firstCallOrder(onCleared));
   });
 
   it('dismisses without clearing anything and returns focus to the trigger', async () => {
@@ -208,18 +208,20 @@ describe('ClearButton', () => {
     expect(onCleared).not.toHaveBeenCalled();
   });
 
-  it('reports a failure when the delete itself fails', async () => {
+  it('leaves the draft and the result alone when the delete fails, and says so', async () => {
     const user = userEvent.setup();
-    clearProgress.mockImplementation((_recordId, options) => {
-      options?.onError?.(new Error('network down'));
-    });
-    renderClearButton();
+    clearProgress.mockRejectedValue(new Error('network down'));
+    const { onCleared } = renderClearButton();
 
     await confirmClear(user);
 
-    // Otherwise the mutation rolls its optimistic removal back and the record simply reappears,
-    // with nothing on screen to say the clear the learner confirmed did not happen.
+    // The mutation rolls its optimistic removal back, so the record comes back. Anything cleared
+    // before the delete landed would stay cleared -- and the draft is the half that cannot be
+    // recovered. That is the state the unreadable-record branch above refuses to create, so this
+    // branch cannot be allowed to create it either.
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not be cleared/i);
+    expect(clearDraft).not.toHaveBeenCalled();
+    expect(onCleared).not.toHaveBeenCalled();
   });
 
   it('cannot be set off a second time while the first clear is still in flight, and keeps focus', async () => {
@@ -249,11 +251,12 @@ describe('ClearButton', () => {
     // close and is left with a button that still looks live and does nothing.
     expect(clearButton()).toHaveClass('aria-disabled:opacity-50', 'aria-disabled:pointer-events-none');
 
-    // Focusable, but genuinely inert: a second confirm would delete a row the first one is already
-    // deleting, and the second DELETE 404s and rolls the cache back over the first.
+    // Focusable, but genuinely inert: the in-flight state spans the whole clear -- the read and the
+    // delete behind it -- so a second confirm cannot overlap the first at all. The absent dialog is
+    // the assertion; a "no delete yet" check here would be vacuous, since the read it waits on has
+    // not resolved and no implementation could have got that far.
     await user.click(clearButton());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(clearProgress).not.toHaveBeenCalled();
 
     releaseRead(storedRecord());
 

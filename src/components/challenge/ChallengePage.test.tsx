@@ -132,7 +132,12 @@ const NOT_YET_SETTLED = (): void => {};
  * `settleProgress()` is called -- which is the state a cold deep-link to `/challenge/:slug` is in
  * for as long as that request is in flight.
  */
-function stubProgressApi(stored: ProgressRecord[]) {
+interface ProgressApiOptions {
+  /** Answers every DELETE with this status instead of removing the row. */
+  deleteFailsWith?: number;
+}
+
+function stubProgressApi(stored: ProgressRecord[], options: ProgressApiOptions = {}) {
   const calls: RecordedCall[] = [];
   const rows = [...stored];
   let release = NOT_YET_SETTLED;
@@ -157,6 +162,7 @@ function stubProgressApi(stored: ProgressRecord[]) {
       // answered every delete with 200 and kept serving the row would report success for a delete
       // that removed nothing, and the refetch after it would hand the record straight back.
       if (method === 'DELETE') {
+        if (options.deleteFailsWith !== undefined) return new Response('{}', { status: options.deleteFailsWith });
         const index = rows.findIndex((row) => url.endsWith(`/progress/${row.id}`));
         if (index === -1) return new Response('{}', { status: 404 });
         rows.splice(index, 1);
@@ -456,6 +462,36 @@ describe('ChallengePage', () => {
       expect(rowDeletes(calls)).toHaveLength(1);
     });
     expect(rowDeletes(calls)[0]?.url).toContain(`/progress/${STUCK.id}`);
+  });
+
+  it('keeps the draft and the result when the delete fails, and says the clear did not happen', async () => {
+    const user = userEvent.setup();
+    const solution = first.solutions[0];
+    expect(solution).toBeDefined();
+    useEditorStore.setState({ drafts: { [first.id]: solution!.code } });
+    const { calls, settleProgress } = stubProgressApi([STUCK], { deleteFailsWith: 500 });
+    settleProgress();
+
+    renderChallengePage(first.slug);
+    await user.click(await screen.findByRole('button', { name: /run tests/i }));
+
+    const total = String(first.tests.length);
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(`${total} of ${total} tests passing`);
+    });
+
+    await confirmClear(user);
+
+    // The alert is the whole outcome, and it is what proves the flow reached its answer -- the
+    // delete had to be issued and rejected before this can be on screen.
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be cleared/i);
+    expect(rowDeletes(calls)).toHaveLength(1);
+    // Nothing else moved. `useClearProgress` rolls its optimistic removal back on failure, so the
+    // record returns -- and a flow that had already cleared the draft would leave the learner with
+    // their progress intact and their code gone, which is the half that cannot be recovered.
+    expect(await editor()).toHaveValue(solution!.code);
+    expect(draftFor(first)).toBe(solution!.code);
+    expect(screen.getByRole('status')).toHaveTextContent(`${total} of ${total} tests passing`);
   });
 
   it('deletes the row the server assigned even when the progress read is still in flight', async () => {
