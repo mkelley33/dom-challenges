@@ -166,6 +166,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./replaceInPlace').then((module) => module.replaceInPlace),
   },
   {
+    id: 'creation-table-context',
+    slug: 'table-context',
+    title: 'The row a <div> throws away',
+    category: 'creation',
+    difficulty: 'advanced',
+    concepts: ['innerHTML', 'fragment parsing', 'context element', 'template', 'createElement'],
+    relatedIds: ['creation-inner-html-cost', 'creation-template-rows'],
+    load: () => import('./tableContext').then((module) => module.tableContext),
+  },
+  {
     id: 'creation-remove-while-iterating',
     slug: 'remove-while-iterating',
     title: 'The rows a live collection lets you skip',
