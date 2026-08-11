@@ -101,12 +101,21 @@ export const detachAndReattach: ChallengeContent = {
       },
     },
     {
-      name: 'the rows that stay keep their order',
+      name: 'the rows that stay are the same rows, in the same order',
       run: ({ doc, fn, expect }) => {
         const list = requireElement(doc, 'list');
+        const first = requireElement(doc, 'r1');
+        const third = requireElement(doc, 'r3');
         fn<Take>('take')(list, 'r2');
 
         expect([...list.children].map((row) => row.id)).toEqual(['r1', 'r3']);
+        // Ids are not identity. Rebuilding the list from `outerHTML` and leaving the wanted row out
+        // detaches it -- so every assertion about the *returned* node still holds, including the
+        // listener round trip -- while silently replacing `r1` and `r3` with parser-built copies
+        // that carry none of theirs. A challenge whose thesis is "removal does not destroy" cannot
+        // accept an answer that destroys the other two.
+        expect(first.parentElement).toBe(list);
+        expect(third.parentElement).toBe(list);
       },
     },
   ],
