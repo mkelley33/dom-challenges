@@ -54,7 +54,9 @@ export function createEventHelpers(win: Window & typeof globalThis): EventHelper
       target.dispatchEvent(new win.Event('input', { bubbles: true }));
     },
     keydown(target, key, init) {
-      target.dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, key, ...init }));
+      // `key` last: `init` is there to add the modifiers a challenge needs, not to replace the
+      // helper's own argument. Spread the other way round and a stale `init.key` silently wins.
+      target.dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init, key }));
     },
     submit(form) {
       form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));

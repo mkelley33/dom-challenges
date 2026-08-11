@@ -125,6 +125,28 @@ describe('createEventHelpers', () => {
     expect(keys).toEqual(['Escape']);
   });
 
+  it('lets the key argument win over a key smuggled in through init', () => {
+    document.body.innerHTML = '<div id="box" tabindex="0"></div>';
+    const box = document.getElementById('box');
+    if (!box) throw new Error('fixture missing');
+
+    const events: KeyboardEvent[] = [];
+    box.addEventListener('keydown', (event) => {
+      events.push(event);
+    });
+
+    // `init` carries the modifiers a challenge wants -- Shift+Tab, Ctrl+Z -- so it is spread over
+    // the defaults on purpose. But the key is the helper's own argument, and a caller who reuses an
+    // init object between two keys would otherwise get the same key twice with nothing to see: the
+    // event fires, the listener runs, only the wrong key arrives. The Events category is authored
+    // against this helper.
+    createEventHelpers(window).keydown(box, 'Escape', { key: 'Enter', shiftKey: true });
+
+    expect(events.map((event) => event.key)).toEqual(['Escape']);
+    // Paired so that "init is ignored entirely" cannot pass as "the argument wins".
+    expect(events.map((event) => event.shiftKey)).toEqual([true]);
+  });
+
   it('fires a cancelable submit event', () => {
     document.body.innerHTML = '<form id="f"><button type="submit">ok</button></form>';
     const form = document.getElementById('f');
