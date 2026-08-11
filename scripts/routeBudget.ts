@@ -171,8 +171,11 @@ for (const { route, lazyKey, maxBytes } of routeBudgets()) {
   stylesheetBytes = Math.max(stylesheetBytes, totalBytes(closure.stylesheets));
 
   const share = Math.round((bytes / maxBytes) * 100);
+  // The percentage alone became misleading once all three budgets were derived: they now leave the
+  // same absolute headroom, so the largest route reads as the closest to trouble purely because its
+  // slack is a smaller fraction of it. The remaining bytes are the comparable figure.
   lines.push(
-    `  ${route.padEnd(22)} ${format(bytes).padStart(9)} B of ${format(maxBytes).padStart(9)} B  ${String(share).padStart(3)}%  (${String(closure.scripts.size)} files)`,
+    `  ${route.padEnd(22)} ${format(bytes).padStart(9)} B of ${format(maxBytes).padStart(9)} B  ${String(share).padStart(3)}%  ${format(maxBytes - bytes).padStart(8)} B left  (${String(closure.scripts.size)} files)`,
   );
   if (bytes > maxBytes) {
     failures.push(`${route} is ${format(bytes - maxBytes)} B over its ${format(maxBytes)} B budget`);
@@ -193,18 +196,17 @@ failures.push(...assertChallengesAreLazy(manifest, eagerScripts));
 // the following line forbids without saying why. Naming what actually moves the number is what
 // makes refusing the obvious fix reasonable rather than merely prohibited.
 const OVER_BUDGET_GUIDANCE = [
-  "`/`'s budget is derived rather than committed: a measured floor, 414 B of ceiling for every",
-  'registered challenge, and a fixed 9,500 B of slack (`scripts/budgets.ts`). Authoring is therefore',
-  'already paid for, and this line tripping is not a library that grew. It is a challenge that got',
-  'more expensive than an index entry, or an import that dragged weight from a lazy route into the',
-  'entry. Measure which, rather than editing a constant: `scripts/budgets.test.ts` pins them, so',
+  'Every budget here is derived rather than committed: a measured floor, 414 B of ceiling for every',
+  'registered challenge, a fixed 9,500 B of slack, and for the two split routes a measured constant',
+  'for the chunks they fetch and `/` does not (`scripts/budgets.ts`). Authoring is therefore already',
+  'paid for on all three, and this line tripping is not a library that grew. It is a challenge that',
+  'got more expensive than an index entry, or an import that dragged weight from a lazy route into',
+  'the entry. Measure which, rather than editing a constant: `scripts/budgets.test.ts` pins them, so',
   'raising one means editing a test that records a measurement -- which is the friction it is for.',
   '',
-  'The two split routes are literals, pinned by that same test, and for those a re-baseline is the',
-  'honest answer to ordinary growth: about every 31 challenges on /category/:categoryId and every 46',
-  "on /challenge/:slug. Counted at their own measured 427.8 B and 438.2 B, not `/`'s 414 B -- a",
-  'number that exists to warn you early takes the conservative coefficient. Deriving them the same',
-  'way is the better fix and needs their floors measured first.',
+  'A split route tripping on its own while / stays green localises the growth for you: the bytes are',
+  "in that route's own chunks, not in the shell. ChallengeList and its icons for /category/:categoryId;",
+  'ChallengePage, Monaco, the runner and the markdown pipeline for /challenge/:slug.',
   '',
   'Do not read any of these numbers as the laziness check. A single challenge module that stopped',
   'being lazy costs between 2,178 B and 9,224 B and fits inside the slack either way -- measured,',

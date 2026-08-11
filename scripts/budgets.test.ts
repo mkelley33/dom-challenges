@@ -44,14 +44,24 @@ function budgetFor(route: string, rootDir?: string): number {
 }
 
 describe('routeBudgets', () => {
-  it("raises `/`'s budget by one index entry per challenge", () => {
-    const three = budgetFor('/', repoWithChallenges({ selection: challengeFiles(3) }));
-    const four = budgetFor('/', repoWithChallenges({ selection: challengeFiles(4) }));
+  it('raises every route budget by one index entry per challenge', () => {
+    const three = repoWithChallenges({ selection: challengeFiles(3) });
+    const four = repoWithChallenges({ selection: challengeFiles(4) });
 
-    // The whole point of deriving this number: authoring a challenge costs `/` 414 B and buys back
+    // The whole point of deriving these numbers: authoring a challenge costs 414 B and buys back
     // exactly 414 B of ceiling, so ordinary growth never needs a re-baseline -- and a re-baseline,
     // which is indistinguishable from raising the number to bury a regression, stops being routine.
-    expect(four - three).toBe(414);
+    //
+    // All three move by the *same* 414 B because the whole index compiles into one chunk and that
+    // chunk is in all three closures; measured across 1 to 104 challenges, no other chunk in any
+    // route's closure moves by a byte when a challenge is registered. Asserted as one object rather
+    // than in a loop so a failure names the route that broke, and so a route disappearing from the
+    // list fails here rather than silently going unbudgeted.
+    const deltas = Object.fromEntries(
+      routeBudgets(four).map(({ route, maxBytes }) => [route, maxBytes - budgetFor(route, three)]),
+    );
+
+    expect(deltas).toEqual({ '/': 414, '/category/:categoryId': 414, '/challenge/:slug': 414 });
   });
 
   it("puts `/`'s budget where the committed literal was, at the challenge count that was measured", () => {
@@ -84,27 +94,48 @@ describe('routeBudgets', () => {
     expect(split).toBe(together);
   });
 
-  it('holds the two split routes at their measured literals, whatever the challenge count', () => {
-    const few = repoWithChallenges({ selection: challengeFiles(1) });
-    const many = repoWithChallenges({ selection: challengeFiles(40) });
+  it('holds each split route a fixed measured distance above `/`, at every challenge count', () => {
+    // The measurement the derivation rests on, and the one that overturned the 427.8 B and 438.2 B
+    // per-challenge coefficients the split routes were once thought to pay. Those were the 0 -> 1
+    // structural step -- 176 B and 311 B, one-time -- divided across thirteen challenges. Above
+    // zero, each split route's extra chunks are byte-identical whatever the count:
+    //
+    //     challenges     1       2      13      24      54     104
+    //     cat  - `/`   166,155 ... unchanged at every one of eleven measured counts
+    //     chal - `/`   415,218 ... likewise
+    //
+    // Three counts here rather than two: one just past the step, today's, and the ~104 this project
+    // targets, which is the extrapolation the derivation actually has to survive. The count is put
+    // in the compared object so a failure names which one drifted rather than only the byte figure.
+    for (const count of [1, 24, 104]) {
+      const root = repoWithChallenges({ selection: challengeFiles(count) });
+      const home = budgetFor('/', root);
 
-    // Two things at once, and both are load-bearing.
+      const offsets = {
+        count,
+        '/category/:categoryId': budgetFor('/category/:categoryId', root) - home,
+        '/challenge/:slug': budgetFor('/challenge/:slug', root) - home,
+      };
+
+      expect(offsets).toEqual({ count, '/category/:categoryId': 166_155, '/challenge/:slug': 415_218 });
+    }
+  });
+
+  it('puts the split-route ceilings where a build of the tree as it stands can be checked against them', () => {
+    const today = repoWithChallenges({ selection: challengeFiles(24) });
+
+    // `pnpm build` reports 374,334 B, 540,489 B and 789,552 B for the 24 challenges in the tree.
+    // These ceilings sit a uniform 10,217 B above each of those -- the fixed 9,500 B of slack plus
+    // the 717 B by which a rounded 414 B outruns what those 24 entries actually cost. Written out
+    // rather than recomputed from the constants, because an assertion that rebuilt the formula
+    // would agree with any formula.
     //
-    // That these do not move with the challenge count is the deliberate asymmetry with `/`: their
-    // closures contain the entry chunk, so they really do pay per challenge, but at 427.8 B and
-    // 438.2 B rather than `/`'s clean 414 B. The excess is re-chunking rather than a mechanism, and
-    // deriving a ceiling from a coefficient nobody can explain would be the unchecked number this
-    // file exists to remove, wearing a formula.
-    //
-    // That they are *these* numbers is the friction `/` gets from being derived, extended to the
-    // routes that could not have it. Until this line existed, a silent 550,000 -> 600,000 passed
-    // every gate in the repository -- which is the whole defect, still open on two routes of three.
-    // The values are written out here rather than imported, or the assertion would be the constant
-    // compared with itself.
-    expect(budgetFor('/category/:categoryId', few)).toBe(550_000);
-    expect(budgetFor('/category/:categoryId', many)).toBe(550_000);
-    expect(budgetFor('/challenge/:slug', few)).toBe(805_000);
-    expect(budgetFor('/challenge/:slug', many)).toBe(805_000);
+    // The literals these replace were 550,000 B and 805,000 B: round numbers, not measurements, and
+    // unequally generous (9,511 B and 15,448 B of headroom). Deriving lowers `/challenge/:slug` by
+    // 5,231 B and raises `/category/:categoryId` by 706 B -- not extra room granted to that route,
+    // but `/`'s own rounding, now applied to all three alike.
+    expect(budgetFor('/category/:categoryId', today)).toBe(550_706);
+    expect(budgetFor('/challenge/:slug', today)).toBe(799_769);
   });
 });
 

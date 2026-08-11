@@ -369,19 +369,26 @@ measurement, so answer it by measuring: raising the number is the last resort, n
 when a route's `lazy()` module stops being a chunk of its own, because that is the regression whose cost lands on a
 _different_ route's line — and, for the same reason, when a challenge module stops being one (§10).
 
-**`/`'s budget is derived from the challenge count; the other two are literals.** A challenge costs `/` 414 B of index
-entry and now buys back 414 B of ceiling, so ordinary authoring never needs a re-baseline — which matters because a
-routine re-baseline is indistinguishable from someone raising a number to bury a regression. The floor (365,115 B, `/`
-with the one populated category emptied) and the slack (a fixed 9,500 B, for growth that is not challenges) are
-measured constants pinned by `scripts/budgets.test.ts`, so moving one means editing a test that records a measurement.
-`/category/:categoryId` and `/challenge/:slug` pay per challenge too — their closures contain the entry chunk — but at
-a measured 427.8 B and 438.2 B rather than `/`'s clean 414 B, the excess being re-chunking rather than a mechanism.
-That is why they are still literals: a ceiling derived from a coefficient nobody can explain is the unchecked number
-this arrangement exists to remove, wearing a formula. They are instead **pinned by value** in
-`scripts/budgets.test.ts`, so neither can be re-baselined without editing a test either. Their headroom is roughly 31
-and 46 challenges — counted at their own coefficients, not `/`'s, because a number whose job is to be an early warning
-takes the conservative one. Derive them once their floors have been measured and reproduced, before the first full
-category is authored rather than after one of them goes red.
+**All three budgets are derived from the challenge count. None is a literal.** A challenge costs every route 414 B of
+index entry and buys back 414 B of ceiling on every route, so ordinary authoring never needs a re-baseline — which
+matters because a routine re-baseline is indistinguishable from someone raising a number to bury a regression. The
+shared floor (365,115 B, `/` with the one populated category emptied), the slack (a fixed 9,500 B per route, for
+growth that is not challenges) and the two split routes' extra chunks (166,155 B and 415,218 B) are measured constants
+pinned by `scripts/budgets.test.ts`, so moving one means editing a test that records a measurement.
+
+**One coefficient covers three routes because the build gives it one.** The whole challenge index compiles into a
+single chunk that every route's closure already contains, so registering a challenge moves that one chunk and no other
+— verified file by file at 1, 2, 11, 13, 14, 17, 20, 24, 34, 54 and 104 challenges, with each split route sitting an
+_exactly_ constant 166,155 B and 415,218 B above `/` at all eleven counts. The 427.8 B and 438.2 B those routes were
+previously thought to pay per challenge were an artefact of the baseline: a **zero**-challenge build has no `import()`
+in any category index, so it has no preload helper and no split-chunk runtime and is structurally a different build.
+Crossing 0 → 1 costs those routes 176 B and 311 B **once**, and 414.2 + 176/13 = 427.7, 414.2 + 311/13 = 438.1. It was
+a one-time re-chunking cost divided by thirteen, not a per-challenge term, and the library does not return to empty.
+For the same reason, do not take a zero-challenge build as this line's intercept when re-measuring the floor.
+
+Deriving moved `/challenge/:slug` down 5,231 B and `/category/:categoryId` up 706 B from the round literals they
+replaced; all three now leave the same 10,217 B of headroom, so `pnpm build` prints remaining bytes as well as a
+percentage — the percentage alone made the largest route look nearest the edge when all three are equidistant.
 
 **`chunkSizeWarningLimit` is raised to 7500 kB, and is not a budget.** Every build warned before that, always about
 the same Monaco workers — chunks no route references and no learner downloads until the editor opens — and a build
@@ -507,15 +514,19 @@ JavaScript on `/` rather than ~1.05 MB.
 
 **Two checks hold this, and they fail for different reasons.** `pnpm build` runs both:
 
-- `scripts/routeBudget.ts` budgets each route's eager bytes against `scripts/budgets.ts`. `/`'s ceiling is the measured
-  365,115 B floor, plus 414 B for every challenge module on disk, plus a fixed 9,500 B of slack — 379,997 B for the 13
-  challenges here today, against a measured 370,500 B. Authoring therefore moves the budget and the bytes by the same
-  414 B and needs no re-baseline; what has to fit in the fixed slack is everything that is _not_ a challenge.
-  **Do not read it as the laziness check** — it cannot see a challenge going eager at all. Measured: statically
-  importing the cheapest module (`queryBasics`) puts `/` at 372,678 B, and the most expensive (`treeWalker`) at
-  379,724 B — under the ceiling either way, and deriving the ceiling does not change that, since a challenge raises it
-  and the entry by the same amount. What this budget does catch is the step change: a dependency dragged out of a lazy
-  route into the entry.
+- `scripts/routeBudget.ts` budgets each route's eager bytes against `scripts/budgets.ts`. Every ceiling is the measured
+  365,115 B shared floor, plus 414 B for every challenge module on disk, plus a fixed 9,500 B of slack, plus that
+  route's own measured chunks (0, 166,155 B, 415,218 B) — 384,551 B, 550,706 B and 799,769 B for the 24 challenges here
+  today, against measured 374,334 B, 540,489 B and 789,552 B. Authoring therefore moves every budget and every route's
+  bytes by the same 414 B and needs no re-baseline; what has to fit in the fixed slack is everything that is _not_ a
+  challenge.
+  **Do not read it as the laziness check** — it cannot see a challenge going eager at all. Re-measured after the
+  derivation: statically importing the cheapest module (`queryBasics`) adds 2,178 B and the most expensive
+  (`treeWalker`) 9,225 B, and **all three routes still pass**, the worst case landing at 100% with 951 B to spare.
+  Deriving the split routes did not change that and could not: a challenge raises every ceiling and every route's bytes
+  by the same amount, so an eager module has only the fixed slack to fit inside on `/challenge/:slug` exactly as it
+  always did on `/`. What this budget does catch is the step change: a dependency dragged out of a lazy route into the
+  entry.
 - `assertChallengesAreLazy` in the same script reads every challenge module off disk and requires each to be its own
   chunk in the build manifest. A module reached only through `import()` is emitted as a chunk under its own source
   path; one that someone statically imported is folded into its importer and disappears from the manifest entirely.
