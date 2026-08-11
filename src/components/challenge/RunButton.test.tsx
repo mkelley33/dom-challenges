@@ -62,6 +62,9 @@ describe('RunButton', () => {
     // an `aria-hidden` icon adds motion without touching the accessible name.
     expect(spinner()).not.toBeNull();
     expect(spinner()).toHaveAttribute('aria-hidden', 'true');
+    // ...and the motion stops for anyone who asked for less of it. The icon stays -- a still
+    // spinner beside a dimmed button still reads as "working" -- so nothing is lost but the spin.
+    expect(spinner()).toHaveClass('animate-spin', 'motion-reduce:animate-none');
   });
 
   it('cannot be set off again while a run is in flight, and keeps focus', async () => {

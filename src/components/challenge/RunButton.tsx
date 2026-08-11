@@ -32,7 +32,7 @@ export interface RunButtonProps {
 export function RunButton({ onRun, isRunning }: RunButtonProps) {
   return (
     <Button onClick={onRun} disabled={isRunning} focusableWhenDisabled size="sm">
-      {isRunning && <LoaderCircleIcon aria-hidden="true" className="animate-spin" />}
+      {isRunning && <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
       Run tests
     </Button>
   );

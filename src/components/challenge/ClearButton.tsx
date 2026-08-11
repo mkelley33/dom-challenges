@@ -119,7 +119,7 @@ export function ClearButton({ challengeId, onCleared }: ClearButtonProps) {
           An `aria-hidden` icon adds motion the learner can see without touching the name, and
           `buttonVariants` sizes a bare <svg> for the current button size. */}
       <Button variant="destructive" size="sm" onClick={handleOpen} disabled={isClearing} focusableWhenDisabled>
-        {isClearing && <LoaderCircleIcon aria-hidden="true" className="animate-spin" />}
+        {isClearing && <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
         Clear solution
       </Button>
 

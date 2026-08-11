@@ -282,6 +282,8 @@ describe('ClearButton', () => {
     // renaming the control -- the whole reason the label stays "Clear solution".
     expect(spinner()).not.toBeNull();
     expect(spinner()).toHaveAttribute('aria-hidden', 'true');
+    // ...and it stops spinning for anyone who asked for less motion, without disappearing.
+    expect(spinner()).toHaveClass('animate-spin', 'motion-reduce:animate-none');
 
     // Focusable, but genuinely inert: the in-flight state spans the whole clear -- the read and the
     // delete behind it -- so a second confirm cannot overlap the first at all. The absent dialog is
