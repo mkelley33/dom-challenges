@@ -82,6 +82,19 @@ const SOLVED_IN_SELECTION = firstIn('selection');
 const SOLVED_IN_EVENTS = firstIn('events');
 const SOLVED_IDS = new Set([SOLVED_IN_SELECTION.id, SOLVED_IN_EVENTS.id]);
 
+/**
+ * A tier one of the fixtures really solves in, so the bar it gates on has a value that must move
+ * off zero.
+ *
+ * Derived from the fixture rather than named, for the reason the fixtures themselves are chosen by
+ * category: which tier the first challenge in a category sits in changes as content is authored --
+ * this was `'intermediate'` until the Events category gained a real, expert challenge and the
+ * fixture stopped landing there. A hardcoded tier does not fail when that happens; it silently
+ * turns the wait below into a no-op, which is exactly the failure the assertion under it exists to
+ * prevent. It fails loudly here only because that assertion was written to catch it.
+ */
+const GATED_TIER: Difficulty = SOLVED_IN_EVENTS.difficulty;
+
 function totalInTier(level: Difficulty): number {
   return challengeIndex.filter((challenge) => challenge.difficulty === level).length;
 }
@@ -230,13 +243,13 @@ describe('Dashboard', () => {
 
     renderDashboard();
 
-    const intermediate = await screen.findByRole('progressbar', { name: 'Intermediate' });
+    const gated = await screen.findByRole('progressbar', { name: DIFFICULTY_LABELS[GATED_TIER] });
     // Gated on the tier's own value: every bar reads 0 until the records land, so asserting the
     // maximum alone would pass against a dashboard that never reads them. That gate needs this
     // tier to hold a solve, which is why the count is pinned before the wait rather than after.
-    expect(solvedInTier('intermediate'), 'the gated tier must hold one of the solved fixtures').toBe(1);
+    expect(solvedInTier(GATED_TIER), 'the gated tier must hold one of the solved fixtures').toBeGreaterThan(0);
     await waitFor(() => {
-      expect(intermediate).toHaveAttribute('aria-valuenow', String(solvedInTier('intermediate')));
+      expect(gated).toHaveAttribute('aria-valuenow', String(solvedInTier(GATED_TIER)));
     });
 
     // Every tier at once, as one table compared against one derived from the registry: each bar
