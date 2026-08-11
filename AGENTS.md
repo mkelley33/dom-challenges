@@ -209,6 +209,20 @@ you measure there.
 - **Never assert a resolved URL.** `a.href` and `img.src` resolve against the document's base, which is
   `https://challenges.local/` here and the **app's current route** in the `about:srcdoc` frame. The
   relative-versus-absolute distinction is fine to teach; the resolved string is not assertable.
+- **Never build an SVG element with `insertAdjacentHTML`, and never write an SVG element's class through
+  `className`.** Both diverge, in opposite directions, and SVG built by script is not one category's problem —
+  Styles, Accessibility, Web APIs and Performance can all reach for it. `svg.insertAdjacentHTML('beforeend',
+'<circle …>')` yields an SVG-namespaced `circle` in Chrome and an `HTMLUnknownElement` named `CIRCLE` here, so a
+  challenge built on it is green in the suite and renders nothing for the learner. `className = 'dot'` on an SVG
+  element is the reverse: here it reflects to the `class` attribute like an HTML element's, while in Chrome
+  `className` is a read-only `SVGAnimatedString`, so the assignment **throws** under the strict-mode code the harness
+  runs (`Cannot set property className of #<SVGElement> which has only a getter`) and no class is set — the suite
+  accepts an answer a browser refuses to run. Use `createElementNS`, `cloneNode`, or `innerHTML` on an element already
+  inside the SVG tree; set classes with `setAttribute('class', …)` or `classList`, both of which agree. Everything
+  else about namespaces matches:
+  `createElement` gives XHTML/`CIRCLE`/`HTMLUnknownElement`, `createElementNS` gives SVG/`circle`/`SVGCircleElement`,
+  parsed markup and `cloneNode` keep the namespace, and a `<template>` holding an `<svg>` wrapper parses its contents
+  as foreign content.
 
 ### Verify host-divergent challenges in a real browser
 
@@ -470,6 +484,18 @@ challenges around it already did; the one that did not is the one that shipped a
 over an empty list expands to no tests at all — so "nothing failed" and "nothing ran" look identical. Pin the counts:
 `content.test.ts` asserts the registry is non-empty and that the result count equals the test count, precisely so those
 two cannot be confused.
+
+**`expect(...).toEqual(...)` never discriminates DOM nodes. Use `toBe`, or compare a projection.** The runner's
+`deepEqual` (`src/runner/expect.ts`) compares own enumerable keys, and a DOM node has none — every property it looks
+like it has lives on a prototype. So `toEqual` is `true` for **any** two nodes: measured, a freshly created `<div>`
+equals an `<li class="a">`, and a text node equals an element. An assertion of the form
+`expect([...list.children]).toEqual(capturedChildren)` therefore passes against a list rebuilt entirely from clones,
+which is exactly the check it was written to prevent. It shipped once, in `creation/table-context`.
+
+Compare node identity with `toBe`, one node at a time — `expect(cell.parentElement).toBe(row)` — or map to something
+`deepEqual` can see, like `.map((el) => el.id)`. Note the projection answers a weaker question: ids and text survive a
+rebuild, so a projection catches _order and content_ and never catches _identity_. When the claim is preservation, it
+has to be `toBe`.
 
 **Duplicated predicates are acceptable only when both divergence directions fail loudly.** `ChallengeList.test.tsx`
 holds a copy of the production `matchesQuery` predicate on that basis — but a change to one needs a matching edit to

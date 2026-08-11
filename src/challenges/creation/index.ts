@@ -47,25 +47,42 @@ import type { ChallengeEntry } from '@/types/challenge';
  * - `insertAdjacentHTML` in all four positions preserves the surrounding text nodes' identity, and
  *   an `innerHTML` rebuild of the same shape does not.
  *
- * **A second divergence, found while authoring `svg-namespace`.** `insertAdjacentHTML` into an
- * `<svg>` element parses as **HTML rather than as foreign content** here: Chrome gives an
- * SVG-namespaced `circle`, happy-dom an `HTMLUnknownElement` named `CIRCLE` that renders nothing. A
- * challenge on that route would be green in the suite and broken for the learner, so nothing here
- * uses or asserts it. Pinned with two controls in `src/test/happyDomGaps.test.ts`. Everything else
- * about namespaces matches: `createElement` gives XHTML/`CIRCLE`/`HTMLUnknownElement`,
+ * **Two more divergences, both inside `svg-namespace`, and they point in opposite directions.** This
+ * is the one challenge in the category that grades differently in the two engines, on two different
+ * answers, and both were run through the challenge itself rather than inferred:
+ *
+ * | answer                            | happy-dom          | Chrome                                |
+ * | --------------------------------- | ------------------ | ------------------------------------- |
+ * | `chart.insertAdjacentHTML(…)`     | fails tests 1 & 2  | **passes all five**                   |
+ * | `dot.className = 'dot'`           | **passes all five**| fails all five, `TypeError` on the assignment |
+ *
+ * `insertAdjacentHTML` into an `<svg>` parses as **HTML rather than as foreign content** here, giving
+ * an `HTMLUnknownElement` named `CIRCLE` that renders nothing, where Chrome gives an SVG-namespaced
+ * `circle`. `className` on an SVG element is a **read-only `SVGAnimatedString`** in Chrome, so the
+ * assignment throws under the strict-mode module code the harness runs and sets no class at all,
+ * where happy-dom reflects it to the `class` attribute like an HTML element's.
+ *
+ * The second is the dangerous direction -- the suite accepting an answer a browser refuses to run --
+ * and it is why this challenge asserts the `class` **attribute** and why both solutions set it with
+ * `setAttribute`. Neither route is used or asserted anywhere. Both are pinned with controls in
+ * `src/test/happyDomGaps.test.ts` and forbidden for every category by AGENTS.md §3, since SVG built
+ * by script is not this category's alone.
+ *
+ * Everything else about namespaces matches: `createElement` gives XHTML/`CIRCLE`/`HTMLUnknownElement`,
  * `createElementNS` gives SVG/`circle`/`SVGCircleElement`, parsed markup and `innerHTML` inside the
- * tree give SVG, `cloneNode` keeps the namespace, and a `<template>` holding an `<svg>` wrapper
- * parses its contents as foreign content.
+ * tree give SVG, `cloneNode` keeps the namespace, a `<template>` holding an `<svg>` wrapper parses
+ * its contents as foreign content, and `setAttribute('class', …)` and `classList` both work.
  *
  * Table context also matches exactly, which is what makes `table-context` authorable: in a `<div>`,
  * `<tr>`, `<td>`, `<th>`, `<tbody>`, `<caption>` and `<col>` are all dropped and their text
  * foster-parented out (`childElementCount` 0), while `<li>` and `<option>` survive; the same markup
  * in a `<template>`, in a `<tbody>`, or in a freshly created `<table>` comes through intact.
  *
- * Three behaviours worth recording because a challenge's prose asserts them and no test does: on an
+ * Two behaviours worth recording because a challenge's prose asserts them and no test does: on an
  * element with no parent, `insertAdjacentHTML('beforebegin', …)` throws `NoModificationAllowedError`
- * while `before()` is a **silent no-op**; and an SVG element's `className` is an `SVGAnimatedString`
- * rather than a string. Measured in Chrome, twice.
+ * while `before()` is a **silent no-op**. Measured in Chrome, twice. (The `className` fact was on
+ * this list and should not have been: `svgNamespace.ts` rests on it in an assertion, and it is now
+ * pinned as the divergence it is.)
  *
  * **Why the category stops at thirteen, one past the expected range.** Ten to twelve was the target,
  * and the thirteenth is here because a review measured two ideas this docblock had excluded by

@@ -444,4 +444,31 @@ describe('APIs present but not faithful', () => {
     expect(chart.querySelector('.viaAdjacent')?.namespaceURI).toBe(XHTML_NAMESPACE);
     expect(chart.querySelector('.viaAdjacent')?.tagName).toBe('CIRCLE');
   });
+
+  it('reflects an SVG element’s className to the class attribute, where a browser does not', async () => {
+    const context = await hostContext('<svg id="chart" viewBox="0 0 10 10"></svg>');
+    const chart = context.document.getElementById('chart');
+    if (!chart) throw new Error('#chart is missing from the fixture');
+
+    const dot = context.document.createElementNS(SVG_NAMESPACE, 'circle');
+    chart.append(dot);
+
+    // The control: this really is a foreign element, so what follows is about `className` on an SVG
+    // element rather than about `createElementNS` having quietly produced an HTML one.
+    expect(dot.namespaceURI).toBe(SVG_NAMESPACE);
+    expect(dot.tagName).toBe('circle');
+
+    // In Chrome `className` on an SVG element is a read-only `SVGAnimatedString`, so this assignment
+    // **throws** under the strict-mode module code the harness runs -- `TypeError: Cannot set
+    // property className of #<SVGElement> which has only a getter` -- and no class is set;
+    // `getAttribute('class')` stays null and `.dot` matches nothing. Measured twice through the
+    // production `createIframeHost` in a foregrounded tab, with an HTML `<div>` as the control in the
+    // same probe, which does reflect. Here it behaves like the `<div>`, which is the direction that
+    // matters: the suite accepts an answer a browser refuses to run at all.
+    // `creation/svgNamespace.ts` asserts the `class` *attribute* for exactly this reason, and
+    // AGENTS.md §3 forbids the property.
+    Reflect.set(dot, 'className', 'dot');
+    expect(dot.getAttribute('class')).toBe('dot');
+    expect(chart.querySelectorAll('.dot')).toHaveLength(1);
+  });
 });
