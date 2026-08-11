@@ -6,6 +6,15 @@ import type { CategoryId, Difficulty } from '@/types/challenge';
 export type MobileTab = 'code' | 'problem' | 'result';
 
 export interface ChallengeFilters {
+  /**
+   * Deliberately unread by the browse UI, and deliberately still here.
+   *
+   * `/category/:categoryId` is already scoped by its route param, and `ChallengeList` filters
+   * within that scope. Applying this on top would let the two disagree -- a stored `events` and a
+   * URL saying `selection` would empty a listing the learner navigated to on purpose, with nothing
+   * on screen explaining why. The field persists a preference the app has no surface for yet; do
+   * not wire it into the category page without also giving the learner a way to see and clear it.
+   */
   category: CategoryId | 'all';
   difficulty: Difficulty | 'all';
   query: string;
