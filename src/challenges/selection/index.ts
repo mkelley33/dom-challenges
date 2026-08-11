@@ -3,6 +3,7 @@ import type { Challenge } from '@/types/challenge';
 import { attributeSelectors } from './attributeSelectors';
 import { childrenVsChildNodes } from './childrenVsChildNodes';
 import { closestRow } from './closestRow';
+import { containsAndPosition } from './containsAndPosition';
 import { firstElementChild } from './firstElementChild';
 import { liveVsStatic } from './liveVsStatic';
 import { queryAll } from './queryAll';
@@ -20,4 +21,5 @@ export const selectionChallenges: Challenge[] = [
   childrenVsChildNodes,
   firstElementChild,
   siblingTraversal,
+  containsAndPosition,
 ];
