@@ -3949,6 +3949,29 @@ Heading "Your progress", an overall shadcn `Progress` bar, and a card per catego
 
 Filter by `query` against title and `concepts`, by `difficulty`, and by `hideSolved` against the progress records. Render an explicit empty state when filters exclude everything — never a blank panel.
 
+**AMENDED — this task must also split the category route, and it must render `byDifficulty`.**
+
+*The split.* `FilterBar`'s controls (Base UI's select and switch machinery, plus lucide icons) cost
+**+161,759 bytes** in the entry chunk, measured by rebuild — and they are only ever used on
+`/category/:categoryId`. Route-level eager bytes for a cold load go 325,296 → 540,291 (+66%)
+without a split and 375,531 with one. Wrap `ChallengeList` in `lazy()` in `src/routes.tsx`, the way
+`ChallengePage` already is; the Suspense boundary on `AppShell`'s `<Outlet />` already exists, so
+this is a handful of lines. Verify by grepping the entry chunk's own static import list and the
+`__vite__mapDeps` preload table — `vite build`'s size listing cannot tell a deferred chunk from a
+preloaded one, and a report in an earlier task was wrong for exactly that reason.
+
+*`byDifficulty`.* Step 4 as originally written renders the overall bar, the per-category cards and
+the revealed count, but nothing renders `byDifficulty` — which this task computes and tests. Data
+that is derived, typed and asserted but never displayed is either dead weight or a missing
+surface; here it is a missing surface, since a learner deciding what to attempt next wants to know
+they have cleared the novice tier and not touched the expert one. Render a per-difficulty
+`solved / total` breakdown on the dashboard, ordered by the `DIFFICULTIES` constant so the tiers
+read in ascending order rather than object-key order.
+
+*`filters.category` stays unused, deliberately.* The category page is scoped by its route param;
+applying a stored category filter on top would let the two disagree with no way for a learner to
+see why. Leave it, and say so in a comment at the field rather than leaving a reader to wonder.
+
 - [ ] **Step 7: Run the tests and verify they pass**
 
 Run: `pnpm vitest run src/lib src/components/browse`
