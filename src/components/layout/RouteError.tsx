@@ -37,13 +37,23 @@ export function RouteError() {
   }, []);
 
   return (
-    <div role="alert" className="flex h-full flex-col items-start gap-3 p-8">
+    <div className="flex h-full flex-col items-start gap-3 p-8">
       <h1 className="text-lg font-semibold">This page could not be loaded</h1>
-      <p className="max-w-prose text-sm text-muted">
-        Part of the app did not finish downloading. Nothing you have saved is affected — reloading usually fixes it, and
-        the rest of the app still works.
-      </p>
-      {detail !== null && <p className="max-w-prose font-mono text-xs break-words text-muted">{detail}</p>}
+      {/* The message alone is the live region, not the page. `role="alert"` here would be assertive
+          and atomic: it interrupts whatever a screen reader is saying, and it reads the whole region
+          as one string -- heading, copy, detail and the button's label together. This page arrives
+          as the result of a navigation the learner just made, where an interruption buys nothing and
+          the heading and the control are better reached as themselves.
+          `<output>` rather than `role="status"` on a div, matching `ResultPanel`: it carries the
+          same implicit polite-live-region role as an element rather than an attribute. It takes
+          phrasing content, which is why the two lines below are spans. */}
+      <output className="flex max-w-prose flex-col gap-3">
+        <span className="text-sm text-muted">
+          Part of the app did not finish downloading. Nothing you have saved is affected — reloading usually fixes it,
+          and the rest of the app still works.
+        </span>
+        {detail !== null && <span className="font-mono text-xs break-words text-muted">{detail}</span>}
+      </output>
       {/* A native <button> wearing `buttonVariants`, rather than the `Button` component. This
           module is reachable from the entry chunk -- it has to be, since it is what renders when a
           chunk fails to arrive -- so everything it can reach is weight every visitor downloads
