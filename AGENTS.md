@@ -237,7 +237,9 @@ chunk from one the route statically imports and preloads via `__vite__mapDeps`. 
 chunk did not grow" prove nothing on their own: a real case had a named chunk shed 110 kB while 64 kB of that was
 re-chunking into files sitting in the same route's preload list, for a real saving of 46 kB. **Resolve the static
 import graph per call site and report the route's total eager bytes** — never sum the `__vite__mapDeps` table whole.
-Any chunk number in this repo's history that was not checked that way should be treated as unverified.
+Any chunk number in this repo's history that was not checked that way should be treated as unverified. In particular,
+**an entry-chunk figure is not a first-paint saving**: Task 13's headline (entry 746.77 → 324.96 kB) is entry-chunk
+only, and that task _created_ a route chunk fetched on the same navigation. Do not cite it as one.
 
 **`pnpm build` measures that for you, and fails on it.** `scripts/routeBudget.ts` runs as the build's last step. It
 reads Vite's build manifest — the same static-import edges the preload helper is generated from, which is why it does
@@ -321,13 +323,26 @@ Two consequences that follow from these and have already been got wrong once eac
 
 **`allChallenges` is eager, and it does not scale.** `Dashboard` imports the whole registry, so every challenge module
 — prompt, `html`, `starterCode`, every solution's explanation and tradeoffs, and the test functions — ships in the
-landing page's static closure. Measured at 13 challenges: ~191 kB of a 452,812 B closure for `/`, i.e. **42%**, at
-~7.2 kB minified each, and almost none of it is rendered by `/`. The plan targets ~103 challenges; at the same rate
-that is roughly +650 kB of eager weight on the first paint of a page that shows only counts and titles.
+landing page's static closure, and almost none of it is rendered by `/`.
+
+Measured by emptying `selectionChallenges` and rebuilding, then reading `pnpm budget`: the 13 challenge modules are
+**87,832 B of `/`'s 452,947 B of eager JavaScript — 19.4%** — or 27,438 B of 144,243 B gzipped. That is **6,756 B raw
+(2,111 B gzipped) each on average**, and the spread is wide: removing one at a time gives 2,424 B for `queryBasics`,
+4,673 B for `firstElementChild`, 9,011 B for `containsAndPosition`, 9,356 B for `treeWalker`. The plan targets ~103
+challenges; at the average rate that is ~696 kB raw of challenge content alone, putting `/` at roughly **1.05 MB raw
+and ~335 kB gzipped** of eager JavaScript for a page that shows only counts and titles.
+
+Two earlier figures for this were wrong, both in the way §7 warns about. "~191 kB, i.e. 42%" was the size of the
+_chunk_ the registry happens to land in (`NotFound-*.js`, 190,968 B today), which also carries everything else rollup
+grouped with it — a chunk size is not a module's cost. Dividing that chunk by 13 to get "~14.7 kB each" compounded the
+error rather than fixing it; the real rate is ~6.8 kB, which is what the original ~7.2 kB estimate said. Re-derive
+before citing: empty the category array, `pnpm build`, and diff the `/` line.
 
 `Dashboard` needs `{id, slug, title, category, difficulty}` per challenge and nothing else. The fix is a generated
-index module plus a per-challenge dynamic import, and it gets structurally harder the longer it waits, because each
-new challenge is another static edge to unpick. **Decide it before the next category is authored, not after.**
+index module plus a per-challenge dynamic import. **The refactor does not get harder per challenge** — every static
+edge lives in one file per category (`selection/index.ts` holds all 13), so unpicking them is the same size of change
+at 13 challenges as at 103. What compounds is the _weight_, which is why the budget in `scripts/routeBudget.ts` gives
+`/` less headroom than one challenge costs. **Decide it before the next category is authored, not after.**
 
 **`RouteError`'s announcement has never been heard with a real screen reader.** A polite region is generally not
 announced for content already present at insertion, and `RouteError` is a whole-page replacement. The
