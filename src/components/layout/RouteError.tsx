@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useRouteError } from 'react-router';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/buttonVariants';
 
 /**
  * `useRouteError` is typed `unknown`, and correctly so: anything a component threw arrives here,
@@ -44,9 +44,19 @@ export function RouteError() {
         the rest of the app still works.
       </p>
       {detail !== null && <p className="max-w-prose font-mono text-xs break-words text-muted">{detail}</p>}
-      {/* The only control here. The way back to a working page is the shell's own navigation, which
-          is the whole reason this renders inside the shell rather than in place of it. */}
-      <Button onClick={handleReload}>Reload the page</Button>
+      {/* A native <button> wearing `buttonVariants`, rather than the `Button` component. This
+          module is reachable from the entry chunk -- it has to be, since it is what renders when a
+          chunk fails to arrive -- so everything it can reach is weight every visitor downloads
+          before the dashboard paints. `Button` wraps Base UI's primitive, and measuring the built
+          output put that at ~9 kB on the landing page for one control on a page almost nobody
+          reaches. The variants are class strings and carry none of it. Nothing here needs the
+          primitive's behaviour: this button is never disabled and never opens a popup.
+          It is also the only control on the page: the way back to a working one is the shell's own
+          navigation, which is the whole reason this renders inside the shell rather than in place
+          of it. */}
+      <button type="button" onClick={handleReload} className={buttonVariants()}>
+        Reload the page
+      </button>
     </div>
   );
 }
