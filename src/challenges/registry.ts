@@ -1,6 +1,7 @@
 import type { CategoryId, ChallengeEntry, ChallengeMeta, Difficulty } from '@/types/challenge';
 
 import { asyncEntries } from './async';
+import { attributesEntries } from './attributes';
 import { creationEntries } from './creation';
 import { observersEntries } from './observers';
 import { performanceEntries } from './performance';
@@ -88,6 +89,7 @@ function byAscendingDifficulty(entries: readonly ChallengeEntry[]): ChallengeEnt
 export const challengeIndex: readonly ChallengeEntry[] = [
   ...byAscendingDifficulty(selectionEntries),
   ...byAscendingDifficulty(creationEntries),
+  ...byAscendingDifficulty(attributesEntries),
   ...byAscendingDifficulty(observersEntries),
   ...byAscendingDifficulty(performanceEntries),
   ...byAscendingDifficulty(asyncEntries),
