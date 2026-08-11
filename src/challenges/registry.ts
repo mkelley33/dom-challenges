@@ -35,14 +35,17 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
 /**
  * `Object.keys` types as `string[]` however narrow the object's own key type is -- a known gap in
  * the standard library's types, not something these objects' shapes leave in doubt. Filtering with
- * these predicates recovers the union through real narrowing instead of an unchecked assertion,
- * and the same predicates narrow the untyped strings that arrive from a route param or a select.
+ * these predicates recovers the union through real narrowing instead of an unchecked assertion.
+ *
+ * `isCategoryId` is exported for a second reason: a route param arrives as `string | undefined`,
+ * and `ChallengeList` narrows it with this rather than casting.
  */
 export function isCategoryId(id: string): id is CategoryId {
   return Object.prototype.hasOwnProperty.call(CATEGORY_META, id);
 }
 
-export function isDifficulty(value: string): value is Difficulty {
+/** Not exported: deriving `DIFFICULTIES` below is the only thing that needs it. */
+function isDifficulty(value: string): value is Difficulty {
   return Object.prototype.hasOwnProperty.call(DIFFICULTY_LABELS, value);
 }
 
