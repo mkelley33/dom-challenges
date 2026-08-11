@@ -123,7 +123,21 @@ describe('isUnrecorded', () => {
     expect(isUnrecorded({ ...blank, solvedAt: '2026-08-10T09:00:00.000Z' })).toBe(false);
     expect(isUnrecorded({ ...blank, attempts: 1 })).toBe(false);
     expect(isUnrecorded({ ...blank, status: 'attempted' })).toBe(false);
+    // Every field of the record, not the four a hand-written chain happened to list: nothing writes
+    // `lastCode` without also bumping `attempts` today, and "today" is exactly how a blind spot
+    // starts. A row holding the learner's last submission is a row with something in it.
+    expect(isUnrecorded({ ...blank, lastCode: '// what I had when I gave up' })).toBe(false);
     expect(isUnrecorded(solved)).toBe(false);
+  });
+
+  it('ignores the two fields a stored row is free to differ on', () => {
+    const blank = emptyProgress('never-tried');
+
+    // `id`, because the placeholder's is the challenge id while a stored row carries whatever
+    // json-server assigned -- comparing it would call every real row recorded. `updatedAt`, because
+    // the placeholder stamps `now`, so comparing it would call every row *un*recorded exactly never.
+    expect(isUnrecorded({ ...blank, id: 'server-assigned-id' })).toBe(true);
+    expect(isUnrecorded({ ...blank, updatedAt: '2020-01-01T00:00:00.000Z' })).toBe(true);
   });
 });
 

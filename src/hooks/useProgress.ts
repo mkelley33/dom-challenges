@@ -24,17 +24,31 @@ export function emptyProgress(challengeId: string): ProgressRecord {
  * Whether this record says nothing happened -- which is what `emptyProgress` above synthesises when
  * the server is holding no row for a challenge.
  *
- * Deliberately reads all four fields rather than `status` and `attempts` alone. A learner who
- * reveals the solution before ever running writes a real row with `status: 'unattempted'` and
- * `attempts: 0` (the reveal spreads the placeholder and sets only `revealedAt`), so the shorter
- * predicate would mistake a stored reveal for "no row" and skip the delete that undoes it.
+ * Compared against the placeholder field by field rather than by a hand-written `&&` chain, and
+ * through an object typed from `ProgressRecord` itself, so that adding a field to the type is a
+ * compile error here until it is either compared or deliberately excluded. A chain reading only
+ * `status` and `attempts` has a reachable hole: a learner who reveals before ever running writes a
+ * real row with neither (the reveal spreads the placeholder and sets only `revealedAt`), and calling
+ * that row "no row" skips the delete that undoes it.
+ *
+ * Three fields are excluded, each for a reason that would otherwise invert the answer: `id`, because
+ * the placeholder's is the challenge id while a stored row carries whatever json-server assigned;
+ * `updatedAt`, because the placeholder stamps `now`; `challengeId`, because the placeholder is built
+ * from this record's own.
  *
  * Recognising a stored-but-empty row as unrecorded costs nothing: there is nothing in it to undo.
  */
 export function isUnrecorded(record: ProgressRecord): boolean {
-  return (
-    record.status === 'unattempted' && record.attempts === 0 && record.solvedAt === null && record.revealedAt === null
-  );
+  const placeholder = emptyProgress(record.challengeId);
+  const matchesPlaceholder: Record<keyof Omit<ProgressRecord, 'id' | 'updatedAt' | 'challengeId'>, boolean> = {
+    status: record.status === placeholder.status,
+    attempts: record.attempts === placeholder.attempts,
+    solvedAt: record.solvedAt === placeholder.solvedAt,
+    revealedAt: record.revealedAt === placeholder.revealedAt,
+    lastCode: record.lastCode === placeholder.lastCode,
+  };
+
+  return Object.values(matchesPlaceholder).every((matches) => matches);
 }
 
 export function useProgressQuery(): UseQueryResult<ProgressRecord[]> {
