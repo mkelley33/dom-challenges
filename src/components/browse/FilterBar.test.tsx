@@ -76,6 +76,23 @@ function storedFilters() {
   return useEditorStore.getState().filters;
 }
 
+/**
+ * Counts writes that actually replace `filters`. `setFilters` spreads into a new object every
+ * call, so one write per call is exactly what a subscriber sees -- which is the cost being
+ * measured, since persist serialises on each one.
+ */
+function countFilterWrites() {
+  let count = 0;
+  const unsubscribe = useEditorStore.subscribe((state, previous) => {
+    if (state.filters !== previous.filters) count += 1;
+  });
+
+  return {
+    count: () => count,
+    stop: unsubscribe,
+  };
+}
+
 beforeEach(() => {
   commits = 0;
   stubProgress([]);
@@ -107,6 +124,58 @@ describe('FilterBar', () => {
     await waitFor(() => {
       expect(storedFilters().query).toBe('closest');
     });
+  });
+
+  it('writes the search box to the store once for a burst of typing, not once per character', async () => {
+    const user = userEvent.setup();
+    renderCategory();
+    const field = await screen.findByRole('textbox', { name: 'Search challenges' });
+
+    const writes = countFilterWrites();
+    await user.type(field, 'closest');
+    await waitFor(() => {
+      expect(storedFilters().query).toBe('closest');
+    });
+
+    // Seven characters. Every `setFilters` makes zustand's persist middleware serialise the whole
+    // payload synchronously -- and that payload carries `drafts`, which holds a full editor buffer
+    // per challenge the learner has opened. Undebounced, a dozen challenges in, each keystroke
+    // stringifies all of them.
+    expect(writes.count()).toBeLessThanOrEqual(2);
+    writes.stop();
+  });
+
+  it('flushes a pending search write when the bar unmounts mid-burst', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderCategory();
+
+    await user.type(await screen.findByRole('textbox', { name: 'Search challenges' }), 'c');
+
+    // The precondition that makes the rest of this mean anything: the write has not landed yet, so
+    // whatever the store holds after `unmount()` came from the cleanup and nowhere else.
+    expect(storedFilters().query).toBe('');
+
+    unmount();
+
+    // Dropping the pending timer instead of flushing it would make whether a learner's search
+    // survives depend on how fast they clicked into a challenge after typing it.
+    expect(storedFilters().query).toBe('c');
+  });
+
+  it('applies a discrete control immediately rather than waiting out the search debounce', async () => {
+    const user = userEvent.setup();
+    renderCategory();
+    await screen.findByRole('switch', { name: 'Hide solved' });
+
+    const writes = countFilterWrites();
+    await user.click(screen.getByRole('switch', { name: 'Hide solved' }));
+
+    // The debounce exists for the one control that fires per keystroke. A switch is a single
+    // decision, and holding its effect back reads as a laggy control -- so this settles on the
+    // first check rather than after a wait, which a debounced write cannot do.
+    expect(storedFilters().hideSolved).toBe(true);
+    expect(writes.count()).toBe(1);
+    writes.stop();
   });
 
   it('does not spiral into a render loop when a single character is typed', async () => {
