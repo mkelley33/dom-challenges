@@ -242,8 +242,11 @@ writes all three slices. Both were checked against a mutation that calls `clearS
 ## 5. Layout and accessibility facts — verified, do not re-derive
 
 **The preview frame must never be `display: none`.** A document inside a non-rendered subtree never services
-`requestAnimationFrame`, so the harness's `tick()` falls back to its 50 ms timer on every call and any paint-dependent
-work in a learner's code simply does not happen. When the preview must step aside — the phone layout parks it while
+`requestAnimationFrame`. `tick()` now waits for a frame it has **seen serviced** — two chained `rAF` hops, with
+`FRAME_FALLBACK_MS` (250 ms) as a genuine escape rather than a deadline — so in a non-rendered subtree it escapes on
+every call, and any paint-dependent work in a learner's code simply does not happen. Note the escape is the _only_
+thing standing between a non-rendered preview and a permanent hang, which is why it exists at all; it is not a bet on
+how long a frame takes. When the preview must step aside — the phone layout parks it while
 another tab is showing — take it out of flow and move it off-screen (`absolute -left-[200vw]`), so it keeps a real box
 and a real rendering. Whether it is parked is decided by **CSS**, so a broken `matchMedia` cannot move a panel;
 JavaScript only decides the parts CSS cannot express.
