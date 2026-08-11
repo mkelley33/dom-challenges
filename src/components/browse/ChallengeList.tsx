@@ -5,6 +5,7 @@ import { CATEGORY_META, challengesInCategory, isCategoryId } from '@/challenges/
 import { FilterBar } from '@/components/browse/FilterBar';
 import { NotFound } from '@/components/NotFound';
 import { useProgressQuery } from '@/hooks/useProgress';
+import { cn } from '@/lib/utils';
 import type { ChallengeFilters } from '@/store/editorStore';
 import { useEditorStore } from '@/store/editorStore';
 import type { Challenge } from '@/types/challenge';
@@ -38,6 +39,17 @@ function applyFilters(
   });
 }
 
+/**
+ * The message for an empty listing, or `null` when there is something to list. Returning `null`
+ * rather than an empty string keeps "say nothing" and "say this" one decision, made once, so the
+ * live region's content and the list's presence cannot disagree.
+ */
+function emptyStateFor(challengeCount: number, visibleCount: number): string | null {
+  if (visibleCount > 0) return null;
+  if (challengeCount === 0) return 'No challenges in this category yet.';
+  return 'No challenges match these filters. Clear the search or widen the difficulty to see more.';
+}
+
 export function ChallengeList() {
   const { categoryId } = useParams();
   const filters = useEditorStore((state) => state.filters);
@@ -58,6 +70,7 @@ export function ChallengeList() {
   }
 
   const meta = CATEGORY_META[category];
+  const emptyMessage = emptyStateFor(challenges.length, visible.length);
 
   return (
     <div className="p-8">
@@ -66,16 +79,16 @@ export function ChallengeList() {
 
       <FilterBar />
 
-      {visible.length === 0 ? (
-        // `<output>`, which carries role="status" and a polite live region natively: filtering
-        // everything out is a change the learner caused and cannot see, and an unannounced blank
-        // panel reads as a broken page.
-        <output className="mt-6 block text-sm text-muted">
-          {challenges.length === 0
-            ? 'No challenges in this category yet.'
-            : 'No challenges match these filters. Clear the search or widen the difficulty to see more.'}
-        </output>
-      ) : (
+      {/* `<output>`, which carries role="status" and a polite live region natively -- and rendered
+          unconditionally, empty, rather than only when there is something to say. A live region
+          that enters the DOM in the same commit as its text is announced inconsistently: Safari
+          with VoiceOver and JAWS have no region to observe at the moment of the mutation and
+          routinely stay silent. Filtering everything out is a change the learner caused and cannot
+          see, so best-effort is not good enough here. The margin is conditional because an empty
+          region still occupies its own margin box. */}
+      <output className={cn('block text-sm text-muted', emptyMessage !== null && 'mt-6')}>{emptyMessage}</output>
+
+      {emptyMessage === null && (
         <ul className="mt-6 space-y-2">
           {visible.map((challenge) => (
             <li key={challenge.id}>
