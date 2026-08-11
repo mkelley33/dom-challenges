@@ -3990,13 +3990,13 @@ git commit -m "feat: add progress dashboard with filtering and category browsing
 ### Task 17: Complete the Selection & Traversal category
 
 **Files:**
-- Create: nine files under `src/challenges/selection/`
+- Create: ten files under `src/challenges/selection/` (CORRECTED after Task 17: Steps 1-10 each specify a distinct challenge, so the count is ten, not nine)
 - Modify: `src/challenges/selection/index.ts`
 - Test: covered automatically by `src/challenges/content.test.ts` (Task 7)
 
 **Interfaces:**
 - Consumes: `Challenge` (Task 2).
-- Produces: nine additional `Challenge` exports registered in `selectionChallenges`, bringing the category to 12.
+- Produces: ten additional `Challenge` exports registered in `selectionChallenges`, bringing the category to 13 (3 existing + 10).
 
 No new test file. The content suite from Task 7 generalises over the registry, so each challenge added here is automatically checked for solution correctness, a non-passing starter, and complete documentation. That is the whole return on Task 7.
 
@@ -4062,12 +4062,12 @@ Export `templateItemCount()` for a page containing a `<template>` with list item
 
 Build a shadow root in the challenge code and export `countInside(host: Element): number`. **Trap:** `document.querySelectorAll` does not pierce shadow boundaries; you must go through `host.shadowRoot`. Tests assert the light-DOM query finds zero. Set `relatedIds: []` for now and add the `web-apis` cross-link in Phase 4 when that category exists — `validateRegistry` rejects dangling ids, so do not point at a challenge that has not been written.
 
-- [ ] **Step 11: Register all nine and run the suite**
+- [ ] **Step 11: Register all ten and run the suite**
 
 Add every export to `selectionChallenges` in `src/challenges/selection/index.ts`.
 
 Run: `pnpm vitest run src/challenges`
-Expected: PASS — 12 challenges, every solution passing, every starter failing, every solution documented.
+Expected: PASS — 13 challenges, every solution passing, every starter failing, every solution documented.
 
 - [ ] **Step 12: Verify green and commit**
 
