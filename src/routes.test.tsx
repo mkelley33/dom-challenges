@@ -112,6 +112,13 @@ describe('routing', () => {
 
   it('renders a not-found page for an unknown slug', async () => {
     renderAt('/challenge/does-not-exist');
-    expect(await screen.findByText(/couldn't find that challenge/i)).toBeInTheDocument();
+    // As a heading, not merely as text: every other page in the app names itself with an `h1`, and
+    // a page that names itself with nothing is the one a screen reader cannot orient in.
+    expect(await screen.findByRole('heading', { level: 1, name: /couldn't find that challenge/i })).toBeInTheDocument();
+  });
+
+  it('renders a not-found page, with its own heading, for a path that matches no route', async () => {
+    renderAt('/somewhere-else');
+    expect(await screen.findByRole('heading', { level: 1, name: /that page does not exist/i })).toBeInTheDocument();
   });
 });

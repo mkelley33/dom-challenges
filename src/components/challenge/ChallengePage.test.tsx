@@ -73,6 +73,59 @@ function draftFor(challenge: Challenge): string | undefined {
   return useEditorStore.getState().drafts[challenge.id];
 }
 
+/** Captured before any test edits it, so restoring never has to restate the store's own defaults. */
+const DEFAULT_LAYOUT = useEditorStore.getState().layout;
+
+/**
+ * Answers `matchMedia` the way a viewport of the given size would.
+ *
+ * happy-dom's window is 1024px wide, which is exactly Tailwind's `lg`, so the unstubbed default is
+ * "desktop" -- correct for every test that is not about the phone layout, and useless for the ones
+ * that are.
+ */
+function stubViewport(isDesktop: boolean): void {
+  vi.stubGlobal('matchMedia', (media: string) => ({
+    media,
+    matches: isDesktop,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+}
+
+/** One of the three layout columns, found by the tab it belongs to. */
+function panel(name: 'code' | 'problem' | 'result'): HTMLElement {
+  const element = document.querySelector(`[data-panel="${name}"]`);
+  if (!(element instanceof HTMLElement)) throw new Error(`No column is marked data-panel="${name}".`);
+  return element;
+}
+
+/**
+ * Whether a column is `display: none`.
+ *
+ * The class is the only trace there is: happy-dom loads no stylesheet, so nothing here has a
+ * computed style to read, and a `display: none` element is present in the DOM like any other.
+ * `hidden` is Tailwind's fixed name for that declaration, which is why it can be named literally.
+ */
+function isDisplayNone(element: HTMLElement): boolean {
+  return element.classList.contains('hidden');
+}
+
+/**
+ * The preview section, by attribute rather than by role.
+ *
+ * `getByRole` cannot reach it while it is parked off-screen, because being out of the
+ * accessibility tree at that moment is precisely what is being asserted.
+ */
+function previewSection(): HTMLElement {
+  const section = document.querySelector('section[aria-label="Preview"]');
+  if (!(section instanceof HTMLElement)) throw new Error('The preview section is not in the document at all.');
+  return section;
+}
+
+function viewTab(name: string): HTMLElement {
+  return screen.getByRole('tab', { name });
+}
+
 /** Scoped to the results region: a prompt is markdown, and markdown is free to contain lists. */
 function testResultItems(): HTMLElement[] {
   return within(screen.getByRole('region', { name: 'Test results' })).getAllByRole('listitem');
@@ -231,7 +284,9 @@ async function confirmClear(user: ReturnType<typeof userEvent.setup>): Promise<v
 }
 
 beforeEach(() => {
-  useEditorStore.setState({ drafts: {} });
+  // `mobileTab` and `layout` are module-level store state that outlives a render, so they are reset
+  // here as well: a tab left on "Results" by one test would silently pre-satisfy the next.
+  useEditorStore.setState({ drafts: {}, mobileTab: 'problem', layout: DEFAULT_LAYOUT });
   vi.stubGlobal(
     'fetch',
     vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))),
@@ -241,7 +296,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
-  useEditorStore.setState({ drafts: {} });
+  useEditorStore.setState({ drafts: {}, mobileTab: 'problem', layout: DEFAULT_LAYOUT });
 });
 
 describe('ChallengePage', () => {
@@ -586,6 +641,161 @@ describe('ChallengePage', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Reveal the solution?' });
     expect(dialog).toHaveAccessibleDescription(new RegExp(clearLabel, 'i'));
+  });
+
+  it('offers the three panels as a tablist and records the choice in the store', async () => {
+    const user = userEvent.setup();
+    renderChallengePage(first.slug);
+    await editor();
+
+    expect(screen.getByRole('tablist', { name: 'Challenge view' })).toBeInTheDocument();
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+
+    await user.click(viewTab('Code'));
+
+    expect(viewTab('Code')).toHaveAttribute('aria-selected', 'true');
+    expect(viewTab('Problem')).toHaveAttribute('aria-selected', 'false');
+    // Through the store, not through local state: the sticky action row, the run flow and the
+    // panels all read the same value, and a control that only knew its own selection would leave
+    // them disagreeing.
+    expect(useEditorStore.getState().mobileTab).toBe('code');
+  });
+
+  it('keeps every panel mounted on a phone, so switching tabs is presentation only', async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    renderChallengePage(first.slug);
+    await editor();
+    const preview = previewSection();
+
+    for (const label of ['Code', 'Results', 'Problem']) {
+      await user.click(viewTab(label));
+
+      // Two layouts -- or one that mounted a tab at a time -- would fail here. The preview is the
+      // costly half: tearing it down takes the iframe host, and with it the learner's rendered DOM,
+      // every time they glance at the prompt.
+      expect(screen.getByRole('region', { name: 'Problem' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Code editor' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Test results' })).toBeInTheDocument();
+      expect(previewSection()).toBe(preview);
+    }
+  });
+
+  it('never puts the preview frame in a display:none subtree, whichever tab is showing', async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    renderChallengePage(first.slug);
+    await editor();
+
+    const observed: { tab: string; problem: boolean; code: boolean; result: boolean }[] = [];
+    for (const tab of ['Problem', 'Code', 'Results']) {
+      await user.click(viewTab(tab));
+      observed.push({
+        tab,
+        problem: isDisplayNone(panel('problem')),
+        code: isDisplayNone(panel('code')),
+        result: isDisplayNone(panel('result')),
+      });
+    }
+
+    // Collected into a table and asserted once, rather than an assertion per branch: the `result`
+    // column being false everywhere only means something next to the other two being true
+    // somewhere. A layout that hid nothing at all would fail this; so would one that reached for
+    // `hidden` on the column holding the preview.
+    expect(observed).toEqual([
+      { tab: 'Problem', problem: false, code: true, result: false },
+      { tab: 'Code', problem: true, code: false, result: false },
+      { tab: 'Results', problem: true, code: true, result: false },
+    ]);
+  });
+
+  it('parks the inactive preview off-screen and takes it out of the accessibility tree instead', async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    renderChallengePage(first.slug);
+    await editor();
+
+    await user.click(viewTab('Results'));
+    expect(panel('result').classList.contains('absolute')).toBe(false);
+    expect(previewSection()).toHaveAttribute('aria-hidden', 'false');
+
+    await user.click(viewTab('Problem'));
+
+    // Out of view, still rendered. A document that is not rendered never services
+    // requestAnimationFrame, so a `hidden` here would drop the harness's `tick()` onto its 50 ms
+    // fallback on every call and stop any paint-dependent learner code from running at all.
+    expect(panel('result').classList.contains('absolute')).toBe(true);
+    expect(previewSection()).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('leaves the preview in the accessibility tree at desktop widths, whatever the phone tab says', async () => {
+    stubViewport(true);
+    useEditorStore.setState({ mobileTab: 'problem' });
+
+    renderChallengePage(first.slug);
+    await editor();
+
+    // Every column is on screen above `lg`, so none of them is "inactive". `aria-hidden` cannot be
+    // written as a media query, so keying it off the tab alone would hide the preview from a
+    // desktop screen-reader user for no reason they could ever discover.
+    expect(screen.getByRole('region', { name: 'Preview' })).toBeInTheDocument();
+    expect(previewSection()).toHaveAttribute('aria-hidden', 'false');
+  });
+
+  it('announces the run outcome through a polite live region rather than moving focus', async () => {
+    renderChallengePage(first.slug);
+    await editor();
+
+    // `role="status"` is a polite live region by definition, which is what `<output>` carries. The
+    // point is that the outcome reaches a screen reader without anything stealing focus from the
+    // editor the learner is still sitting in.
+    const results = screen.getByRole('region', { name: 'Test results' });
+    expect(within(results).getByRole('status')).toHaveTextContent('Not run yet');
+  });
+
+  it('runs from the keyboard, under a name that does not change while it is running', async () => {
+    const user = userEvent.setup();
+    renderChallengePage(first.slug);
+
+    // Found by its exact name, not `/run/i`: the label a learner hears must be the same one before
+    // and during the run, and a loose matcher would accept a button that renamed itself mid-action.
+    const run = await screen.findByRole('button', { name: 'Run tests' });
+    run.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/of \d+ tests passing/);
+    });
+    expect(screen.getByRole('button', { name: 'Run tests' })).toBeInTheDocument();
+  });
+
+  it('brings a phone to the results as the run starts, so the announcement is on screen', async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    useEditorStore.setState({ mobileTab: 'code' });
+    renderChallengePage(first.slug);
+
+    await user.click(await screen.findByRole('button', { name: 'Run tests' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/of \d+ tests passing/);
+    });
+    // Otherwise the learner presses Run on the code tab and nothing they can see or hear changes:
+    // the results are a tab away, and an off-screen live region announces to no one.
+    expect(useEditorStore.getState().mobileTab).toBe('result');
+    expect(viewTab('Results')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('lays the desktop columns out from the persisted layout rather than a fixed ratio', async () => {
+    useEditorStore.setState({ layout: { promptPercent: 20, editorPercent: 50 } });
+
+    renderChallengePage(first.slug);
+    await editor();
+
+    // Deliberately not the stored defaults: a hardcoded ratio would pass against those and fail
+    // here. The third track is what is left over, so the three always sum to the whole row.
+    const grid = panel('code').parentElement;
+    expect(grid?.style.gridTemplateColumns).toBe('minmax(0, 20fr) minmax(0, 50fr) minmax(0, 30fr)');
   });
 
   it('records nothing when the prior record cannot be read', async () => {

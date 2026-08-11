@@ -1,11 +1,15 @@
-import { useCallback, useRef } from 'react';
+import type { CSSProperties } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'react-router';
 
 import { challengeBySlug } from '@/challenges/registry';
+import { MobileTabs } from '@/components/layout/MobileTabs';
 import { NotFound } from '@/components/NotFound';
 import { useChallengeRun } from '@/hooks/useChallengeRun';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useChallengeProgress, useSaveProgress, useStoredProgress } from '@/hooks/useProgress';
 import { solutionAccess } from '@/lib/solutionAccess';
+import { cn } from '@/lib/utils';
 import { useEditorStore } from '@/store/editorStore';
 import type { Challenge } from '@/types/challenge';
 
@@ -14,11 +18,40 @@ import { EditorPanel } from './EditorPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { PromptPanel } from './PromptPanel';
 import { ResultPanel } from './ResultPanel';
+import { RunButton } from './RunButton';
 import { SolutionsPanel } from './SolutionsPanel';
+
+/** Tailwind's `lg`. The layout itself is CSS; this is read only where CSS cannot reach -- see below. */
+const DESKTOP_MEDIA_QUERY = '(min-width: 64rem)';
 
 // No `min-h-*` here on purpose: each panel sets its own, and two min-height utilities in one class
 // string are resolved by stylesheet order rather than by the order they are written.
 const PANEL = 'overflow-hidden rounded-lg border bg-surface-raised';
+
+// Deliberately without a display utility. `flex` and `hidden` are both `display`, and two of them
+// in one class string are resolved by stylesheet order rather than by the order they are written --
+// so which one wins would be Tailwind's business rather than this file's. Each column below picks
+// exactly one.
+const COLUMN = 'min-h-0 flex-col gap-4';
+
+/** The active phone tab, and every column from `lg` up. */
+const SHOWN = 'flex';
+
+/** A column that is not the active phone tab: out of the box tree below `lg`, back in it above. */
+const HIDDEN_BELOW_LG = 'hidden lg:flex';
+
+/**
+ * How the column holding the preview frame steps aside instead — never `hidden`.
+ *
+ * Tailwind's `hidden` is `display: none`, and a document inside a subtree that is not rendered
+ * never services `requestAnimationFrame`: the harness's `tick()` would fall back to its 50 ms timer
+ * on every call, and any paint-dependent work in a learner's code simply would not happen. Taken
+ * out of flow and parked off to the left, the frame keeps a real box and a real rendering.
+ *
+ * The `lg:` half puts it back in the grid, so this never depends on JavaScript knowing the
+ * viewport: layout is CSS, and a broken `matchMedia` cannot move a panel.
+ */
+const PREVIEW_OFF_SCREEN = 'absolute top-0 -left-[200vw] h-96 w-80 lg:static lg:h-auto lg:w-auto';
 
 interface ChallengeWorkspaceProps {
   challenge: Challenge;
@@ -34,6 +67,9 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const draft = useEditorStore((state) => state.drafts[challenge.id]);
   const setDraft = useEditorStore((state) => state.setDraft);
+  const mobileTab = useEditorStore((state) => state.mobileTab);
+  const setMobileTab = useEditorStore((state) => state.setMobileTab);
+  const layout = useEditorStore((state) => state.layout);
   const { result, isRunning, run, reset } = useChallengeRun(challenge, previewRef);
   const record = useChallengeProgress(challenge.id);
   const readStoredProgress = useStoredProgress(challenge.id);
@@ -50,10 +86,35 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
     [challenge.id, setDraft],
   );
 
+  // `aria-hidden` is the one part of the responsive layout that CSS cannot express, so it is the
+  // one part that has to ask where the viewport is. Keyed off the tab alone it would hide the
+  // preview from every desktop screen-reader user whose last phone tab was not "Results".
+  const isDesktop = useMediaQuery(DESKTOP_MEDIA_QUERY);
+  const previewInactive = mobileTab !== 'result';
+  const previewOffScreen = previewInactive && !isDesktop;
+
+  // Applied unconditionally, and inert below `lg` by construction: the container is `display: flex`
+  // until the breakpoint, and `grid-template-columns` means nothing to a flex container. That is
+  // what lets a persisted, learner-controlled ratio live in an inline style without also needing a
+  // second, mobile-shaped version of it.
+  const gridStyle = useMemo<CSSProperties>(() => {
+    const resultPercent = 100 - layout.promptPercent - layout.editorPercent;
+    const track = (percent: number): string => `minmax(0, ${String(percent)}fr)`;
+    // `fr` rather than `%`, so the three tracks keep the stored *ratio* without the gaps between
+    // them pushing the row past the width of the grid.
+    return {
+      gridTemplateColumns: [track(layout.promptPercent), track(layout.editorPercent), track(resultPercent)].join(' '),
+    };
+  }, [layout.editorPercent, layout.promptPercent]);
+
   const handleRun = useCallback(() => {
+    // On a phone the results are behind a tab, and a live region that is off screen announces to a
+    // learner who cannot then read it. Moving to the results as the run starts puts the outcome and
+    // its announcement in the same place. Above `lg` the tab is not on screen and nothing moves.
+    setMobileTab('result');
     // `run` reports every failure through `result`; it never rejects.
     void run(code);
-  }, [code, run]);
+  }, [code, run, setMobileTab]);
 
   const handleCleared = useCallback(() => {
     // The third of the three things a clear resets, and the only one the button cannot do itself:
@@ -94,43 +155,63 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
   }, [readStoredProgress, writeProgress]);
 
   return (
-    // Stacked and scrolling on small screens, three columns filling the viewport from `lg` up.
-    // Nothing here ever hides the preview: a frame inside a `display: none` subtree is not
-    // rendered, so it never services an animation frame and `tick()` silently degrades.
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] lg:overflow-hidden">
-      {/* Prompt and solutions share the first column: they are the two halves of "what am I being
-          asked, and how else could it have been done", and the solutions half is empty of content
-          until it is unlocked. */}
-      <div className="flex min-h-0 flex-col gap-4">
-        <div className={`${PANEL} min-h-48 lg:min-h-0 lg:flex-[2]`}>
-          <PromptPanel challenge={challenge} />
-        </div>
-        <div className={`${PANEL} min-h-40 lg:min-h-0 lg:flex-[1]`}>
-          <SolutionsPanel solutions={challenge.solutions} record={record} onReveal={handleReveal} />
-        </div>
-      </div>
+    // One tree at every size. The breakpoint changes presentation only -- nothing below is mounted
+    // or unmounted by a viewport -- so rotating a phone never resets a panel's state, and no later
+    // task has two layouts to keep in step.
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+      <MobileTabs value={mobileTab} onChange={setMobileTab} />
 
-      <div className={`${PANEL} flex min-h-96 flex-col lg:min-h-0`}>
-        <EditorPanel
-          challengeId={challenge.id}
-          starterCode={challenge.starterCode}
-          value={code}
-          onChange={handleChange}
-          onRun={handleRun}
-          isRunning={isRunning}
-        />
-        {/* Outside the editor's own region rather than inside its header: this control does not
-            edit the code, it throws the whole attempt away, and the confirm in front of it is the
-            second half of that distinction. */}
-        <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
-          <ClearButton challengeId={challenge.id} onCleared={handleCleared} />
+      {/* `relative` so the parked preview below has this box to be positioned against. Stacked and
+          scrolling below `lg`, three columns filling the remaining height from `lg` up. */}
+      <div
+        style={gridStyle}
+        className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto lg:grid lg:overflow-hidden"
+      >
+        {/* Prompt and solutions share the first column: they are the two halves of "what am I being
+            asked, and how else could it have been done", and the solutions half is empty of content
+            until it is unlocked. */}
+        <div data-panel="problem" className={cn(COLUMN, mobileTab === 'problem' ? SHOWN : HIDDEN_BELOW_LG)}>
+          <div className={`${PANEL} min-h-48 lg:min-h-0 lg:flex-[2]`}>
+            <PromptPanel challenge={challenge} />
+          </div>
+          <div className={`${PANEL} min-h-40 lg:min-h-0 lg:flex-[1]`}>
+            <SolutionsPanel solutions={challenge.solutions} record={record} onReveal={handleReveal} />
+          </div>
         </div>
-      </div>
 
-      <div className="flex min-h-0 flex-col gap-4">
-        <PreviewFrame containerRef={previewRef} />
-        <div className={`${PANEL} min-h-40 flex-1`}>
-          <ResultPanel result={result} isRunning={isRunning} />
+        {/* This column is its own panel, so it carries the panel's chrome directly. `overflow-hidden`
+            only from `lg`: below it, the box must not be a scroll container or the sticky action row
+            at its foot would have no scrollport to stick to and would simply never stick. */}
+        <div
+          data-panel="code"
+          className={cn(
+            'min-h-96 flex-col rounded-lg border bg-surface-raised lg:min-h-0 lg:overflow-hidden',
+            mobileTab === 'code' ? SHOWN : HIDDEN_BELOW_LG,
+          )}
+        >
+          <EditorPanel
+            challengeId={challenge.id}
+            starterCode={challenge.starterCode}
+            value={code}
+            onChange={handleChange}
+          />
+          {/* Both controls live outside the editor's own region: neither edits the code. One runs
+              it, the other throws the whole attempt away. Sticky below `lg` so the primary action
+              is under a thumb rather than scrolled off the top with the panel header. */}
+          <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-t bg-surface-raised px-3 py-2 lg:static">
+            <RunButton onRun={handleRun} isRunning={isRunning} />
+            <ClearButton challengeId={challenge.id} onCleared={handleCleared} />
+          </div>
+        </div>
+
+        {/* Never `HIDDEN_BELOW_LG`: see `PREVIEW_OFF_SCREEN`. The results panel rides along, which
+            also means its live region stays in the accessibility tree on every tab -- so a run
+            started from the code tab is still announced. */}
+        <div data-panel="result" className={cn(COLUMN, SHOWN, previewInactive && PREVIEW_OFF_SCREEN)}>
+          <PreviewFrame containerRef={previewRef} hiddenFromScreenReaders={previewOffScreen} />
+          <div className={`${PANEL} min-h-40 flex-1`}>
+            <ResultPanel result={result} isRunning={isRunning} />
+          </div>
         </div>
       </div>
     </div>

@@ -32,25 +32,15 @@ describe('EditorPanel', () => {
     starterCode: '// start',
     value: '// start',
     onChange: vi.fn<(code: string) => void>(),
-    onRun: vi.fn<() => void>(),
-    isRunning: false,
   };
 
-  it('renders a run button', async () => {
+  it('holds the editor and nothing that acts on it', async () => {
     render(<EditorPanel {...baseProps} />);
-    expect(await screen.findByRole('button', { name: /run/i })).toBeInTheDocument();
-  });
+    expect(await screen.findByRole('textbox', { name: 'Solution code' })).toBeInTheDocument();
 
-  it('calls onRun when the run button is pressed', async () => {
-    const onRun = vi.fn<() => void>();
-    render(<EditorPanel {...baseProps} onRun={onRun} />);
-    await userEvent.click(await screen.findByRole('button', { name: /run/i }));
-    expect(onRun).toHaveBeenCalledOnce();
-  });
-
-  it('disables the run button while a run is in flight', async () => {
-    render(<EditorPanel {...baseProps} isRunning />);
-    expect(await screen.findByRole('button', { name: /running/i })).toBeDisabled();
+    // Run and Clear belong to the page's action row, which is sticky at the foot of the panel on a
+    // phone. A copy of either in this header would be a second control with the same name.
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('shows the value passed in for the current challenge, not the starter code', async () => {

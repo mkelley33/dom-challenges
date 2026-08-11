@@ -56,6 +56,11 @@ function clearButton(): HTMLElement {
   return screen.getByRole('button', { name: 'Clear solution' });
 }
 
+/** The in-flight motion. Decorative by construction, so it is found by tag rather than by role. */
+function spinner(): SVGElement | null {
+  return clearButton().querySelector('svg');
+}
+
 /** Opens the confirm and waits for Base UI to move focus into it, which it does asynchronously. */
 async function openConfirm(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
   await user.click(clearButton());
@@ -89,10 +94,13 @@ afterEach(() => {
 });
 
 describe('ClearButton', () => {
-  it('offers a control named for what it clears', () => {
+  it('offers a control named for what it clears, and shows no motion until there is any', () => {
     renderClearButton();
 
     expect(clearButton()).toBeInTheDocument();
+    // The other half of the in-flight assertion further down: without this one, a button that
+    // spun permanently would pass it.
+    expect(spinner()).toBeNull();
   });
 
   it('warns before clearing anything, and clears nothing until the warning is confirmed', async () => {
@@ -269,6 +277,11 @@ describe('ClearButton', () => {
     // `aria-disabled:` pair a learner who just confirmed a destructive action watches the dialog
     // close and is left with a button that still looks live and does nothing.
     expect(clearButton()).toHaveClass('aria-disabled:opacity-50', 'aria-disabled:pointer-events-none');
+    // ...and it *moves*, which the class assertion above cannot show: happy-dom loads no
+    // stylesheet, so dimming is only ever a promise here. An `aria-hidden` icon is motion without
+    // renaming the control -- the whole reason the label stays "Clear solution".
+    expect(spinner()).not.toBeNull();
+    expect(spinner()).toHaveAttribute('aria-hidden', 'true');
 
     // Focusable, but genuinely inert: the in-flight state spans the whole clear -- the read and the
     // delete behind it -- so a second confirm cannot overlap the first at all. The absent dialog is

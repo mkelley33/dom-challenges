@@ -40,6 +40,17 @@
       }
     },
     {
+      // Same rule, same reason, different subject. This file walks the mobile tab bar one tab at a
+      // time and reads the layout back after each click; the awaits are `userEvent` interactions,
+      // which are a sequence a learner performs, not work to parallelise. `Promise.all` would fire
+      // three clicks at one control at once and assert against whatever state they landed in.
+      // Listed rather than globbed so the rule stays on for every other test file.
+      "files": ["src/components/challenge/ChallengePage.test.tsx"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    },
+    {
       // Enabled implicitly by the "suspicious" category. Each of these four files holds exactly
       // one kind of seam between the app's realm and the sandbox's, where the value arrives
       // untyped and an assertion is the only way across: happy-dom's `Window` is structurally

@@ -1,7 +1,5 @@
 import { lazy, Suspense, useCallback } from 'react';
 
-import { Button } from '@/components/ui/button';
-
 // `configureMonaco` is imported here, inside the lazy loader, rather than at module scope.
 // `monaco.ts` itself statically imports `@monaco-editor/react` (for `loader.config`), so a
 // top-level `import { configureMonaco } from '@/lib/monaco'` in this file would make that whole
@@ -41,11 +39,16 @@ export interface EditorPanelProps {
   starterCode: string;
   value: string;
   onChange: (code: string) => void;
-  onRun: () => void;
-  isRunning: boolean;
 }
 
-export function EditorPanel({ challengeId, value, onChange, onRun, isRunning }: EditorPanelProps) {
+/**
+ * The editor itself, and nothing that acts on it.
+ *
+ * Run and Clear both live in the page's action row rather than in this header: on a phone that row
+ * is sticky at the bottom of the panel, which is where a thumb is, and a header control would be
+ * scrolled off the top by the time a learner had read their own code.
+ */
+export function EditorPanel({ challengeId, value, onChange }: EditorPanelProps) {
   const handleEditorChange = useCallback(
     (next: string | undefined) => {
       onChange(next ?? '');
@@ -57,9 +60,6 @@ export function EditorPanel({ challengeId, value, onChange, onRun, isRunning }: 
     <section aria-label="Code editor" className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <h2 className="text-sm font-medium">Your solution</h2>
-        <Button onClick={onRun} disabled={isRunning} size="sm">
-          {isRunning ? 'Running…' : 'Run tests'}
-        </Button>
       </div>
       <div className="min-h-0 flex-1">
         <Suspense fallback={EDITOR_LOADING_FALLBACK}>

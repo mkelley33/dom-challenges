@@ -1,3 +1,4 @@
+import { LoaderCircleIcon } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -112,8 +113,13 @@ export function ClearButton({ challengeId, onCleared }: ClearButtonProps) {
           the clear behind it is two requests long on a cold deep-link. A plainly disabled button
           cannot take that focus, so it would drop to <body>. Base UI still blocks activation --
           inert, but findable. It also omits the native `disabled` attribute, which is why the look
-          cannot come from the `disabled:` variants. */}
+          cannot come from the `disabled:` variants.
+          The spinner is the visible half. Dimming alone is a weak signal and, under Vitest, an
+          unverifiable one -- happy-dom loads no stylesheet, so a test can only read the class back.
+          An `aria-hidden` icon adds motion the learner can see without touching the name, and
+          `buttonVariants` sizes a bare <svg> for the current button size. */}
       <Button variant="destructive" size="sm" onClick={handleOpen} disabled={isClearing} focusableWhenDisabled>
+        {isClearing && <LoaderCircleIcon aria-hidden="true" className="animate-spin" />}
         Clear solution
       </Button>
 
