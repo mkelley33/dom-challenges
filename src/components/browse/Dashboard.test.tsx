@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -93,6 +93,22 @@ function overallBar(): Promise<HTMLElement> {
   return screen.findByRole('progressbar', { name: 'Overall progress' });
 }
 
+/** Scoped to the difficulty region: the category cards are a list of their own. */
+function difficultyRows(): string[] {
+  const region = screen.getByRole('region', { name: 'By difficulty' });
+  return within(region)
+    .getAllByRole('listitem')
+    .map((item) => item.textContent ?? '');
+}
+
+/** Both solves land in the fixture's two populated tiers, one each. */
+function stubOneSolvePerPopulatedTier(): void {
+  stubProgress([
+    makeRecord(challengeAt(SOLVED_IN_SELECTION).id, { status: 'solved', solvedAt: SOLVED_AT }),
+    makeRecord(challengeAt(SOLVED_IN_EVENTS).id, { status: 'solved', solvedAt: SOLVED_AT }),
+  ]);
+}
+
 beforeEach(() => {
   stubProgress([]);
 });
@@ -139,6 +155,59 @@ describe('Dashboard', () => {
     });
     expect(events).toHaveTextContent(`1 of ${countIn('events')} solved`);
     expect(selection).not.toHaveTextContent(`of ${allChallenges.length} solved`);
+  });
+
+  it('breaks the totals down by difficulty, ascending, not in alphabetical order', async () => {
+    stubOneSolvePerPopulatedTier();
+
+    renderDashboard();
+    await screen.findByRole('region', { name: 'By difficulty' });
+
+    // Read only once the records have landed. Every tier shows 0 solved on the first paint, so
+    // rows snapshotted before this wait would agree with a dashboard that never reads them.
+    await waitFor(() => {
+      expect(difficultyRows()[0]).toContain('1 of 1 solved');
+    });
+    const [novice, intermediate, advanced, expert] = difficultyRows();
+
+    // The expected order is written out here rather than derived from `DIFFICULTIES`, so this
+    // pins the tiers a learner should read -- easiest first -- independently of the constant. A
+    // breakdown walking `Object.keys(...).sort()` gives Advanced, Expert, Intermediate, Novice.
+    expect([novice, intermediate, advanced, expert]).toEqual([
+      expect.stringContaining('Novice'),
+      expect.stringContaining('Intermediate'),
+      expect.stringContaining('Advanced'),
+      expect.stringContaining('Expert'),
+    ]);
+
+    // The fixture gives all four tiers different shapes on purpose: one fully cleared, one part
+    // way, one untouched, one empty. A row rendering the overall figure would read "2 of 5" four
+    // times over.
+    expect(intermediate).toContain('1 of 3 solved');
+    expect(advanced).toContain('0 of 1 solved');
+    expect(expert).toContain('No challenges yet');
+  });
+
+  it('names each difficulty bar and gives it that tier’s own value and maximum', async () => {
+    stubOneSolvePerPopulatedTier();
+
+    renderDashboard();
+
+    const intermediate = await screen.findByRole('progressbar', { name: 'Intermediate' });
+    // Gated on the tier's own value: every bar reads 0 until the records land, so asserting the
+    // maximum alone would pass against a dashboard that never reads them.
+    await waitFor(() => {
+      expect(intermediate).toHaveAttribute('aria-valuenow', '1');
+    });
+    expect(intermediate).toHaveAttribute('aria-valuemax', '3');
+
+    const novice = screen.getByRole('progressbar', { name: 'Novice' });
+    expect(novice).toHaveAttribute('aria-valuenow', '1');
+    expect(novice).toHaveAttribute('aria-valuemax', '1');
+
+    // An empty tier gets no bar at all rather than one whose maximum is zero, which announces as
+    // complete the moment it appears.
+    expect(screen.queryByRole('progressbar', { name: 'Expert' })).not.toBeInTheDocument();
   });
 
   it('says a category with nothing written yet has no challenges rather than showing 0 of 0', async () => {
