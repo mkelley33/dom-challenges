@@ -97,8 +97,8 @@ split. Progress — attempts, solved and revealed state — is saved to json-ser
 ```
 src/
   runner/        the execution engine: transpile, assertions, harness, iframe host
-  challenges/    challenge content as typed TypeScript modules, plus the registry
-    selection/   Selection & Traversal — one file per challenge
+  challenges/    the metadata index, the on-demand loader, and the content modules
+    selection/   Selection & Traversal — one file per challenge, plus the index that registers them
   components/
     browse/      dashboard, category list, filter bar
     challenge/   the challenge workspace: prompt, editor, preview, results, solutions
@@ -145,13 +145,17 @@ dispatching `click`, `input`, `keydown` and `submit`.
 
 To add one:
 
-1. Write `src/challenges/<category>/<name>.ts`, exporting a `Challenge`.
-2. Add it to that category's `index.ts` array.
+1. Write `src/challenges/<category>/<name>.ts`, exporting a `ChallengeContent` — prompt, markup, starter, tests and
+   solutions.
+2. Add an entry to that category's `index.ts`: the metadata (`id`, `slug`, `title`, `category`, `difficulty`,
+   `concepts`, `relatedIds`) and `load: () => import('./<name>').then((module) => module.<name>)`.
 3. Run `pnpm test`.
 
-Registration order matters only as a tiebreak — the registry sorts each category by ascending difficulty, so a
-challenge lands in the right place in the ladder without you moving it. There is no per-challenge test wiring to write:
-the content suite is generated from the registry, so step 3 checks the new challenge the moment step 2 lands.
+The index is what the dashboard and the category listing read, and the `import()` is what keeps a challenge's content
+off every page but its own — `pnpm build` fails if a challenge module ever stops being fetched on demand. Registration
+order matters only as a tiebreak: the registry sorts each category by ascending difficulty, so a challenge lands in the
+right place in the ladder without you moving it. There is no per-challenge test wiring to write — the content suite is
+generated from the index, so step 3 checks the new challenge the moment step 2 lands.
 
 `AGENTS.md` carries the authoring rules that are not obvious from the type — in particular the realm rule, which is the
 one mistake that passes the test suite and fails in a real browser. Read it before writing tests.
@@ -170,10 +174,13 @@ challenge:
 - `starterCode` runs cleanly and still **fails at least one** test — so no challenge ships accidentally pre-solved,
   and a starter that merely fails to compile does not pass this check by accident;
 - the result count equals the test count — so "nothing failed" cannot mean "nothing ran";
-- every solution has a distinct label, an explanation and a tradeoff analysis.
+- every solution has a distinct label, an explanation and a tradeoff analysis;
+- every entry in the index resolves to a module that really exports what the entry names it — the suite loads all of
+  them through the same loader the app uses.
 
 `src/challenges/registry.test.ts` covers the structural invariants: unique ids and slugs, resolvable `relatedIds`, and
-the ascending-difficulty ordering within each category.
+the ascending-difficulty ordering within each category. `src/challenges/loader.test.ts` pins the shape of the index
+itself — an entry carries metadata and a loader and no challenge content, which is what keeps the landing page cheap.
 
 Under Vitest the harness runs against happy-dom; in the browser it runs against a real iframe. The engine is the same
 code either way — that is the point of the host contract described in `AGENTS.md`.
@@ -191,9 +198,9 @@ code either way — that is the point of the host contract described in `AGENTS.
   summing to exactly 100 however long the drag, and keeps the persisted value readable.
 - **With json-server down, progress fails quietly.** Editing and running still work, and nothing is destroyed, but
   reads and writes fail with no banner explaining it. The spec calls for one; it is not built yet.
-- **The landing page eagerly ships every challenge module.** `Dashboard` imports the whole registry, so each challenge
-  authored adds roughly 15 kB to `/`. `pnpm build` fails once a route passes its committed budget, which is what will
-  force the fix; see `AGENTS.md` §10.
+- **Opening a challenge takes two sequential fetches.** The route's chunk loads first, then the challenge's own — a
+  few kilobytes, on a page that is already showing the app shell. Prefetching on hover would remove the second wait
+  and is not built; see `AGENTS.md` §10.
 
 ## License
 

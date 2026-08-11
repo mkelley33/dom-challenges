@@ -75,6 +75,13 @@ Consequences worth knowing before you touch the runner:
 
 ## 3. Authoring challenges
 
+A challenge is two files' worth of edit: a module exporting a `ChallengeContent` — prompt, `html`, `starterCode`,
+`tests`, `solutions` — and an entry in its category's `index.ts` carrying the metadata and the `import()` that fetches
+it. The metadata lives only in the index and the content lives only in the module, so neither can drift from the other.
+**Never statically import a challenge module**; §10 explains what that costs and what fails when you do. A helper
+shared between a category's challenges goes in that category's `support.ts`, which is the one other filename the build
+check treats as not-a-challenge.
+
 Every new challenge needs **at least one documented alternative solution with tradeoffs**. This is the point of the
 app: it teaches _when_ to reach for a technique, not only _how_, and a challenge with one solution teaches only that
 one way exists. `content.test.ts` enforces that every solution carries a label, an explanation and a tradeoff
@@ -253,7 +260,7 @@ not have to parse `__vite__mapDeps` back out of the emitted chunk — and report
 `/category/:categoryId` and `/challenge/:slug` against committed budgets. A budget it trips is a measurement, so
 answer it by measuring: raising the number is the last resort, not the first. It also fails outright when a route's
 `lazy()` module stops being a chunk of its own, because that is the regression whose cost lands on a _different_
-route's line.
+route's line — and, for the same reason, when a challenge module stops being one (§10).
 
 **`chunkSizeWarningLimit` is raised to 7500 kB, and is not a budget.** Every build warned before that, always about
 the same Monaco workers — chunks no route references and no learner downloads until the editor opens — and a build
@@ -325,30 +332,70 @@ Two consequences that follow from these and have already been got wrong once eac
 
 ---
 
-## 10. Known constraints
+## 10. The challenge registry is an index, and challenge content is lazy
 
-**`allChallenges` is eager, and it does not scale.** `Dashboard` imports the whole registry, so every challenge module
-— prompt, `html`, `starterCode`, every solution's explanation and tradeoffs, and the test functions — ships in the
-landing page's static closure, and almost none of it is rendered by `/`.
+**Nothing but the challenge route may reach a challenge module.** The type is split in two, and the split is the whole
+architecture:
 
-Measured by emptying `selectionChallenges` and rebuilding, then reading `pnpm budget`: the 13 challenge modules are
-**87,832 B of `/`'s 452,947 B of eager JavaScript — 19.4%** — or 27,438 B of 144,243 B gzipped. That is **6,756 B raw
-(2,111 B gzipped) each on average**, and the spread is wide: removing one at a time gives 2,424 B for `queryBasics`,
-4,673 B for `firstElementChild`, 9,011 B for `containsAndPosition`, 9,356 B for `treeWalker`. The plan targets ~103
-challenges; at the average rate that is ~696 kB raw of challenge content alone, putting `/` at roughly **1.05 MB raw
-and ~335 kB gzipped** of eager JavaScript for a page that shows only counts and titles.
+- `ChallengeMeta` — `{id, slug, title, category, difficulty, concepts, relatedIds}`. What `/` and
+  `/category/:categoryId` render and search. Cheap, and eager.
+- `ChallengeContent` — `prompt`, `html`, `starterCode`, `tests`, `solutions`. What only `/challenge/:slug` renders, and
+  only for the one challenge it is showing. Expensive, and never eager.
+- `ChallengeEntry` is the metadata plus `load()`, the dynamic import that fetches the rest. `Challenge` is the two
+  halves joined, which is what `loadChallenge` returns and what the runner, the editor and the prompt panel see.
 
-Two earlier figures for this were wrong, both in the way §7 warns about. "~191 kB, i.e. 42%" was the size of the
-_chunk_ the registry happens to land in (`NotFound-*.js`, 190,968 B today), which also carries everything else rollup
-grouped with it — a chunk size is not a module's cost. Dividing that chunk by 13 to get "~14.7 kB each" compounded the
-error rather than fixing it; the real rate is ~6.8 kB, which is what the original ~7.2 kB estimate said. Re-derive
-before citing: empty the category array, `pnpm build`, and diff the `/` line.
+A category's `index.ts` holds one entry per challenge — metadata inline, `load: () => import('./x').then(m => m.x)` —
+and is the only place a challenge is registered. Metadata therefore has exactly one home; there is no generated file to
+regenerate and nothing that can drift out of step with the module beside it.
 
-`Dashboard` needs `{id, slug, title, category, difficulty}` per challenge and nothing else. The fix is a generated
-index module plus a per-challenge dynamic import. **The refactor does not get harder per challenge** — every static
-edge lives in one file per category (`selection/index.ts` holds all 13), so unpicking them is the same size of change
-at 13 challenges as at 103. What compounds is the _weight_, which is why the budget in `scripts/routeBudget.ts` gives
-`/` less headroom than one challenge costs. **Decide it before the next category is authored, not after.**
+`ChallengePage` looks the slug up in the index synchronously (so an unknown slug is a not-found page immediately, not a
+spinner that becomes one) and then reads `loadChallenge(entry)` with React's `use`. That is why `loadChallenge` caches
+its promises by id: `use` requires the same promise across renders. It also deletes a **rejected** promise from that
+cache, so a dropped chunk request is retried rather than becoming a permanently broken challenge.
+
+**What it cost and what it saved, measured by route-level delta** (`pnpm build`, then empty the category's entries and
+rebuild — §7's method, and the only one that is trustworthy here):
+
+| `/` eager JavaScript          | before  | after   |
+| ----------------------------- | ------- | ------- |
+| with the 13 selection entries | 452,947 | 370,500 |
+| with the category emptied     | 365,115 | 365,115 |
+| **cost of 13 challenges**     | 87,832  | 5,385   |
+| **per challenge**             | 6,756   | 414     |
+
+The floor is byte-identical either way, so the refactor added no fixed overhead: a challenge went from **6,756 B on the
+first paint to 414 B**, a factor of sixteen. At the ~103 challenges the project targets, that is ~408 kB of eager
+JavaScript on `/` rather than ~1.05 MB. The per-challenge spread before was wide — 2,424 B for `queryBasics`, 9,356 B
+for `treeWalker` — which matters below, because the cheapest one is the one a byte budget cannot see.
+
+**Two checks hold this, and they fail for different reasons.** `pnpm build` runs both:
+
+- `scripts/routeBudget.ts` budgets each route's eager bytes. At 414 B per challenge the headroom is about twenty
+  challenges of ordinary growth, so a jump of kilobytes means something went eager — not that the library grew.
+- `assertChallengesAreLazy` in the same script reads every challenge module off disk and requires each to be its own
+  chunk in the build manifest. A module reached only through `import()` is emitted as a chunk under its own source
+  path; one that someone statically imported is folded into its importer and disappears from the manifest entirely.
+  **This is the ungameable half.** Verified by mutation: replacing one `load` with a static import and
+  `Promise.resolve` moved `/` by 2,178 B — comfortably inside the budget's headroom, invisible to it, and caught by
+  this check naming the file.
+
+`src/challenges/loader.test.ts` covers the same rule from the source side: it asserts an index entry's keys
+**exhaustively**, so a `{...challenge, load}` spread fails rather than passing every "it has a title" assertion. Both
+halves are needed. Neither replaces the other.
+
+**`content.test.ts` still opens every challenge, and must.** It awaits `loadChallenge` for the whole index at the top
+of the file, which is eager on purpose — it is a test, not a route — and it buys a check nothing else makes: every
+entry has to resolve to a module that really exports what the entry says. A mistyped path or export name is a challenge
+that 404s for a learner and for no one else. If this suite is ever narrowed to a subset, the project's correctness
+guarantee has a hole in it that nothing else can see.
+
+**One accepted cost:** opening a challenge is now two sequential fetches — the route chunk, then the challenge chunk —
+where it used to be one. The second is a few kilobytes. Prefetching on hover from `ChallengeList` would remove it and
+has not been done.
+
+---
+
+## 11. Known constraints
 
 **`RouteError`'s announcement has never been heard with a real screen reader.** A polite region is generally not
 announced for content already present at insertion, and `RouteError` is a whole-page replacement. The
