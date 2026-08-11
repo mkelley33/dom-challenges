@@ -29,6 +29,39 @@ import type { ChallengeEntry } from '@/types/challenge';
  * batching challenge needs the browser-only validation route that Observers, Canvas and the async
  * Clipboard API are already waiting on. Pinned by `src/test/happyDomGaps.test.ts`.
  *
+ * **Re-measured in real Chrome when the category was filled out**, through the production
+ * `createIframeHost` on a Vite-served page, in a foregrounded tab (`visibilityState: 'visible'`,
+ * `hasFocus(): true`) with a positive control asserted first -- the frame services a
+ * `requestAnimationFrame` within 500ms -- and repeated. Both runs identical: **22 solution runs, 0
+ * failures; 11 starters, all running cleanly and all failing a named assertion; 45 hand-written
+ * wrong solutions, all rejected; `localStorage` 0 keys -> 0 keys.** Seventeen direct DOM probes in
+ * the same frame agreed with happy-dom on every one, including the four this category's assertions
+ * actually rest on:
+ *
+ * - a live `HTMLCollection` iterated forwards while removing **skips** -- `for..of` and an indexed
+ *   loop both leave the second of two adjacent matches behind, in both engines;
+ * - `list.remove(row)` removes the **list** (`remove()` takes no arguments and ignores extras) and
+ *   returns `undefined`, with the rows surviving inside the detached list;
+ * - assigning `outerHTML` leaves the reference you were holding detached while the element in the
+ *   document is a third node the parser built;
+ * - `insertAdjacentHTML` in all four positions preserves the surrounding text nodes' identity, and
+ *   an `innerHTML` rebuild of the same shape does not.
+ *
+ * Two behaviours worth recording because a challenge's prose asserts them and no test can: on an
+ * element with no parent, `insertAdjacentHTML('beforebegin', …)` throws `NoModificationAllowedError`
+ * while `before()` is a **silent no-op**. Measured in Chrome, twice.
+ *
+ * **Why the category stops at eleven.** The ground is covered and the remaining ideas are either
+ * unauthorable here or already taught: batching is the divergence above; `<template>` inertness is
+ * `template-rows` plus `selection/template-content`; `DOMParser` and `createContextualFragment` are
+ * the same "parse a string into nodes" lesson `inner-html-cost` teaches with the cost attached; and
+ * HTML's context-sensitive parsing (a `<tr>` dropped outside a table) is a parser lesson rather than
+ * a creation one. A twelfth challenge would repeat a trap already in here.
+ *
+ * What the eleven cost, by §7's route-level delta -- build, empty this array, rebuild, subtract:
+ * **4,533 B on every route, 412.1 B an entry**, inside the 414 B `scripts/budgets.ts` allows for
+ * one. All three ceilings moved by the same amount, so nothing here needed a re-baseline.
+ *
  * See AGENTS.md §3 and §10.
  */
 export const creationEntries: ChallengeEntry[] = [
@@ -83,6 +116,16 @@ export const creationEntries: ChallengeEntry[] = [
     load: () => import('./adjacentPositions').then((module) => module.adjacentPositions),
   },
   {
+    id: 'creation-template-rows',
+    slug: 'template-rows',
+    title: 'Stamp the rows out of a template',
+    category: 'creation',
+    difficulty: 'intermediate',
+    concepts: ['template', 'cloneNode', 'DocumentFragment', 'replaceChildren', 'textContent'],
+    relatedIds: ['selection-template-content'],
+    load: () => import('./templateRows').then((module) => module.templateRows),
+  },
+  {
     id: 'creation-inner-html-cost',
     slug: 'inner-html-cost',
     title: 'What innerHTML += throws away',
@@ -131,15 +174,5 @@ export const creationEntries: ChallengeEntry[] = [
     concepts: ['HTMLCollection', 'live collections', 'remove', 'querySelectorAll'],
     relatedIds: ['selection-live-vs-static', 'creation-detach-and-reattach'],
     load: () => import('./removeWhileIterating').then((module) => module.removeWhileIterating),
-  },
-  {
-    id: 'creation-template-rows',
-    slug: 'template-rows',
-    title: 'Stamp the rows out of a template',
-    category: 'creation',
-    difficulty: 'intermediate',
-    concepts: ['template', 'cloneNode', 'DocumentFragment', 'replaceChildren', 'textContent'],
-    relatedIds: ['selection-template-content'],
-    load: () => import('./templateRows').then((module) => module.templateRows),
   },
 ];
