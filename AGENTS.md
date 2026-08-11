@@ -372,19 +372,28 @@ _different_ route's line — and, for the same reason, when a challenge module s
 **All three budgets are derived from the challenge count. None is a literal.** A challenge costs every route 414 B of
 index entry and buys back 414 B of ceiling on every route, so ordinary authoring never needs a re-baseline — which
 matters because a routine re-baseline is indistinguishable from someone raising a number to bury a regression. The
-shared floor (365,115 B, `/` with the one populated category emptied), the slack (a fixed 9,500 B per route, for
+shared floor (365,115 B, `/` with **every** category's entries emptied), the slack (a fixed 9,500 B per route, for
 growth that is not challenges) and the two split routes' extra chunks (166,155 B and 415,218 B) are measured constants
-pinned by `scripts/budgets.test.ts`, so moving one means editing a test that records a measurement.
+pinned by `scripts/budgets.test.ts`, so moving one means editing a test that records a measurement. Emptying
+`selectionEntries` alone was that method when `selection` was the only populated category and is now wrong by eleven
+index entries: it measures 369,309 B, 4,194 B above the floor.
 
 **One coefficient covers three routes because the build gives it one.** The whole challenge index compiles into a
 single chunk that every route's closure already contains, so registering a challenge moves that one chunk and no other
 — verified file by file at 1, 2, 11, 13, 14, 17, 20, 24, 34, 54 and 104 challenges, with each split route sitting an
 _exactly_ constant 166,155 B and 415,218 B above `/` at all eleven counts. The 427.8 B and 438.2 B those routes were
 previously thought to pay per challenge were an artefact of the baseline: a **zero**-challenge build has no `import()`
-in any category index, so it has no preload helper and no split-chunk runtime and is structurally a different build.
-Crossing 0 → 1 costs those routes 176 B and 311 B **once**, and 414.2 + 176/13 = 427.7, 414.2 + 311/13 = 438.1. It was
-a one-time re-chunking cost divided by thirteen, not a per-challenge term, and the library does not return to empty.
-For the same reason, do not take a zero-challenge build as this line's intercept when re-measuring the floor.
+in any category index, so it has no preload helper and no split-chunk runtime and is structurally a different build —
+`/`'s closure is four files at zero challenges and six at one. Crossing 0 → 1 costs those routes 176 B and 311 B
+**once**, and 414.2 + 176/13 = 427.7, 414.2 + 311/13 = 438.1. It was a one-time re-chunking cost divided by thirteen,
+not a per-challenge term, and the library does not return to empty.
+
+**`/` pays that step too, so 414.2 was never a clean per-challenge figure either.** The same subtraction produced it,
+and `/`'s own 0 → 1 cost is at least 260 B measured directly outside the index chunk. Net it out and Phase 2's entries
+cost ~393.5 B; the 23 real entries added between the N=1 and N=24 builds — both structurally the same build, so an
+honest subtraction — cost 365.6 B. 414 stays because it exceeds every figure an entry has ever measured, not because
+it was rounded down from 414.2. When re-measuring either the floor or the coefficient, do not subtract a
+zero-challenge build.
 
 Deriving moved `/challenge/:slug` down 5,231 B and `/category/:categoryId` up 706 B from the round literals they
 replaced; all three now leave the same 10,217 B of headroom, so `pnpm build` prints remaining bytes as well as a
@@ -511,6 +520,13 @@ rebuild — §7's method, and the only one that is trustworthy here):
 The floor is byte-identical either way, so the refactor added no fixed overhead: a challenge went from **6,756 B on the
 first paint to 414 B**, a factor of sixteen. At the ~103 challenges the project targets, that is ~408 kB of eager
 JavaScript on `/` rather than ~1.05 MB.
+
+Both columns subtract a zero-challenge build, which §7 records is structurally a different one. For the after column
+that is measurable and measured: net out `/`'s own one-time 0 → 1 cost and its 414.2 B becomes ~393.5 B. For the before
+column it is not — that architecture is gone from the tree and cannot be rebuilt — so whether 6,756 B carries an
+equivalent step is unknown, and the factor of sixteen should be read as the order-of-magnitude claim it is rather than
+recomputed. The conclusion it supports is not close enough to the line for this to matter. The derived budget's 414 is
+justified separately, in `scripts/budgets.ts`, and not by this table.
 
 **Two checks hold this, and they fail for different reasons.** `pnpm build` runs both:
 

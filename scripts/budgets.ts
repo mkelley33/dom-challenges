@@ -26,38 +26,61 @@ export interface RouteBudget {
 }
 
 /**
- * `/`'s eager JavaScript with the one populated category emptied out, measured -- and the part of
- * the other two routes' closures that is `/`'s, since both contain it whole.
+ * `/`'s eager JavaScript with no challenge registered anywhere, measured -- and the part of the
+ * other two routes' closures that is `/`'s, since both contain it whole.
  *
- * `pnpm build`, empty `selectionEntries`, rebuild -- §7's method and the only trustworthy one here.
+ * Route-level delta per §7, and the only trustworthy method here: build, empty **every** category's
+ * entries array, rebuild, take the difference. Emptying `selectionEntries` alone was that method
+ * when `selection` was the only populated category; it is not any more. Eleven categories now hold a
+ * challenge each, and a build with only those registered measures 369,309 B -- 4,194 B above this
+ * constant, which is eleven index entries and not a floor.
+ *
  * This is the part of every route that has nothing to do with how many challenges exist.
  *
  * **A zero-challenge build is not this line's intercept, and whoever re-measures this needs to know
  * why.** With no `import()` left in any category index there is no preload helper chunk and no
- * split-chunk runtime, so a zero-challenge build is a structurally different one -- which is the
- * whole reason the split routes below looked like they paid more per challenge than `/`. Fitted to
- * builds from 1 to 104 challenges instead, `/`'s intercept is about 365,560 B, so this constant runs
- * ~445 B low. Left as measured: it is charged against the fixed slack, in the safe direction, and it
- * stops mattering as the count grows. Do not raise it to "correct" it -- that is a re-baseline of
- * the one number this arrangement exists to stop anyone re-baselining.
+ * split-chunk runtime -- `/`'s closure is four files at zero challenges and six at one -- so a
+ * zero-challenge build is structurally a different build. That is the whole reason the split routes
+ * below looked like they paid more per challenge than `/`.
+ *
+ * So this constant sits below the N>=1 line, by about 445 B, and only part of that is the artefact.
+ * Today's zero-challenge build measures 365,290 B against the 365,115 B recorded here, so **~175 B
+ * is ordinary app growth since Phase 2 and only ~270 B is the zero-baseline artefact**. Both are
+ * left as they are: the gap is charged against the fixed slack, in the safe direction, and it stops
+ * mattering as the count grows. Do not raise it to "correct" it -- that is a re-baseline of the one
+ * number this arrangement exists to stop anyone re-baselining.
+ *
+ * The ~445 B is the distance to the line through N=1 at 365.6 B per entry, the average real
+ * challenges cost. It is not a least-squares fit of every point measured: that gives slope 318.7 and
+ * intercept 366,086, pulled down because the 34, 54 and 104-challenge points used synthetic entries
+ * with shorter metadata than real ones.
  */
 const SHARED_FLOOR_BYTES = 365_115;
 
 /**
  * What one challenge costs **every** route: its index entry, and nothing else.
  *
- * `/` measures 370,500 B with 13 challenges registered and 365,115 B with none, so 5,385/13 =
- * 414.2 B. Rounded down, which runs the model ~0.2 B per challenge tight -- 23 B at the ~103
- * challenges this project targets, against slack measured in thousands.
+ * 414 was set as 5,385/13 = 414.2 B, from `/` measuring 370,500 B with 13 challenges registered and
+ * 365,115 B with none. **That subtraction has the same flaw this file now warns about**, and saying
+ * so here rather than letting the two claims sit side by side unreconciled: `/` pays its own
+ * one-time 0 -> 1 structural cost too, at least 260 B measured directly in the chunks outside the
+ * index and ~269 B once the one entry in the N=1 build is charged at the going rate. Net that out
+ * and Phase 2's entries cost ~393.5 B each, not 414.2.
+ *
+ * The constant is nonetheless still sound, for a better reason than the one originally given: it
+ * exceeds what an entry has ever measured. ~393.5 B then, and 365.6 B for the 23 real entries added
+ * between the N=1 and N=24 builds -- the honest figure, since both ends of that subtraction are
+ * structurally the same build. 414 is the generous side of both. Rounding down from a number that
+ * was itself inflated is not what makes it safe, and the margin is real rather than the ~0.2 B once
+ * claimed.
  *
  * One coefficient for three routes is a measurement, not an assumption. Registering a challenge
  * moves exactly one chunk in the whole build -- the one the index compiles into, which every route's
  * closure already contains -- and moves no other chunk by a byte, checked file by file at eleven
- * challenge counts. A real challenge's entry averaged 365.6 B over the 23 in the tree, so 414 stays
- * on the generous side of measurement across the range.
+ * challenge counts.
  *
  * Not to be confused with what a challenge module going *eager* costs, which is a different
- * measurement of a different thing: 2,178 B to 9,224 B across this category. `assertChallengesAreLazy`
+ * measurement of a different thing: 2,178 B to 9,225 B across this category. `assertChallengesAreLazy`
  * is what sees that; see the note on `routeBudgets` below.
  */
 const CHALLENGE_INDEX_ENTRY_BYTES = 414;
@@ -169,9 +192,10 @@ export function challengeModuleKeys(rootDir: string = ROOT_DIR): string[] {
  * rather than accommodated.
  *
  * **This is still not the laziness check, and deriving it does not make it one.** The byte budget
- * cannot see a challenge going lazy-to-eager at any size: statically importing the most expensive
- * module in the tree puts `/` at 379,724 B, which fits under the derived ceiling exactly as it fit
- * under the literal. `assertChallengesAreLazy` in `routeBudget.ts` is what catches that, it reads
+ * cannot see a challenge going lazy-to-eager at any size: re-measured after this change, statically
+ * importing the most expensive module in the tree puts `/` at 383,559 B and every route at 100% of
+ * its ceiling, all three still passing, the tightest with 951 B to spare.
+ * `assertChallengesAreLazy` in `routeBudget.ts` is what catches that, it reads
  * the same set of files this count comes from, and it does not depend on a number at all. Nor does
  * the derivation hand an eager module any room: a challenge raises the ceiling by 414 B and the
  * entry by 414 B, so going eager still has to fit inside the fixed slack -- and now that the split
