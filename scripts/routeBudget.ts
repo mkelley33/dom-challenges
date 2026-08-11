@@ -38,11 +38,16 @@ interface RouteBudget {
 /**
  * Measured figures plus roughly 2.5%.
  *
- * The headroom on `/` is deliberately less than one challenge's worth. `allChallenges` is eager --
- * see AGENTS.md §10 -- so every challenge authored adds around 15 kB to the landing page, and a
- * budget generous enough to absorb several of them would let the whole category land before anyone
- * noticed. Tripping this is the reminder that the eager-registry refactor is now due, not a
- * suggestion to raise the number.
+ * `/`'s headroom is 12,053 B, which at the measured 6,756 B per challenge (AGENTS.md §10) is a
+ * little under two — so this trips on the *second* challenge authored, not the first.
+ *
+ * That is the backstop, not the guard. This check measures bytes, and bytes are a proxy: the rule
+ * is "do not author a second category while the registry is statically imported", and 12 kB freed
+ * anywhere at all buys another challenge without anyone going near the registry. The unused `ui/`
+ * components and CSS tokens on the Phase 2 list would each do it, as a side effect of cleanup that
+ * has nothing to do with challenges. The ungameable half is the pinned count in
+ * `src/challenges/registry.test.ts`, which counts challenges rather than bytes and trips on the
+ * first one. Keep both; they fail for different reasons and say different things.
  */
 const BUDGETS: RouteBudget[] = [
   { route: '/', lazyKey: null, maxBytes: 465_000 },
@@ -160,8 +165,23 @@ process.stdout.write(`${lines.join('\n')}\n\n`);
 // per-route number that would count it three times.
 process.stdout.write(`  one shared stylesheet: ${format(stylesheetBytes)} B\n\n`);
 
+// Named inline rather than left to the reader. Someone who has just authored a challenge reads
+// "/ is 1,234 B over its 465,000 B budget" and the most available fix is a bigger number -- which
+// the following line forbids without saying why. Naming the eager registry is what makes refusing
+// the obvious fix reasonable rather than merely prohibited.
+const OVER_BUDGET_GUIDANCE = [
+  'On `/` the usual cause is the eager registry: `Dashboard` imports every challenge module, so each',
+  'challenge authored puts another ~6.8 kB on the first paint of a page that shows only counts and',
+  'titles. The fix is the one AGENTS.md §10 describes -- a generated index module plus a per-challenge',
+  'dynamic import -- not a bigger number here. `src/challenges/registry.test.ts` pins the same rule by',
+  'count, and it trips a challenge earlier than this does.',
+  '',
+  'For anything else, measure before changing a number: AGENTS.md §7 has the method, and this check is',
+  'what it says to use.',
+].join('\n');
+
 if (failures.length > 0) {
   process.stdout.write(`Over budget:\n${failures.map((failure) => `  - ${failure}`).join('\n')}\n\n`);
-  process.stdout.write('Measure before raising a number. AGENTS.md §7 has the method and §10 has the known cause.\n\n');
+  process.stdout.write(`${OVER_BUDGET_GUIDANCE}\n\n`);
   process.exit(1);
 }
