@@ -1,5 +1,6 @@
 import type { CategoryId, ChallengeEntry, ChallengeMeta, Difficulty } from '@/types/challenge';
 
+import { observersEntries } from './observers';
 import { selectionEntries } from './selection';
 
 export const CATEGORY_META: Record<CategoryId, { title: string; blurb: string }> = {
@@ -79,7 +80,10 @@ function byAscendingDifficulty(entries: readonly ChallengeEntry[]): ChallengeEnt
  * whole module used to cost. `loadChallenge` in `./loader` turns an entry into a `Challenge`, and
  * the challenge route is the only thing that asks. See AGENTS.md §10.
  */
-export const challengeIndex: readonly ChallengeEntry[] = [...byAscendingDifficulty(selectionEntries)];
+export const challengeIndex: readonly ChallengeEntry[] = [
+  ...byAscendingDifficulty(selectionEntries),
+  ...byAscendingDifficulty(observersEntries),
+];
 
 const byId = new Map(challengeIndex.map((entry) => [entry.id, entry]));
 const bySlug = new Map(challengeIndex.map((entry) => [entry.slug, entry]));
