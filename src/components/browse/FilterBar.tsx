@@ -24,6 +24,11 @@ const DIFFICULTY_OPTION_LABELS: Record<string, string> = { all: ANY_DIFFICULTY_L
  * learner has opened. Undebounced, a learner a dozen challenges in stringifies all of them on
  * every keystroke. Long enough to swallow a burst, short enough that the list still feels like it
  * is filtering as you type.
+ *
+ * Raising this reaches beyond this file. `ChallengeList.test.tsx`'s live-region test types into the
+ * search box and waits for the empty-state message, so it waits out this delay inside `waitFor`'s
+ * 1000ms default -- and `vitest.config.ts` sets no `asyncUtilTimeout`. At 200ms that is 5x
+ * headroom; past roughly 800ms it becomes a flake in a file that never mentions this constant.
  */
 const QUERY_WRITE_DELAY_MS = 200;
 
