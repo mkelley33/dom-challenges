@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import type { EditorLayout } from '@/lib/paneLayout';
+import { DEFAULT_LAYOUT } from '@/lib/paneLayout';
 import type { CategoryId, Difficulty } from '@/types/challenge';
 
 export type MobileTab = 'code' | 'problem' | 'result';
@@ -21,11 +23,6 @@ export interface ChallengeFilters {
   hideSolved: boolean;
 }
 
-export interface EditorLayout {
-  promptPercent: number;
-  editorPercent: number;
-}
-
 interface EditorStore {
   drafts: Record<string, string>;
   filters: ChallengeFilters;
@@ -39,7 +36,6 @@ interface EditorStore {
 }
 
 const DEFAULT_FILTERS: ChallengeFilters = { category: 'all', difficulty: 'all', query: '', hideSolved: false };
-const DEFAULT_LAYOUT: EditorLayout = { promptPercent: 28, editorPercent: 42 };
 
 export const useEditorStore = create<EditorStore>()(
   persist(
