@@ -162,6 +162,25 @@ describe('FilterBar', () => {
     expect(storedFilters().query).toBe('c');
   });
 
+  it('carries a half-typed search along when a discrete control fires inside the debounce window', async () => {
+    const user = userEvent.setup();
+    renderCategory();
+
+    await user.type(await screen.findByRole('textbox', { name: 'Search challenges' }), 'clo');
+
+    // The precondition: the query write is still sitting on the timer the click is about to
+    // cancel. Without this the assertion below could pass on a write that had already landed.
+    expect(storedFilters().query).toBe('');
+
+    await user.click(screen.getByRole('switch', { name: 'Hide solved' }));
+
+    // The discrete path cancels the pending timer, so the *only* thing keeping the typed text is
+    // that it writes the whole form snapshot rather than the field that changed. Narrowing it to
+    // `{ [name]: values[name] }` reads like a tightening, passes every other test in the suite,
+    // and throws away what the learner had typed.
+    expect(storedFilters()).toMatchObject({ query: 'clo', hideSolved: true });
+  });
+
   it('applies a discrete control immediately rather than waiting out the search debounce', async () => {
     const user = userEvent.setup();
     renderCategory();
