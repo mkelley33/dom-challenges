@@ -224,6 +224,25 @@ describe('ClearButton', () => {
     expect(onCleared).not.toHaveBeenCalled();
   });
 
+  it('drops a stale failure once a later clear succeeds', async () => {
+    const user = userEvent.setup();
+    readStoredProgress.mockResolvedValueOnce(null);
+    const { onCleared } = renderClearButton();
+
+    await confirmClear(user);
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    await confirmClear(user);
+
+    // Otherwise "your progress could not be cleared" stands next to a clear that just worked. The
+    // reset happens synchronously as the confirm is handled, so by the time `onCleared` runs it has
+    // long since flushed -- an alert still on screen here is one that was never dismissed.
+    await waitFor(() => {
+      expect(onCleared).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('cannot be set off a second time while the first clear is still in flight, and keeps focus', async () => {
     const user = userEvent.setup();
     let releaseRead!: (record: ProgressRecord | null) => void;
