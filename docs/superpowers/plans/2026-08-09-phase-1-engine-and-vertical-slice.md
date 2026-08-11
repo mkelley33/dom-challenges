@@ -30,6 +30,17 @@ Every challenge module and every task that writes one inherits these.
 - **Read learner exports through `ctx.fn<T>(name)`, never by asserting a type onto `ctx.exports`.** The accessor concentrates the one unavoidable unsound assertion in `harness.ts` and throws a named, useful error when the export is missing.
 - **A challenge's tests must make the wrong mental model impossible, not merely undesirable.** If the learner's function owns both the setup and the mutation, no assertion on its return value can tell a correct technique from a lucky one — invert control so the test performs the mutation. The live-vs-static challenge in Task 7 is the worked example.
 - **Every `starterCode` must run cleanly and fail a named assertion.** A starter that fails to transpile also "fails a test", which is why the content suite asserts `error === null` and `results.length === tests.length` before it looks at failures.
+- **A challenge's `html` may contain `<script>`, but nothing may depend on whether it runs.** ADDED
+  after the Task 17 review. The host inlines `challenge.html` into an unsandboxed `srcdoc`
+  document and resolves on `load`, so in a real browser the parser executes those scripts before
+  any test sees the frame — and `runChallenge` rebuilds the document per test, so a script runs
+  once per test plus once for the preview, with the frame global in the learner's scope chain.
+  happy-dom leaves them inert. **The content suite is therefore structurally blind to this one
+  invariant**, unlike every other one it enforces. A script whose only effect is inert text (the
+  tree-walker challenge's `var trackingId = '…'`) is safe by author discipline, not by any gate.
+  So: `<script>` content is allowed as *material to be traversed*, never as *behaviour a test
+  relies on*. A challenge that needs a script to have run must be verified manually in Chrome and
+  must say so in a comment at its `html` field.
 
 ---
 
@@ -4131,6 +4142,24 @@ elements are present in the DOM.
 Walk every component built in Tasks 10–17 and confirm: one `<h1>` per page; landmarks (`header`, `main`, `nav`) present; every icon-only control has an accessible name; visible focus rings are not removed; `Dialog` traps focus and restores it on close (shadcn handles this — verify, do not assume); pass/fail is not conveyed by colour alone (the `✓`/`✗` plus screen-reader-only text in Task 13 covers this).
 
 Run `pnpm lint` and confirm `jsx-a11y` reports nothing.
+
+- [ ] **Step 5b: Make assertion failure messages legible to a learner**
+
+**ADDED after the Task 17 review**, and it must land in this phase rather than after the next
+ninety challenges are written against the current messages. `describeValue` in
+`src/runner/expect.ts` renders DOM collections as objects, so real failures a learner meets today
+read: `Expected [{}] to have length 0`, `Expected {"0":{},"1":{},"2":{}} to have length 0`, and
+`Expected {"0":{},"1":{},"2":{}} to equal ["Home","Docs","About"]`. Four of the ten new challenges
+produce one of these, including `selection-query-all` — the first novice challenge in the category,
+so it is the first failure message a beginner ever sees. A teaching app whose failure messages are
+unreadable fails at the one thing it exists to do.
+
+This is **not** a one-line branch, and the earlier report calling it one was wrong. A useful version
+needs: `NodeList` / `HTMLCollection` / array-of-nodes rendering as a list of their elements; the
+element branch (`expect.ts:68`) extended past the bare `<p>` it prints today to carry `id` and
+`class`, since `<div>` three times over identifies nothing; a length cap so a 500-node collection
+does not flood the panel; and tests in `expect.test.ts` for each. Do it as its own commit, not
+folded into a layout or a11y change.
 
 - [ ] **Step 6: Add a router `errorElement`**
 
