@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useRouteError } from 'react-router';
 
 import { buttonVariants } from '@/components/ui/buttonVariants';
@@ -28,6 +28,23 @@ function detailOf(error: unknown): string | null {
 export function RouteError() {
   const error = useRouteError();
   const detail = detailOf(error);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    // The only thing that gets this page announced at all.
+    //
+    // A live region is read when its content changes *while the region is already on the page*;
+    // content that is present when the region is inserted is not announced. This is a whole-route
+    // replacement, so the `<output>` below arrives with its text already inside it, and react-router
+    // moves no focus on navigation -- a polite region alone would be silence. `role="alert"` is the
+    // documented exception to that rule, and it is exactly what this page gave up in order to stop
+    // being assertive and atomic over its own heading and button.
+    //
+    // Focusing the heading is the conventional SPA route-change answer: it announces the heading
+    // without interrupting, and it puts a keyboard user at the top of a page they were thrown to
+    // rather than wherever focus happened to be when the chunk failed.
+    headingRef.current?.focus();
+  }, []);
 
   const handleReload = useCallback(() => {
     // A reload rather than a re-render. React caches a rejected `lazy` payload for the life of the
@@ -38,7 +55,10 @@ export function RouteError() {
 
   return (
     <div className="flex h-full flex-col items-start gap-3 p-8">
-      <h1 className="text-lg font-semibold">This page could not be loaded</h1>
+      {/* `-1`, so the effect above can focus it while it never becomes a Tab stop of its own. */}
+      <h1 ref={headingRef} tabIndex={-1} className="text-lg font-semibold">
+        This page could not be loaded
+      </h1>
       {/* The message alone is the live region, not the page. `role="alert"` here would be assertive
           and atomic: it interrupts whatever a screen reader is saying, and it reads the whole region
           as one string -- heading, copy, detail and the button's label together. This page arrives

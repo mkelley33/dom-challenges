@@ -61,6 +61,20 @@ describe('RouteError', () => {
     expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument();
   });
 
+  it('moves focus to its heading, which is the only thing that gets the page announced at all', () => {
+    renderThrown(new Error('boom'));
+
+    const heading = screen.getByRole('heading', { level: 1, name: /could not be loaded/i });
+    // A live region is announced when its content changes *while it is already present*; content
+    // that is there at insertion is not. This page is a whole-route replacement, so the `<output>`
+    // below arrives with its text already in it and react-router moves no focus on navigation --
+    // without this, a screen-reader user gets silence. `role="alert"` is the documented exception,
+    // and it is the one this page gave up to stop being assertive and atomic over its own controls.
+    expect(heading).toHaveFocus();
+    // -1, not 0: focusable to be announced, never a stop a keyboard user has to Tab past.
+    expect(heading).toHaveAttribute('tabindex', '-1');
+  });
+
   it('announces politely, and does not sweep the heading and the retry into the announcement', () => {
     renderThrown(new Error('boom'));
 
