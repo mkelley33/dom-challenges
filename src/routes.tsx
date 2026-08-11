@@ -4,6 +4,7 @@ import { createBrowserRouter } from 'react-router';
 
 import { Dashboard } from './components/browse/Dashboard';
 import { AppShell } from './components/layout/AppShell';
+import { RouteError } from './components/layout/RouteError';
 import { NotFound } from './components/NotFound';
 
 // Both split routes below use `React.lazy` rather than the route's own `lazy` property, so
@@ -37,10 +38,23 @@ export const routeDefinitions: RouteObject[] = [
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: 'category/:categoryId', element: <ChallengeList /> },
-      { path: 'challenge/:slug', element: <ChallengePage /> },
-      { path: '*', element: <NotFound message="That page does not exist." /> },
+      {
+        // A pathless layout route whose only job is to hold the boundary. react-router renders an
+        // `errorElement` in place of the element belonging to the route that carries it, so putting
+        // this on the shell route above would replace the header and the navigation with the error
+        // page -- a learner whose chunk failed would have nowhere left to click. One level down, it
+        // renders into the shell's own `<Outlet />` and covers every child route, including all
+        // three lazy boundaries beneath them: the two split routes here, Monaco inside
+        // `EditorPanel`, and the confirm dialogs. A route defaults to `<Outlet />` when it has no
+        // element of its own, so this adds nothing to the rendered tree but the boundary.
+        errorElement: <RouteError />,
+        children: [
+          { index: true, element: <Dashboard /> },
+          { path: 'category/:categoryId', element: <ChallengeList /> },
+          { path: 'challenge/:slug', element: <ChallengePage /> },
+          { path: '*', element: <NotFound message="That page does not exist." /> },
+        ],
+      },
     ],
   },
 ];
