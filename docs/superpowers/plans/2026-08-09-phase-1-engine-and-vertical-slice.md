@@ -3867,6 +3867,22 @@ Expected: FAIL — `Failed to resolve import "./ClearButton"`.
 
 A shadcn `Dialog` wrapping a destructive-variant `Button`. On confirm, in order: `clearDraft(challengeId)`, `clearProgress.mutate(recordId)`, `onCleared()`.
 
+**AMENDED after the Task 15 review — that ordering is not safe on a failed DELETE.** The sketch
+never considered the network failing, and with `mutate` (fire-and-forget) it produces exactly the
+state the same function refuses to produce three lines earlier: `clearDraft` has already destroyed
+the learner's unrecoverable code while the optimistic removal rolls the record back, so the row
+saying they solved it returns and their draft does not. Half a clear, and the worse half.
+
+Use `mutateAsync` and clear the draft and the result **after** it resolves, so a failed DELETE
+leaves everything intact and the alert is the whole outcome. The usual objection — a visible delay
+on every clear — does not apply here: the flow already awaits `readStoredProgress()` before it can
+do anything, and already renders an in-flight disabled state built for that wait. One DELETE
+round-trip inside an affordance that already exists costs nothing new. On success the learner
+observes the same order the sketch specified.
+
+Whichever way this lands, the `stored === null` branch's stated reasoning and the DELETE-failure
+branch's behaviour must agree. They currently contradict each other in the same function.
+
 - [ ] **Step 4: Wire it into `ChallengePage`**
 
 Pass `onCleared` as a callback that sets the editor value back to `challenge.starterCode` and then calls `reset(challenge.starterCode)` from `useChallengeRun` (Task 13), which clears the stale result and re-renders the preview.
