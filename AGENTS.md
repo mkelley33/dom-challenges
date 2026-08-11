@@ -177,6 +177,29 @@ tab, use real key events, and take the **wrap-around** as its evidence. Two more
 Chrome does not surface focusable-scroller through the IDL; and `.focus()` measures focusability, which is a
 prerequisite for a sequential stop but is not the same claim.
 
+**The resize handles are the desktop grid's only gutters, and `lg:gap-x-0` is load-bearing.** From `lg` up the row is
+`prompt fr | auto | editor fr | auto | result fr`, and the two `auto` tracks are the `PaneResizer` handles. They are
+the only tracks in that row that are not a share of it, which is what lets the handle turn a pointer's pixels into a
+percentage by subtracting nothing but its own width, twice. Put a column gap back and the arithmetic is wrong by the
+gap's share of the row — the handle trails the pointer, and trails further the further it is dragged. Nothing fails;
+it just feels broken. Verified in Chrome against real geometry: a 52.7px drag of a 542px track space moved the
+boundary 54px, which is the 1%-rounding step and nothing else.
+
+**Both input paths go through `resizePanes`, and the clamp is not cosmetic.** The split is persisted under
+`dom-challenges-editor`, so a pane dragged to zero is still zero after a reload — with the handle that would undo it
+sitting in a pane of no width. `MIN_PANE_PERCENT` is what prevents that, and it has to be enforced in one place
+because a pointer delta and an arrow key are the same request in different units. Only the leading pane of a pair is
+ever written; the trailing one takes the rest of the pair's total, which is what holds the three at 100 across any
+number of moves. happy-dom has no layout engine, so the pixel half of this is untestable there — that is the reason
+the arithmetic is a pure exported function with its own tests rather than logic inside the handlers.
+
+**The handle is a `<div role="separator" tabIndex={0}>`, and `.oxlintrc.json` turns off `prefer-tag-over-role` for
+that one file.** It is the ARIA window-splitter pattern: a focusable separator carrying `aria-valuenow`, which is a
+widget rather than a thematic break. No element satisfies all of oxlint's a11y rules at once — `<hr>` with a tabindex
+trips `no-noninteractive-tabindex` and `no-noninteractive-element-interactions`, and `<hr role="separator">` trips
+`no-redundant-roles` and `no-noninteractive-element-to-interactive-role`. Each was run through `pnpm lint` before the
+override was written; the evidence is in the override's comment.
+
 **A control's accessible name is its identity — do not swap it while the control is focused and disabled.** Screen
 readers do not reliably re-announce a focused button's changed name, and a name that changes under the user is a
 different control appearing where theirs was. In-flight state is signalled by `aria-disabled`, the results live region,

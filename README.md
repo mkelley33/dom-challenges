@@ -84,9 +84,12 @@ filter, and a "hide solved" switch.
   progress record is deleted. It is atomic — if the delete fails, nothing is cleared.
 - **Solutions** unlock either by solving or by revealing. Revealing asks for confirmation and is recorded, but a
   learner who reveals sees exactly the same solutions and tradeoffs as one who solved unaided.
+- **Resizing the panes.** On a desktop there is a handle between each pair of columns. Drag it, or focus it with Tab
+  and use the left and right arrow keys. No pane can be taken below 15% of the row, so a split you save is always one
+  you can undo. Below 1024px the columns are stacked behind the tab bar and the handles are not rendered.
 
-Your in-progress code is saved to `localStorage` per challenge as you type, and survives a reload. Progress —
-attempts, solved and revealed state — is saved to json-server.
+Your in-progress code is saved to `localStorage` per challenge as you type, and survives a reload. So does the pane
+split. Progress — attempts, solved and revealed state — is saved to json-server.
 
 ## Project layout
 
@@ -181,8 +184,9 @@ code either way — that is the point of the host contract described in `AGENTS.
 - **The runner is not a security sandbox.** The frame is same-origin with no `sandbox` attribute, because the harness
   passes live function references across the boundary and reads `contentDocument` directly. What it isolates is the
   DOM — a broken solution cannot corrupt the app shell. Do not paste code you do not trust into it.
-- **The desktop panes are not resizable yet.** Their widths come from a persisted ratio in the store, but nothing
-  writes to it, so they sit at the default 28/42/30 split. The spec calls for drag handles; they are not built.
+- **The pane split moves in whole percentage points.** A drag rounds to the nearest one, so at 1440px the boundary
+  snaps in steps of about 14px rather than following the pointer continuously. That is what keeps the three panes
+  summing to exactly 100 however long the drag, and keeps the persisted value readable.
 - **With json-server down, progress fails quietly.** Editing and running still work, and nothing is destroyed, but
   reads and writes fail with no banner explaining it. The spec calls for one; it is not built yet.
 - **`vite build` always prints the 500 kB chunk warning.** It names Monaco's lazily-loaded chunks, which no entry
