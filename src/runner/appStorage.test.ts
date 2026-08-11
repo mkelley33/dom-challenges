@@ -168,6 +168,33 @@ describe('protectAppStorage covers what the frame defers past its run', () => {
     expect(localStorage.getItem(EDITOR_KEY)).toBe(DRAFTS);
   });
 
+  it('puts back a key cleared after the run settled, on pagehide', async () => {
+    const host = guardedHost();
+    const context = await host.reset('<p></p>');
+
+    // Closing the tab runs no React effect cleanup, so `dispose()` may never happen. Measured
+    // through the production host: after a deferred `clear()` the key reads as lost right up until
+    // teardown, and a tab closed in that window takes the drafts with it.
+    context.window.localStorage.clear();
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(localStorage.getItem(EDITOR_KEY)).toBe(DRAFTS);
+  });
+
+  it('stops listening for pagehide once disposed', async () => {
+    const host = guardedHost();
+    await host.reset('<p></p>');
+    host.dispose();
+
+    // A host is disposed on every challenge navigation and every StrictMode remount. A listener
+    // left behind would still be holding a stale baseline and would resurrect keys long after its
+    // frame was gone -- so the absence of that is what this asserts.
+    localStorage.clear();
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(localStorage.getItem(EDITOR_KEY)).toBeNull();
+  });
+
   it('never reverts a changed value, because outside a run that is the app’s own write', async () => {
     const host = guardedHost();
     await host.reset('<p></p>');

@@ -144,12 +144,24 @@ export function protectAppStorage(host: HostHandle): HostHandle {
     captured = snapshot(storage);
   };
 
+  // `dispose()` is not guaranteed to happen. Closing the tab does not run React effect cleanup, so
+  // a deferred `clear()` that fired while the preview frame sat idle would be repaired by nothing
+  // at all -- measured through the production host, where the key reads as lost right up until
+  // teardown. `pagehide` is the last moment a document reliably gets, and it also covers bfcache.
+  const onPageHide = (): void => {
+    rescue();
+  };
+  globalThis.addEventListener('pagehide', onPageHide);
+
   return {
     reset(html: string): Promise<HostContext> {
       rescue();
       return host.reset(html);
     },
     dispose(): void {
+      // Removed first: a host is disposed on every challenge navigation and on every StrictMode
+      // remount, so a listener left behind here accumulates one per visit for the life of the tab.
+      globalThis.removeEventListener('pagehide', onPageHide);
       rescue();
       host.dispose();
     },
