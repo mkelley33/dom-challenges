@@ -110,6 +110,26 @@ the one remaining way to reintroduce a class of bug that has already been remove
 The same asymmetry is why `src/runner/expect.ts` and `harness.ts` check errors and elements **structurally** rather
 than with `instanceof` — an error crossing out of the host realm is not an instance of this realm's `Error`.
 
+### Ask an identity question in the direction that prints a legible failure
+
+**When a test asserts node identity, ask "where is the node I am holding" rather than "is that node
+this one".** `expect(row.parentElement).toBe(list)` and `expect(list.firstElementChild).toBe(row)`
+are the same claim; only the first one fails usefully.
+
+The reason is `describeElement` in `src/runner/expect.ts`, which prints an element as its tag, `id`
+and `class` — everything a rebuilt-from-markup copy has in common with the original. So the second
+form fails with `Expected <li id="beta" class="item"> to be <li id="beta" class="item">`, and a
+learner is told that a thing is not itself. The first form fails with `Expected null to be <ul
+id="pinned">`, because the operation being caught — an `innerHTML` rebuild, a clone-then-delete, a
+list reassembled from strings — is exactly the one that leaves the held node **detached**.
+
+Identity is the main tool for catching those, so this comes up constantly: it was written the wrong
+way round first in six of `creation`'s eleven challenges. The same applies to text nodes
+(`#text "Before "` describes both sides equally) and to `doc.getElementById('list')` against a
+captured element, which reads `null` when something removed the container.
+
+Not a matcher bug to fix in passing — `expect.test.ts` pins those messages deliberately.
+
 ### `<script>` inside a challenge's `html`
 
 **You may traverse it. You may never rely on it having executed.** The iframe host assigns `srcdoc`, so the parser
