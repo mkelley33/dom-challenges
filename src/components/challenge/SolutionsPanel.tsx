@@ -14,10 +14,11 @@ const ConfirmDialog = lazy(async () => {
   return { default: Component };
 });
 
-// Says what is recorded, and stops there. Naming a way back would name a control that does not
-// exist yet -- the Clear button arrives with the progress panel.
+// Names the way back, which the app now has: clearing deletes the record, and `revealedAt` goes
+// with it, so the panel returns to locked. The label is quoted exactly as the control reads -- a
+// warning that names an affordance the learner cannot find is worse than one that names none.
 const REVEAL_DESCRIPTION =
-  'Revealing is recorded against this challenge. From then on these solutions are marked revealed rather than earned.';
+  'Revealing is recorded against this challenge. From then on these solutions are marked revealed rather than earned, and clearing your progress with "Clear solution" is the only way back.';
 
 interface CodeBlockProps {
   code: string;

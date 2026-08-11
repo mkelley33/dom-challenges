@@ -529,6 +529,29 @@ describe('ChallengePage', () => {
     expect(testResultItems()).toHaveLength(first.tests.length);
   });
 
+  it('warns about a reveal by naming a control the page actually offers', async () => {
+    const user = userEvent.setup();
+    const { settleProgress } = stubProgressApi([STUCK]);
+    settleProgress();
+
+    // One constant for both halves, because the two are the same claim: the warning tells the
+    // learner how to undo a reveal, and the control it names has to be findable under that name.
+    // The Task 14 review found this copy promising a Clear button that did not exist; it does now,
+    // and this is what keeps the two from drifting apart again.
+    const clearLabel = 'Clear solution';
+
+    renderChallengePage(first.slug);
+
+    // Checked before the dialog opens, because a modal dialog takes the rest of the page out of the
+    // accessibility tree -- which is also why the copy describes what to do once it is closed.
+    expect(await screen.findByRole('button', { name: clearLabel })).toBeInTheDocument();
+
+    await user.click(await screen.findByRole('button', { name: 'Reveal solution' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Reveal the solution?' });
+    expect(dialog).toHaveAccessibleDescription(new RegExp(clearLabel, 'i'));
+  });
+
   it('records nothing when the prior record cannot be read', async () => {
     const user = userEvent.setup();
     const calls = stubFailingProgressRead();

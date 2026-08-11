@@ -90,9 +90,12 @@ describe('SolutionsPanel when locked', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Reveal the solution?' });
     // Announced with the dialog, not merely present somewhere in it: a warning a screen reader
-    // never reaches is not a warning. Asserted on the consequence that is true today -- naming a
-    // way back would name the Clear button, which does not exist yet.
+    // never reaches is not a warning.
     expect(dialog).toHaveAccessibleDescription(/revealing is recorded against this challenge/i);
+    // And it names the way back out, which is a promise the app has to keep: clearing deletes the
+    // record, and `revealedAt` goes with it. `ChallengePage.test.tsx` holds both halves -- that the
+    // panel really does return to locked, and that the control this copy names is on the page.
+    expect(dialog).toHaveAccessibleDescription(/clearing your progress/i);
     // Waited for, not asserted outright: the dialog element is in the DOM before Base UI has moved
     // focus into it, and the lazy boundary in front of it widens that gap enough to flake.
     // `contains` rather than `toContainElement`, which will not take `Element | null`.
