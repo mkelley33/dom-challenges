@@ -1,4 +1,4 @@
-import type { CategoryId, Challenge } from '@/types/challenge';
+import type { CategoryId, Challenge, Difficulty } from '@/types/challenge';
 
 import { selectionChallenges } from './selection';
 
@@ -17,6 +17,38 @@ export const CATEGORY_META: Record<CategoryId, { title: string; blurb: string }>
   a11y: { title: 'Accessibility', blurb: 'Focus management, ARIA state, keyboard navigation.' },
   react: { title: 'React', blurb: 'The same problems, solved the React way.' },
 };
+
+/**
+ * The human-readable name for each difficulty, in the order a learner would climb them.
+ *
+ * A `Record` keyed by `Difficulty` rather than an array of ids: adding a member to the union is a
+ * compile error here until it is given a label, where an array would simply omit it -- and an
+ * omitted difficulty is a filter option nobody can pick and a summary bucket that never appears.
+ */
+export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+  novice: 'Novice',
+  intermediate: 'Intermediate',
+  advanced: 'Advanced',
+  expert: 'Expert',
+};
+
+/**
+ * `Object.keys` types as `string[]` however narrow the object's own key type is -- a known gap in
+ * the standard library's types, not something these objects' shapes leave in doubt. Filtering with
+ * these predicates recovers the union through real narrowing instead of an unchecked assertion,
+ * and the same predicates narrow the untyped strings that arrive from a route param or a select.
+ */
+export function isCategoryId(id: string): id is CategoryId {
+  return Object.prototype.hasOwnProperty.call(CATEGORY_META, id);
+}
+
+export function isDifficulty(value: string): value is Difficulty {
+  return Object.prototype.hasOwnProperty.call(DIFFICULTY_LABELS, value);
+}
+
+export const CATEGORY_IDS: readonly CategoryId[] = Object.keys(CATEGORY_META).filter(isCategoryId);
+
+export const DIFFICULTIES: readonly Difficulty[] = Object.keys(DIFFICULTY_LABELS).filter(isDifficulty);
 
 export const allChallenges: readonly Challenge[] = [...selectionChallenges];
 
