@@ -354,6 +354,31 @@ describe('useChallengeRun', () => {
     expect(preview?.getElementById('target')?.classList.contains('found')).toBe(false);
   });
 
+  it('opens no preview when the reset comes before any run, and still runs afterwards', async () => {
+    stubFetch();
+    const ref = attachedRef();
+    const { result } = renderRun(ref);
+
+    await act(async () => {
+      await result.current.reset(challenge.starterCode);
+    });
+
+    // The decision behind `reset`'s no-op on a null host, which is every call before the first run:
+    // the frame is created by a run, so a page that has not been run has no preview -- and "cleared"
+    // means "as the page arrived". Opening one here would show the learner something they never got
+    // by loading the page. Awaited rather than polled, so the enqueued body has certainly run.
+    expect(previewDocument(ref)).toBeNull();
+    expect(result.current.result).toBeNull();
+
+    // ...and the serial queue is not left wedged by the call that did nothing.
+    await act(async () => {
+      await result.current.run(PASSING);
+    });
+
+    expect(result.current.result?.passed).toBe(true);
+    expect(previewDocument(ref)?.getElementById('target')?.classList.contains('found')).toBe(true);
+  });
+
   it('never lets a superseded run land after the run that replaced it', async () => {
     const fetchMock = stubFetch();
     const ref = attachedRef();

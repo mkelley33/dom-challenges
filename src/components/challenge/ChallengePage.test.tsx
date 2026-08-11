@@ -134,6 +134,7 @@ const NOT_YET_SETTLED = (): void => {};
  */
 function stubProgressApi(stored: ProgressRecord[]) {
   const calls: RecordedCall[] = [];
+  const rows = [...stored];
   let release = NOT_YET_SETTLED;
   const settled = new Promise<void>((resolve) => {
     release = resolve;
@@ -151,7 +152,18 @@ function stubProgressApi(stored: ProgressRecord[]) {
       // already resolved its record, so gating it would prove nothing.
       if (method === 'GET' && url.endsWith('/progress')) await settled;
 
-      return method === 'GET' ? jsonResponse(stored) : jsonResponse(body);
+      // A delete actually removes the row, and 404s for an id no row has -- json-server's own
+      // behaviour, and the thing a clear keyed on the challenge id would run into. A stub that
+      // answered every delete with 200 and kept serving the row would report success for a delete
+      // that removed nothing, and the refetch after it would hand the record straight back.
+      if (method === 'DELETE') {
+        const index = rows.findIndex((row) => url.endsWith(`/progress/${row.id}`));
+        if (index === -1) return new Response('{}', { status: 404 });
+        rows.splice(index, 1);
+        return jsonResponse({});
+      }
+
+      return method === 'GET' ? jsonResponse(rows) : jsonResponse(body);
     }),
   );
 
@@ -190,10 +202,26 @@ function writes(calls: RecordedCall[]): RecordedCall[] {
   return calls.filter((call) => call.method === 'PATCH' || call.method === 'POST');
 }
 
+/** Every request that would remove a stored row. */
+function rowDeletes(calls: RecordedCall[]): RecordedCall[] {
+  return calls.filter((call) => call.method === 'DELETE');
+}
+
+/** Collection reads only -- `saveProgress`'s `?challengeId=` lookup is a different question. */
+function progressReads(calls: RecordedCall[]): number {
+  return calls.filter((call) => call.method === 'GET' && call.url.endsWith('/progress')).length;
+}
+
 /** Drives a reveal through the confirm dialog, from the locked panel. */
 async function confirmReveal(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(await screen.findByRole('button', { name: 'Reveal solution' }));
   await user.click(await screen.findByRole('button', { name: 'Yes, reveal it' }));
+}
+
+/** Drives a clear through its confirm dialog. */
+async function confirmClear(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: 'Clear solution' }));
+  await user.click(await screen.findByRole('button', { name: 'Yes, clear it' }));
 }
 
 beforeEach(() => {
@@ -397,6 +425,108 @@ describe('ChallengePage', () => {
     // First reveal wins: the second is the same decision, not a later one. Nothing is written at
     // all, so `revealedAt` keeps the moment the learner actually made the choice.
     await expect.poll(() => writes(calls)).toHaveLength(0);
+  });
+
+  it('clears the draft, the stored record and the result on screen together', async () => {
+    const user = userEvent.setup();
+    const solution = first.solutions[0];
+    expect(solution).toBeDefined();
+    useEditorStore.setState({ drafts: { [first.id]: solution!.code } });
+    const { calls, settleProgress } = stubProgressApi([STUCK]);
+    settleProgress();
+
+    renderChallengePage(first.slug);
+    await user.click(await screen.findByRole('button', { name: /run tests/i }));
+
+    const total = String(first.tests.length);
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(`${total} of ${total} tests passing`);
+    });
+
+    await confirmClear(user);
+
+    // All three, or the page lies: a stale set of passing tests sitting beside freshly reset
+    // starter code reads as "this is what the starter code scores".
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Not run yet');
+    });
+    expect(await editor()).toHaveValue(first.starterCode);
+    expect(draftFor(first)).toBeUndefined();
+    await waitFor(() => {
+      expect(rowDeletes(calls)).toHaveLength(1);
+    });
+    expect(rowDeletes(calls)[0]?.url).toContain(`/progress/${STUCK.id}`);
+  });
+
+  it('deletes the row the server assigned even when the progress read is still in flight', async () => {
+    const user = userEvent.setup();
+    const { calls, settleProgress } = stubProgressApi([STUCK]);
+
+    renderChallengePage(first.slug);
+
+    // The cold deep-link window again: the page still holds `emptyProgress`, whose `id` is the
+    // *challenge* id. A clear keyed on that would 404 against json-server's own row id, roll back,
+    // and leave the learner looking at an unchanged page after confirming a destructive action.
+    await confirmClear(user);
+
+    settleProgress();
+
+    await waitFor(() => {
+      expect(rowDeletes(calls)).toHaveLength(1);
+    });
+    expect(rowDeletes(calls)[0]?.url).toContain(`/progress/${STUCK.id}`);
+    expect(rowDeletes(calls)[0]?.url).not.toContain(`/progress/${first.id}`);
+  });
+
+  it('returns the solutions panel to locked, and it stays locked once the refetch lands', async () => {
+    const user = userEvent.setup();
+    const { calls, settleProgress } = stubProgressApi([ALREADY_REVEALED]);
+    settleProgress();
+
+    renderChallengePage(first.slug);
+    expect(await screen.findByRole('heading', { level: 2, name: 'Solution' })).toBeInTheDocument();
+
+    const readsBeforeClear = progressReads(calls);
+    await confirmClear(user);
+
+    // Clearing takes `revealedAt` with the row, which is what makes the confirm dialog's promise of
+    // a way back true.
+    expect(await screen.findByRole('button', { name: 'Reveal solution' })).toBeInTheDocument();
+
+    // The optimistic removal is only half of it. `useClearProgress` invalidates on React Query's
+    // 'active' default -- deliberately, since a delete has no server-assigned field to read back --
+    // and this page does observe the query, so a refetch follows. That refetch is the server's own
+    // answer, and if it disagreed the row would reappear under the learner.
+    await waitFor(() => {
+      expect(progressReads(calls)).toBeGreaterThan(readsBeforeClear);
+    });
+    expect(rowDeletes(calls)).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Reveal solution' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: 'Solution' })).not.toBeInTheDocument();
+  });
+
+  it('leaves the run flow working when the learner clears before ever running', async () => {
+    const user = userEvent.setup();
+    const { calls, settleProgress } = stubProgressApi([STUCK]);
+    settleProgress();
+
+    renderChallengePage(first.slug);
+    expect(await editor()).toHaveValue(first.starterCode);
+
+    await confirmClear(user);
+    await waitFor(() => {
+      expect(rowDeletes(calls)).toHaveLength(1);
+    });
+
+    // `reset` no-ops before the first run, because there is no preview frame yet -- covered as a
+    // decision in `useChallengeRun.test.tsx`. What matters here is that the no-op leaves nothing
+    // wedged: the serial queue the reset joined still carries the next run.
+    await user.click(screen.getByRole('button', { name: /run tests/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/of \d+ tests passing/);
+    });
+    expect(testResultItems()).toHaveLength(first.tests.length);
   });
 
   it('records nothing when the prior record cannot be read', async () => {

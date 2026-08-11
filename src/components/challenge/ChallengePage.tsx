@@ -9,6 +9,7 @@ import { solutionAccess } from '@/lib/solutionAccess';
 import { useEditorStore } from '@/store/editorStore';
 import type { Challenge } from '@/types/challenge';
 
+import { ClearButton } from './ClearButton';
 import { EditorPanel } from './EditorPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { PromptPanel } from './PromptPanel';
@@ -33,7 +34,7 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const draft = useEditorStore((state) => state.drafts[challenge.id]);
   const setDraft = useEditorStore((state) => state.setDraft);
-  const { result, isRunning, run } = useChallengeRun(challenge, previewRef);
+  const { result, isRunning, run, reset } = useChallengeRun(challenge, previewRef);
   const record = useChallengeProgress(challenge.id);
   const readStoredProgress = useStoredProgress(challenge.id);
   const { mutate: writeProgress } = useSaveProgress();
@@ -53,6 +54,17 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
     // `run` reports every failure through `result`; it never rejects.
     void run(code);
   }, [code, run]);
+
+  const handleCleared = useCallback(() => {
+    // The third of the three things a clear resets, and the only one the button cannot do itself:
+    // the result on screen. The editor needs nothing here -- `clearDraft` already removed the
+    // draft, and `code` falls back to the starter code the moment it is gone.
+    //
+    // Before a first run this renders nothing at all, deliberately: the preview frame is created by
+    // a run, and a page that has not been run has no preview. See `useChallengeRun.test.tsx`.
+    // `reset` reports its own failures through `result` and never rejects, as `run` does.
+    void reset(challenge.starterCode);
+  }, [challenge.starterCode, reset]);
 
   const handleReveal = useCallback(() => {
     const reveal = async (): Promise<void> => {
@@ -107,6 +119,12 @@ function ChallengeWorkspace({ challenge }: ChallengeWorkspaceProps) {
           onRun={handleRun}
           isRunning={isRunning}
         />
+        {/* Outside the editor's own region rather than inside its header: this control does not
+            edit the code, it throws the whole attempt away, and the confirm in front of it is the
+            second half of that distinction. */}
+        <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
+          <ClearButton challengeId={challenge.id} onCleared={handleCleared} />
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-col gap-4">
