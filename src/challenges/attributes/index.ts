@@ -50,6 +50,16 @@ export const attributesEntries: ChallengeEntry[] = [
     load: () => import('./propertyNotAttribute').then((module) => module.propertyNotAttribute),
   },
   {
+    id: 'attributes-boolean-attributes',
+    slug: 'boolean-attributes',
+    title: 'The button that disabled="false" disables',
+    category: 'attributes',
+    difficulty: 'novice',
+    concepts: ['boolean attributes', 'toggleAttribute', 'disabled', 'hidden', 'reflection'],
+    relatedIds: ['attributes-empty-or-absent'],
+    load: () => import('./booleanAttributes').then((module) => module.booleanAttributes),
+  },
+  {
     id: 'attributes-dirty-value',
     slug: 'dirty-value',
     title: 'The value on screen and the value in the markup',
