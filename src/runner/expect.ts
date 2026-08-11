@@ -45,7 +45,14 @@ function isNode(value: unknown): value is Node {
   return typeof value === 'object' && value !== null && 'nodeType' in value && typeof value.nodeType === 'number';
 }
 
-/** `nodeType === 1` is `Node.ELEMENT_NODE`; `tagName` is checked so the members read below exist. */
+/**
+ * `nodeType === 1` is `Node.ELEMENT_NODE`, and `tagName` is the second structural witness: it is a
+ * member every element carries and no other node type does, which is what `describeElement` prints.
+ *
+ * It is not a proof that `classList`, `hasAttribute` or `getAttribute` exist -- nothing cheap is --
+ * and it does not claim to be. Those are read on the strength of the two checks above naming a real
+ * element in *some* realm, which is the most a structural guard can establish.
+ */
 function isElement(value: unknown): value is Element {
   return isNode(value) && value.nodeType === 1 && 'tagName' in value && typeof value.tagName === 'string';
 }

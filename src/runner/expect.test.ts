@@ -117,6 +117,26 @@ describe('expect', () => {
     vitestExpect(() => {
       expect([1, 2]).toHaveLength(3);
     }).toThrow(AssertionError);
+
+    // The branch nearly every selection challenge actually lands on. A NodeList is not an array,
+    // so it reaches `lengthOf`'s separate `'length' in value` path -- and until this was written,
+    // deleting that path left the whole suite green while `toHaveLength` on a `querySelectorAll`
+    // result silently answered "no length" and failed every count assertion in the category.
+    document.body.innerHTML = '<ul><li></li><li></li><li></li></ul>';
+    const items = document.querySelectorAll('li');
+    vitestExpect(Array.isArray(items)).toBe(false);
+    vitestExpect(() => {
+      expect(items).toHaveLength(3);
+    }).not.toThrow();
+    vitestExpect(() => {
+      expect(items).toHaveLength(2);
+    }).toThrow(AssertionError);
+
+    // An HTMLCollection reaches it too, and an empty one is the value behind every `toHaveLength(0)`
+    // failure in the category -- the case where "no length" and "length 0" are easiest to confuse.
+    vitestExpect(() => {
+      expect(document.getElementsByTagName('td')).toHaveLength(0);
+    }).not.toThrow();
   });
 
   it('supports DOM matchers', () => {
