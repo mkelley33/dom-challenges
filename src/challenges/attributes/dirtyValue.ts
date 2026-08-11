@@ -1,26 +1,6 @@
 import type { ChallengeContent } from '@/types/challenge';
 
-/**
- * The `<input>` a test needs, typed by the selector that found it.
- *
- * `querySelector<HTMLInputElement>` with the tag name in the selector rather than `getElementById`
- * plus a cast: the generic tells the compiler which element the selector names, and the `input` in
- * the selector is what makes that claim true at run time too.
- *
- * Local rather than in a `support.ts` because this category has one challenge -- a helper shared
- * between two of them earns its own file, one used by a single challenge belongs beside it.
- */
-function requireInput(doc: Document, id: string): HTMLInputElement {
-  const input = doc.querySelector<HTMLInputElement>(`input#${id}`);
-  if (!input) throw new Error(`#${id} is missing from the challenge markup, or is not an <input>`);
-  return input;
-}
-
-function requireElement(doc: Document, id: string): HTMLElement {
-  const element = doc.getElementById(id);
-  if (!element) throw new Error(`#${id} is missing from the challenge markup`);
-  return element;
-}
+import { requireElement, requireInput } from './support';
 
 type IsChanged = (field: HTMLInputElement) => boolean;
 type Revert = (field: HTMLInputElement) => void;
