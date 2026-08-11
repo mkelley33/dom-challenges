@@ -36,6 +36,9 @@ afterEach(() => {
 /** Long enough that a delivery mechanism which works has visibly worked. */
 const SETTLE_MS = 150;
 
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+
 async function settle(win: Window & typeof globalThis): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -416,5 +419,29 @@ describe('APIs present but not faithful', () => {
     expect(records[0]?.addedNodes).toHaveLength(1);
     // Chrome reports `<li id="first">` here. Hence AGENTS.md §3: no challenge may assert on it.
     expect(records[0]?.previousSibling).toBeNull();
+  });
+
+  it('parses insertAdjacentHTML into an <svg> as HTML rather than as foreign content', async () => {
+    const context = await hostContext('<svg id="chart" viewBox="0 0 10 10"><title id="cap">t</title></svg>');
+    const chart = context.document.getElementById('chart');
+    if (!chart) throw new Error('#chart is missing from the fixture');
+
+    // Two controls, both in this document, and together they say the parser *can* produce foreign
+    // content here: the markup in the page did, and so does the same element's `innerHTML`. Without
+    // them a wrong namespace below would be indistinguishable from happy-dom having no SVG support
+    // at all, which is a different finding with a different consequence.
+    expect(chart.namespaceURI).toBe(SVG_NAMESPACE);
+    chart.innerHTML += '<circle class="viaInnerHtml" r="1"></circle>';
+    expect(chart.querySelector('.viaInnerHtml')?.namespaceURI).toBe(SVG_NAMESPACE);
+
+    chart.insertAdjacentHTML('beforeend', '<circle class="viaAdjacent" r="1"></circle>');
+
+    // Chrome puts this one in the SVG namespace and reports `tagName` as `circle`; measured twice,
+    // in a foregrounded tab, through the production `createIframeHost`. Here it is an
+    // `HTMLUnknownElement` that renders nothing -- so a Creation challenge that reached for this
+    // route would be green in the suite and broken for the learner, which is why
+    // `src/challenges/creation/svgNamespace.ts` uses `createElementNS` and `cloneNode` instead.
+    expect(chart.querySelector('.viaAdjacent')?.namespaceURI).toBe(XHTML_NAMESPACE);
+    expect(chart.querySelector('.viaAdjacent')?.tagName).toBe('CIRCLE');
   });
 });
