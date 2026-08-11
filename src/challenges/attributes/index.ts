@@ -119,4 +119,14 @@ export const attributesEntries: ChallengeEntry[] = [
     relatedIds: ['attributes-boolean-attributes', 'attributes-empty-or-absent'],
     load: () => import('./enumeratedState').then((module) => module.enumeratedState),
   },
+  {
+    id: 'attributes-copy-attributes',
+    slug: 'copy-attributes',
+    title: 'Copy every attribute, not the ones you thought of',
+    category: 'attributes',
+    difficulty: 'advanced',
+    concepts: ['getAttributeNames', 'attributes', 'NamedNodeMap', 'Attr', 'outerHTML'],
+    relatedIds: ['attributes-data-attributes', 'attributes-reflected-properties', 'creation-replace-in-place'],
+    load: () => import('./copyAttributes').then((module) => module.copyAttributes),
+  },
 ];
