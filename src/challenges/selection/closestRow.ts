@@ -1,5 +1,7 @@
 import type { Challenge } from '@/types/challenge';
 
+import { requireElement } from './support';
+
 export const closestRow: Challenge = {
   id: 'selection-closest-row',
   slug: 'closest-row',
@@ -33,30 +35,21 @@ export const closestRow: Challenge = {
       name: 'finds the row from a deeply nested cell',
       run: ({ doc, fn, expect }) => {
         const findRow = fn<(start: Element) => HTMLElement | null>('findRow');
-        const cell = doc.getElementById('cell-b');
-        expect(cell).not.toBeNull();
-        if (!cell) return;
-        expect(findRow(cell)?.id).toBe('row-2');
+        expect(findRow(requireElement(doc, 'cell-b'))?.id).toBe('row-2');
       },
     },
     {
       name: 'returns the element itself when it is already a row',
       run: ({ doc, fn, expect }) => {
         const findRow = fn<(start: Element) => HTMLElement | null>('findRow');
-        const row = doc.getElementById('row-1');
-        expect(row).not.toBeNull();
-        if (!row) return;
-        expect(findRow(row)?.id).toBe('row-1');
+        expect(findRow(requireElement(doc, 'row-1'))?.id).toBe('row-1');
       },
     },
     {
       name: 'returns null when there is no row above the element',
       run: ({ doc, fn, expect }) => {
         const findRow = fn<(start: Element) => HTMLElement | null>('findRow');
-        const outside = doc.getElementById('outside');
-        expect(outside).not.toBeNull();
-        if (!outside) return;
-        expect(findRow(outside)).toBeNull();
+        expect(findRow(requireElement(doc, 'outside'))).toBeNull();
       },
     },
   ],
