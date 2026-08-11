@@ -9,14 +9,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Reads the raw persist envelope back out of storage and returns its `state` payload.
+ * Reads the raw persist envelope back out of storage.
  *
  * `JSON.parse` returns `any` by lib.dom's own typing, and this is a boundary with data this
  * test wrote itself, not code under test -- so an unchecked assertion would just be asserting
  * away a check that's cheap to do for real. Narrows via runtime `isRecord` guards instead of
  * `as`, throwing with a specific message at whichever step the shape does not hold.
  */
-function readPersistedState(): Record<string, unknown> {
+function readPersistedEnvelope(): Record<string, unknown> {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw === null) {
     throw new Error(`expected localStorage["${STORAGE_KEY}"] to hold a value`);
@@ -25,7 +25,12 @@ function readPersistedState(): Record<string, unknown> {
   if (!isRecord(envelope)) {
     throw new Error('expected a persisted envelope object');
   }
-  const { state } = envelope;
+  return envelope;
+}
+
+/** The `state` payload of the envelope above: exactly what `partialize` chose to write. */
+function readPersistedState(): Record<string, unknown> {
+  const { state } = readPersistedEnvelope();
   if (!isRecord(state)) {
     throw new Error('expected envelope.state to be an object');
   }
@@ -82,6 +87,25 @@ describe('persistence', () => {
     useEditorStore.getState().setDraft('a', 'code-a');
 
     expect(readPersistedState().drafts).toEqual({ a: 'code-a' });
+  });
+
+  it('writes filters and layout too, under the version the rehydration path reads', () => {
+    // The write side of persistence, which the rehydration tests below cannot reach: they seed
+    // storage by hand and so exercise zustand's merge rather than `partialize`. Reduce `partialize`
+    // to `{ drafts }` and every other test in this file still passes -- while the filters and the
+    // pane split silently stop surviving a reload.
+    useEditorStore.getState().setFilters({ difficulty: 'expert', hideSolved: true });
+    useEditorStore.getState().setLayout({ promptPercent: 35 });
+
+    const envelope = readPersistedEnvelope();
+    const state = readPersistedState();
+
+    expect(state.filters).toEqual({ category: 'all', difficulty: 'expert', query: '', hideSolved: true });
+    expect(state.layout).toEqual({ promptPercent: 35, editorPercent: 42 });
+    // The envelope's version is what a future `migrate` would be handed. Nothing else pins it, so a
+    // silent bump would strand every stored payload as "older than the store" with no migration to
+    // carry it across.
+    expect(envelope.version).toBe(0);
   });
 
   it('loads a draft written by a previous session on rehydration', async () => {
