@@ -22,6 +22,47 @@ function challengeAt(index: number): Challenge {
   return challenge;
 }
 
+/** A search term matched by one challenge, and the challenge it belongs to. */
+interface UniqueTerm {
+  challenge: Challenge;
+  term: string;
+}
+
+/**
+ * The challenges whose title or concepts carry `term` as a case-insensitive substring.
+ *
+ * A statement about the content, not a copy of `matchesQuery`: it says which challenges *mention*
+ * the term, which is what makes a term usable as a fixture for "searching narrows the list to one
+ * entry". What the search does with a term is exactly what the tests below are asserting, so it is
+ * derived from the data and never from the filter.
+ */
+function challengesMentioning(term: string): Challenge[] {
+  const needle = term.trim().toLowerCase();
+  return challenges.filter((challenge) =>
+    [challenge.title, ...challenge.concepts].some((text) => text.toLowerCase().includes(needle)),
+  );
+}
+
+/**
+ * The first term produced by `termsFor` that exactly one challenge mentions.
+ *
+ * Every search test below asserts the list narrows to a single entry, so the term has to be unique
+ * -- and taking it from a fixed position ("the second challenge's title") makes that uniqueness an
+ * accident of registration order. It broke the moment the category was sorted by difficulty:
+ * `Collect the text of every item` truncates to `collect`, which `Live collections versus static
+ * lists` also carries. Searching for a term counted first, and failing loudly when nothing in the
+ * category is unique, keeps the assertion about the search rather than about the registry's shape.
+ */
+function uniqueTerm(label: string, termsFor: (challenge: Challenge) => string[]): UniqueTerm {
+  for (const challenge of challenges) {
+    for (const term of termsFor(challenge)) {
+      if (challengesMentioning(term).length === 1) return { challenge, term };
+    }
+  }
+
+  throw new Error(`no ${label} in the selection category is carried by exactly one challenge`);
+}
+
 function solvedRecord(challengeId: string): ProgressRecord {
   return {
     id: `row-${challengeId}`,
@@ -82,23 +123,27 @@ describe('ChallengeList', () => {
   });
 
   it('matches the search text against the title', async () => {
-    const wanted = challengeAt(1);
-    setFilters({ query: wanted.title.slice(0, 8).toUpperCase() });
+    // The first eight characters of a title, which is a learner typing the beginning of one they
+    // half-remember rather than the whole thing.
+    const { challenge: wanted, term } = uniqueTerm('title prefix', (challenge) => [challenge.title.slice(0, 8)]);
+    setFilters({ query: term.toUpperCase() });
 
     renderCategory();
 
-    // Upper-cased on purpose: a case-sensitive `includes` would find nothing here, and a learner
-    // typing the first word of a title they half-remember would be told there is no such challenge.
+    // Upper-cased on purpose: a case-sensitive `includes` would find nothing here, and that learner
+    // would be told there is no such challenge.
     expect(await screen.findByRole('link', { name: wanted.title })).toBeInTheDocument();
     expect(linkNames()).toEqual([wanted.title]);
   });
 
   it('matches the search text against a concept that never appears in the title', async () => {
-    const wanted = challengeAt(1);
-    const concept = wanted.concepts.find((entry) => !wanted.title.toLowerCase().includes(entry.toLowerCase()));
-    expect(concept).toBeDefined();
+    // Restricted to concepts absent from their own challenge's title, so a title-only search cannot
+    // find it either -- and unique across the category, so one match is the correct answer.
+    const { challenge: wanted, term } = uniqueTerm('concept', (challenge) =>
+      challenge.concepts.filter((concept) => !challenge.title.toLowerCase().includes(concept.toLowerCase())),
+    );
 
-    setFilters({ query: concept ?? '' });
+    setFilters({ query: term });
 
     renderCategory();
 

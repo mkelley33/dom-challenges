@@ -53,7 +53,24 @@ export const CATEGORY_IDS: readonly CategoryId[] = Object.keys(CATEGORY_META).fi
 
 export const DIFFICULTIES: readonly Difficulty[] = Object.keys(DIFFICULTY_LABELS).filter(isDifficulty);
 
-export const allChallenges: readonly Challenge[] = [...selectionChallenges];
+/**
+ * Orders one category's challenges the way a learner should meet them: easiest first.
+ *
+ * `ChallengeList` renders a category top to bottom in this order, so registration order *is* the
+ * reading order -- and challenges are authored in whatever sequence the work happened, which put an
+ * expert challenge above a novice one. The rank comes from `DIFFICULTIES`, itself
+ * `DIFFICULTY_LABELS`' declaration order, so the ladder is defined in exactly one place.
+ *
+ * `toSorted` is stable and copies, so challenges of equal difficulty keep the order they were
+ * written in -- the only other ordering signal the content carries -- and the category's own array
+ * is left alone. Applied per category rather than to the whole concatenation, which would
+ * interleave the categories by difficulty instead of keeping each one together.
+ */
+function byAscendingDifficulty(challenges: readonly Challenge[]): Challenge[] {
+  return challenges.toSorted((a, b) => DIFFICULTIES.indexOf(a.difficulty) - DIFFICULTIES.indexOf(b.difficulty));
+}
+
+export const allChallenges: readonly Challenge[] = [...byAscendingDifficulty(selectionChallenges)];
 
 const byId = new Map(allChallenges.map((challenge) => [challenge.id, challenge]));
 const bySlug = new Map(allChallenges.map((challenge) => [challenge.slug, challenge]));

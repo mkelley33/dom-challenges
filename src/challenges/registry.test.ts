@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { Challenge } from '@/types/challenge';
 
-import { allChallenges, challengeById, challengeBySlug, challengesInCategory, validateRegistry } from './registry';
+import {
+  allChallenges,
+  CATEGORY_IDS,
+  challengeById,
+  challengeBySlug,
+  challengesInCategory,
+  DIFFICULTIES,
+  validateRegistry,
+} from './registry';
 
 function stub(overrides: Partial<Challenge>): Challenge {
   return {
@@ -89,5 +97,24 @@ describe('the real registry', () => {
     // assertion still fails for a filter that ignores its argument and hands back everything.
     expect(selection.length).toBe(allChallenges.filter((c) => c.category === 'selection').length);
     expect(challengesInCategory('react').length).toBe(allChallenges.filter((c) => c.category === 'react').length);
+  });
+
+  it('lists every category from easiest to hardest', () => {
+    // `ChallengeList` renders a category in this order, so it is the sequence a learner reads it
+    // in. Challenges are authored in whatever order the work happened, which is why the ordering
+    // has to be imposed rather than assumed -- appending a novice challenge after an expert one is
+    // otherwise invisible until someone browses the page.
+    //
+    // Collected into one list rather than asserted per category, so a failure names every category
+    // that is out of order and so there is no `expect` inside a conditional.
+    const misordered = CATEGORY_IDS.filter((category) => {
+      const ranks = challengesInCategory(category).map((challenge) => DIFFICULTIES.indexOf(challenge.difficulty));
+      return ranks.some((rank, index) => index > 0 && rank < (ranks[index - 1] ?? rank));
+    });
+
+    expect(misordered).toEqual([]);
+    // The check above is vacuous for a registry with one challenge per category, and every category
+    // but one is empty today.
+    expect(challengesInCategory('selection').length).toBeGreaterThan(1);
   });
 });
