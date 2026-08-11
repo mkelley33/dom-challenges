@@ -3979,6 +3979,26 @@ No new test file. The content suite from Task 7 generalises over the registry, s
 
 Each challenge below states its id, difficulty, the concept it teaches, and — most importantly — **the trap its tests must catch**. A challenge whose tests do not catch its trap is not finished.
 
+**The plan's "Authoring rules for challenge content" section binds every file in this task**, and it
+is repeated here because this is the largest content task and a brief extracted from it would
+otherwise not carry the rules:
+
+- **Never write `toBeInstanceOf(SomeBareGlobalConstructor)` in challenge test code.**
+  `toBeInstanceOf` resolves the constructor from the realm it is named in. happy-dom shares one
+  class table across windows, so a bare global passes under Vitest — but challenges run inside a
+  real same-origin iframe with its own constructors, where the same assertion fails on *correct*
+  learner output, and the content suite cannot see it. Use `ctx.win.HTMLInputElement`, or prefer
+  the structural matchers (`toHaveClass`, `toHaveAttribute`, `toHaveTextContent`, `toHaveLength`),
+  which were made realm-independent for exactly this reason.
+- **Read learner exports through `ctx.fn<T>(name)`, never by asserting a type onto `ctx.exports`.**
+- **A challenge's tests must make the wrong mental model impossible, not merely undesirable.** If
+  the learner's function owns both the setup and the mutation, no assertion on its return value
+  can distinguish a correct technique from a lucky one — invert control so the *test* performs the
+  mutation. `liveVsStatic` is the worked example.
+- **Every `starterCode` must run cleanly and fail a named assertion.** A starter that fails to
+  transpile also "fails a test", which is why the content suite asserts `error === null` and
+  `results.length === tests.length` before it looks at failures.
+
 - [ ] **Step 1: `selection-query-all` — novice — `queryAll.ts`**
 
 Collect the text of every `.item` into a `string[]` via exported `itemTexts()`. **Trap:** `NodeList` is not an `Array` — `.map` does not exist on it. Tests must assert the return value is a real array (`Array.isArray`). Solutions: `Array.from(...).map`, spread `[...nodes].map`, and `forEach` with `push`. Tradeoffs must cover `NodeList.forEach` existing while `HTMLCollection` has nothing.
