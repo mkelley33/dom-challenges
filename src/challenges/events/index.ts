@@ -60,6 +60,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./customEventDetail').then((module) => module.customEventDetail),
   },
   {
+    id: 'events-capture-phase',
+    slug: 'capture-phase',
+    title: 'The click the widget swallows',
+    category: 'events',
+    difficulty: 'intermediate',
+    concepts: ['capture phase', 'propagation', 'stopPropagation', 'non-bubbling events', 'handleEvent'],
+    relatedIds: ['events-delegate-one-listener'],
+    load: () => import('./capturePhase').then((module) => module.capturePhase),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
