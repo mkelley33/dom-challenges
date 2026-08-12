@@ -116,6 +116,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./toggleNotGenerate').then((module) => module.toggleNotGenerate),
   },
   {
+    id: 'styles-order-of-appearance',
+    slug: 'order-of-appearance',
+    title: 'The override that arrived too early',
+    category: 'styles',
+    difficulty: 'advanced',
+    concepts: ['source order', 'styleSheets', 'adoptedStyleSheets', 'CSSStyleSheet', 'cascade'],
+    relatedIds: ['styles-specificity-not-order', 'styles-toggle-not-generate'],
+    load: () => import('./orderOfAppearance').then((module) => module.orderOfAppearance),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
