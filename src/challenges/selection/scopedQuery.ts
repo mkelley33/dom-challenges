@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
@@ -13,14 +13,7 @@ function idsOf(elements: Element[]): string[] {
   return elements.map((element) => element.id);
 }
 
-export const scopedQuery: Challenge = {
-  id: 'selection-scoped-query',
-  slug: 'scoped-query',
-  title: 'Paragraphs one level down, and no deeper',
-  category: 'selection',
-  difficulty: 'intermediate',
-  concepts: [':scope', 'querySelectorAll', 'children', 'child combinator'],
-  relatedIds: ['selection-query-all'],
+export const scopedQuery: ChallengeContent = {
   prompt: [
     'Export a function `directParagraphs(container)` that takes an `Element` and returns an',
     '`Element[]` of every `<p>` that is a **direct child** of it, in document order.',

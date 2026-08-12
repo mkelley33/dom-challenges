@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
@@ -8,14 +8,7 @@ interface Counts {
   childNodes: number;
 }
 
-export const childrenVsChildNodes: Challenge = {
-  id: 'selection-children-vs-childnodes',
-  slug: 'children-vs-childnodes',
-  title: 'Whitespace between the tags is a node',
-  category: 'selection',
-  difficulty: 'intermediate',
-  concepts: ['children', 'childNodes', 'text nodes', 'nodeType', 'childElementCount'],
-  relatedIds: ['selection-scoped-query'],
+export const childrenVsChildNodes: ChallengeContent = {
   prompt: [
     'The list below is written across several lines, with a comment in the middle of it — ordinary,',
     'readable markup.',

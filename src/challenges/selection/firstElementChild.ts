@@ -1,15 +1,8 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
-export const firstElementChild: Challenge = {
-  id: 'selection-first-element-child',
-  slug: 'first-element-child',
-  title: 'The first child that is actually an element',
-  category: 'selection',
-  difficulty: 'novice',
-  concepts: ['firstElementChild', 'firstChild', 'children', 'tagName'],
-  relatedIds: ['selection-children-vs-childnodes'],
+export const firstElementChild: ChallengeContent = {
   prompt: [
     'Export a function `firstTag(container)` that takes an `Element` and returns the tag name of its',
     'first **element** child, in lower case — `"li"`, `"span"` — or `null` when it has no element',

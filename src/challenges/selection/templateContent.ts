@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
@@ -22,14 +22,7 @@ function makeRow(doc: Document, text: string): HTMLElement {
   return row;
 }
 
-export const templateContent: Challenge = {
-  id: 'selection-template-content',
-  slug: 'template-content',
-  title: 'The rows the document cannot see',
-  category: 'selection',
-  difficulty: 'advanced',
-  concepts: ['template', 'DocumentFragment', 'content', 'inert markup'],
-  relatedIds: ['selection-query-all'],
+export const templateContent: ChallengeContent = {
   prompt: [
     'The page below holds an empty list and a `<template>` containing three `<li class="row">`',
     'elements.',

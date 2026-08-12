@@ -4,19 +4,19 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { challengesInCategory } from '@/challenges/registry';
+import { entriesInCategory } from '@/challenges/registry';
 import type { ChallengeFilters } from '@/store/editorStore';
 import { useEditorStore } from '@/store/editorStore';
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeEntry } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
 
 import { ChallengeList } from './ChallengeList';
 
 const NO_FILTERS: ChallengeFilters = { category: 'all', difficulty: 'all', query: '', hideSolved: false };
 
-const challenges: Challenge[] = challengesInCategory('selection');
+const challenges: ChallengeEntry[] = entriesInCategory('selection');
 
-function challengeAt(index: number): Challenge {
+function challengeAt(index: number): ChallengeEntry {
   const challenge = challenges[index];
   if (!challenge) throw new Error(`the selection category has no challenge at index ${index}`);
   return challenge;
@@ -24,7 +24,7 @@ function challengeAt(index: number): Challenge {
 
 /** A search term matched by one challenge, and the challenge it belongs to. */
 interface UniqueTerm {
-  challenge: Challenge;
+  challenge: ChallengeEntry;
   term: string;
 }
 
@@ -36,7 +36,7 @@ interface UniqueTerm {
  * entry". What the search does with a term is exactly what the tests below are asserting, so it is
  * derived from the data and never from the filter.
  */
-function challengesMentioning(term: string): Challenge[] {
+function challengesMentioning(term: string): ChallengeEntry[] {
   const needle = term.trim().toLowerCase();
   return challenges.filter((challenge) =>
     [challenge.title, ...challenge.concepts].some((text) => text.toLowerCase().includes(needle)),
@@ -53,7 +53,7 @@ function challengesMentioning(term: string): Challenge[] {
  * lists` also carries. Searching for a term counted first, and failing loudly when nothing in the
  * category is unique, keeps the assertion about the search rather than about the registry's shape.
  */
-function uniqueTerm(label: string, termsFor: (challenge: Challenge) => string[]): UniqueTerm {
+function uniqueTerm(label: string, termsFor: (challenge: ChallengeEntry) => string[]): UniqueTerm {
   for (const challenge of challenges) {
     for (const term of termsFor(challenge)) {
       if (challengesMentioning(term).length === 1) return { challenge, term };

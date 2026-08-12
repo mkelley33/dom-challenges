@@ -4,6 +4,11 @@
     "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // Nothing here is bundled: `scripts/` and `server/` are run straight by Node, which strips
+    // types in place and resolves the specifier it is given. So a relative import between two of
+    // these files has to name the `.ts` file that exists on disk -- a `.js` specifier would resolve
+    // to nothing at run time. Safe with `noEmit`, since no specifier is ever rewritten.
+    "allowImportingTsExtensions": true,
     "strict": true,
     "composite": true,
     "noEmit": true,

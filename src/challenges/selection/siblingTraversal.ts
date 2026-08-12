@@ -1,15 +1,8 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
-export const siblingTraversal: Challenge = {
-  id: 'selection-sibling-traversal',
-  slug: 'sibling-traversal',
-  title: 'The row before and the row after',
-  category: 'selection',
-  difficulty: 'intermediate',
-  concepts: ['nextElementSibling', 'previousElementSibling', 'nextSibling', 'text nodes'],
-  relatedIds: ['selection-first-element-child'],
+export const siblingTraversal: ChallengeContent = {
   prompt: [
     'A keyboard handler needs to move the selection up and down this list. Export two functions,',
     'each taking the row the user is on:',

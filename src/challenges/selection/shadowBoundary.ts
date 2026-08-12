@@ -1,4 +1,4 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
@@ -21,14 +21,7 @@ function makeChip(doc: Document, text: string): HTMLElement {
   return chip;
 }
 
-export const shadowBoundary: Challenge = {
-  id: 'selection-shadow-boundary',
-  slug: 'shadow-boundary',
-  title: 'Behind the shadow boundary',
-  category: 'selection',
-  difficulty: 'expert',
-  concepts: ['attachShadow', 'shadowRoot', 'ShadowRoot', 'encapsulation'],
-  relatedIds: [],
+export const shadowBoundary: ChallengeContent = {
   prompt: [
     'Two empty containers below. Your code has two jobs:',
     '',

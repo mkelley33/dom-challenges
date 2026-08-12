@@ -1,3 +1,5 @@
+import type { ProtectAppStorageOptions } from './appStorage';
+import { protectAppStorage } from './appStorage';
 import type { HostContext, HostHandle } from './harness';
 
 const BASE_STYLES = `
@@ -38,9 +40,12 @@ export class HostDisposedError extends Error {
  *
  * No `sandbox` attribute: the harness needs to pass live function references and read
  * `contentDocument` directly. Isolation here means DOM isolation — a broken solution
- * cannot corrupt the app shell — not a security boundary against untrusted code.
+ * cannot corrupt the app shell — not a security boundary against untrusted code, **and not storage
+ * isolation**: same-origin means the frame and the app share one `localStorage` area, so submitted
+ * code can empty the app's persisted drafts. `protectAppStorage` below is what puts them back; see
+ * its docblock for why no frame arrangement avoids the sharing in the first place.
  */
-export function createIframeHost(container: HTMLElement): HostHandle {
+export function createIframeHost(container: HTMLElement, storage: ProtectAppStorageOptions = {}): HostHandle {
   let frame: HTMLIFrameElement | null = null;
   // The `reject` of a `reset` that has not settled yet, if there is one.
   let cancelPending: ((error: Error) => void) | null = null;
@@ -59,44 +64,51 @@ export function createIframeHost(container: HTMLElement): HostHandle {
     cancel?.(new HostDisposedError());
   };
 
-  return {
-    reset(html: string): Promise<HostContext> {
-      // Rebuilding rather than rewriting is the whole point: window listeners, timers and
-      // observers registered by the previous attempt die with the frame that owned them.
-      destroy();
+  // Wrapped here rather than at the call site so a second caller cannot forget it: the sharing this
+  // repairs is created by the frame, so the repair belongs to whoever creates the frame. `storage`
+  // is how the app hands down the one thing the runner may not reach for itself -- a way to ask the
+  // store to re-persist. Without it the guard still works, but only against an outright deletion.
+  return protectAppStorage(
+    {
+      reset(html: string): Promise<HostContext> {
+        // Rebuilding rather than rewriting is the whole point: window listeners, timers and
+        // observers registered by the previous attempt die with the frame that owned them.
+        destroy();
 
-      return new Promise<HostContext>((resolve, reject) => {
-        cancelPending = reject;
+        return new Promise<HostContext>((resolve, reject) => {
+          cancelPending = reject;
 
-        const next = document.createElement('iframe');
-        next.title = 'Challenge preview';
-        next.className = 'h-full w-full border-0 bg-white';
+          const next = document.createElement('iframe');
+          next.title = 'Challenge preview';
+          next.className = 'h-full w-full border-0 bg-white';
 
-        next.addEventListener(
-          'load',
-          () => {
-            cancelPending = null;
-            const { contentWindow, contentDocument } = next;
-            if (!contentWindow || !contentDocument) {
-              reject(new Error('The preview frame did not initialise.'));
-              return;
-            }
-            resolve({ window: contentWindow as Window & typeof globalThis, document: contentDocument });
-          },
-          { once: true },
-        );
+          next.addEventListener(
+            'load',
+            () => {
+              cancelPending = null;
+              const { contentWindow, contentDocument } = next;
+              if (!contentWindow || !contentDocument) {
+                reject(new Error('The preview frame did not initialise.'));
+                return;
+              }
+              resolve({ window: contentWindow as Window & typeof globalThis, document: contentDocument });
+            },
+            { once: true },
+          );
 
-        // Order matters. `srcdoc` is assigned *before* insertion so that the frame's very first
-        // navigation is the seeded document: an iframe inserted with no source navigates to
-        // `about:blank` and fires `load` for it, which a listener attached here would mistake for
-        // the seeded document being ready. Setting the attribute first means one navigation, and
-        // therefore one `load`, carrying the markup this call asked for. Resolving on that event
-        // rather than on the next tick is what keeps the wait a guarantee instead of a guess.
-        next.srcdoc = documentFor(html);
-        container.append(next);
-        frame = next;
-      });
+          // Order matters. `srcdoc` is assigned *before* insertion so that the frame's very first
+          // navigation is the seeded document: an iframe inserted with no source navigates to
+          // `about:blank` and fires `load` for it, which a listener attached here would mistake for
+          // the seeded document being ready. Setting the attribute first means one navigation, and
+          // therefore one `load`, carrying the markup this call asked for. Resolving on that event
+          // rather than on the next tick is what keeps the wait a guarantee instead of a guess.
+          next.srcdoc = documentFor(html);
+          container.append(next);
+          frame = next;
+        });
+      },
+      dispose: destroy,
     },
-    dispose: destroy,
-  };
+    storage,
+  );
 }

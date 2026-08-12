@@ -3,11 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { runChallenge } from '@/runner/harness';
 import { createMemoryHost } from '@/test/createMemoryHost';
 
-import { allChallenges } from './registry';
+import { loadChallenge } from './loader';
+import { challengeIndex } from './registry';
 
 /**
- * The correctness suite for challenge *content*, driven straight off the registry so that every
- * challenge added from here on is covered without any per-challenge wiring.
+ * Every challenge in the library, content and all.
+ *
+ * The app loads one challenge at a time and `/` loads none; this suite is the one place that must
+ * hold all of them, because a content check that ran over a subset would be a correctness
+ * guarantee with a hole in it that nothing else in the project could see. Awaited at the top level
+ * so the `describe.each` blocks below can still be generated from real content -- `it.each` over a
+ * challenge's solutions needs the solutions before the suite is collected.
+ *
+ * Loaded through the production loader rather than by importing the modules directly, which buys a
+ * check nothing else makes: every entry in the index has to resolve to a module that really exports
+ * what the entry says it does. A mistyped `import()` path or export name is a challenge that 404s
+ * for a learner and for nobody else, and `Promise.all` fails this whole file the moment one does.
  *
  * Two invariants, both of which rot silently without a test:
  *  1. every reference solution still passes every test of its own challenge;
@@ -18,11 +29,16 @@ import { allChallenges } from './registry';
  * `createMemoryHost`'s `reset` only closes the *previous* window, so an undisposed host leaks one
  * happy-dom window (and any timers inside it) per challenge.
  */
+const allChallenges = await Promise.all(challengeIndex.map((entry) => loadChallenge(entry)));
+
 describe('challenge content', () => {
-  it('has at least one challenge registered', () => {
+  it('covers every challenge in the index', () => {
     // Everything below is generated from `allChallenges`; on an empty registry the `.each` blocks
-    // expand to nothing at all and the suite would pass while testing no content whatsoever.
+    // expand to nothing at all and the suite would pass while testing no content whatsoever. The
+    // second assertion is what keeps this suite whole as the library grows: a loader that quietly
+    // handed back a subset would satisfy the first.
     expect(allChallenges.length).toBeGreaterThan(0);
+    expect(allChallenges.map((challenge) => challenge.slug)).toEqual(challengeIndex.map((entry) => entry.slug));
   });
 
   describe.each(allChallenges.map((challenge) => [challenge.slug, challenge] as const))('%s', (_slug, challenge) => {

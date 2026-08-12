@@ -1,32 +1,35 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
 
-import { CATEGORY_META, challengesInCategory, isCategoryId } from '@/challenges/registry';
+import { CATEGORY_META, entriesInCategory, isCategoryId } from '@/challenges/registry';
 import { FilterBar } from '@/components/browse/FilterBar';
 import { NotFound } from '@/components/NotFound';
 import { useProgressQuery } from '@/hooks/useProgress';
 import { cn } from '@/lib/utils';
 import type { ChallengeFilters } from '@/store/editorStore';
 import { useEditorStore } from '@/store/editorStore';
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeEntry } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
 
 /**
  * Matches the search box against the title *and* the concepts. Concepts are what a learner
  * actually types -- `closest`, `MutationObserver` -- and no title contains them, so a title-only
  * search answers "no such challenge" to the most likely query there is.
+ *
+ * Both fields are in the index, which is what lets this page search the whole library without
+ * fetching a single challenge module.
  */
-function matchesQuery(challenge: Challenge, needle: string): boolean {
+function matchesQuery(challenge: ChallengeEntry, needle: string): boolean {
   if (needle === '') return true;
   if (challenge.title.toLowerCase().includes(needle)) return true;
   return challenge.concepts.some((concept) => concept.toLowerCase().includes(needle));
 }
 
 function applyFilters(
-  challenges: readonly Challenge[],
+  challenges: readonly ChallengeEntry[],
   filters: ChallengeFilters,
   records: ProgressRecord[],
-): Challenge[] {
+): ChallengeEntry[] {
   const needle = filters.query.trim().toLowerCase();
   // Status, not mere presence of a row: a row exists as soon as a learner runs the tests once, and
   // hiding on that would hide exactly the challenges they are still in the middle of.
@@ -62,7 +65,7 @@ export function ChallengeList() {
    */
   const category = categoryId !== undefined && isCategoryId(categoryId) ? categoryId : null;
 
-  const challenges = useMemo(() => (category === null ? [] : challengesInCategory(category)), [category]);
+  const challenges = useMemo(() => (category === null ? [] : entriesInCategory(category)), [category]);
   const visible = useMemo(() => applyFilters(challenges, filters, data ?? []), [challenges, filters, data]);
 
   if (category === null) {

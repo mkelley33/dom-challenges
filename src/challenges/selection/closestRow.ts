@@ -1,15 +1,8 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
 import { requireElement } from './support';
 
-export const closestRow: Challenge = {
-  id: 'selection-closest-row',
-  slug: 'closest-row',
-  title: 'Walk up to the containing row',
-  category: 'selection',
-  difficulty: 'intermediate',
-  concepts: ['closest', 'parentElement', 'matches', 'event delegation'],
-  relatedIds: ['selection-query-basics'],
+export const closestRow: ChallengeContent = {
   prompt: [
     'One click handler on the table has to serve every row. The event target it receives is',
     'whatever the user actually pressed — usually the `<span>` inside a cell, sometimes the `<td>`,',

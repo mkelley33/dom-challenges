@@ -1,5 +1,5 @@
 /**
- * Fails the build when a route's eager JavaScript grows past its committed budget.
+ * Fails the build when a route's eager JavaScript grows past its budget in `./budgets.ts`.
  *
  * This is the signal `chunkSizeWarningLimit` cannot give. That limit is a single global number
  * compared against one chunk at a time, so on this project it only ever names Monaco's lazy
@@ -22,38 +22,14 @@ import { readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+import { challengeModuleKeys, ROUTE_SLACK_BYTES, routeBudgets } from './budgets.ts';
+
+const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
+const DIST_DIR = join(ROOT_DIR, 'dist');
 const MANIFEST_PATH = join(DIST_DIR, '.vite', 'manifest.json');
 
 /** The manifest key of the HTML entry, whose closure every route pays for. */
 const HTML_ENTRY_KEY = 'index.html';
-
-interface RouteBudget {
-  route: string;
-  /** The module a `React.lazy` call reaches for, or `null` when the route is in the entry chunk. */
-  lazyKey: string | null;
-  maxBytes: number;
-}
-
-/**
- * Measured figures plus roughly 2.5%.
- *
- * `/`'s headroom is 12,053 B, which at the measured 6,756 B per challenge (AGENTS.md §10) is a
- * little under two — so this trips on the *second* challenge authored, not the first.
- *
- * That is the backstop, not the guard. This check measures bytes, and bytes are a proxy: the rule
- * is "do not author a second category while the registry is statically imported", and 12 kB freed
- * anywhere at all buys another challenge without anyone going near the registry. The unused `ui/`
- * components and CSS tokens on the Phase 2 list would each do it, as a side effect of cleanup that
- * has nothing to do with challenges. The ungameable half is the pinned count in
- * `src/challenges/registry.test.ts`, which counts challenges rather than bytes and trips on the
- * first one. Keep both; they fail for different reasons and say different things.
- */
-const BUDGETS: RouteBudget[] = [
-  { route: '/', lazyKey: null, maxBytes: 465_000 },
-  { route: '/category/:categoryId', lazyKey: 'src/components/browse/ChallengeList.tsx', maxBytes: 635_000 },
-  { route: '/challenge/:slug', lazyKey: 'src/components/challenge/ChallengePage.tsx', maxBytes: 890_000 },
-];
 
 interface ManifestChunk {
   file: string;
@@ -130,12 +106,58 @@ function format(bytes: number): string {
   return bytes.toLocaleString('en-US');
 }
 
+/**
+ * Fails when a challenge's content stops being fetched on demand.
+ *
+ * The structural counterpart to the byte budgets, and the one that does not depend on a number
+ * anybody can raise -- which matters, because the budgets cannot see this at all: the most
+ * expensive challenge module going eager lands at 100% of `/`'s budget and passes.
+ *
+ * A module reached only through `import()` is emitted as a chunk of its own and appears in the
+ * manifest under its source path; a module someone statically imported is folded into whatever
+ * imported it and vanishes from the manifest entirely, leaving nothing behind but a slightly larger
+ * entry chunk. Reading the expected set from disk rather than from the manifest is what makes the
+ * disappearance visible -- and what makes this scale to a hundred challenges with nothing to
+ * re-baseline, unlike the challenge count this replaced.
+ *
+ * A file in a category directory that no index registers fails the same way, since it is absent
+ * from the manifest for its own reason. That is deliberate: it is the only thing keeping "every
+ * challenge on disk" equal to "every challenge in the index".
+ *
+ * The second half catches the rarer shape: a chunk that is still emitted but has also been pulled
+ * into a route's static import graph, which the manifest reports as an ordinary import.
+ */
+function assertChallengesAreLazy(manifest: Map<string, ManifestChunk>, eagerScripts: Set<string>): string[] {
+  const problems: string[] = [];
+
+  for (const key of challengeModuleKeys()) {
+    const chunk = manifest.get(key);
+    if (chunk === undefined) {
+      // Two causes, and the message names both because the fixes are opposites. A module folded
+      // into a static importer and a module nothing imports at all are the same absence here.
+      problems.push(
+        `"${key}" has no chunk of its own. Either something statically imports it -- challenge content must be reached only through the \`load\` in its category index -- or no index registers it, in which case add the entry or delete the file`,
+      );
+      continue;
+    }
+    if (eagerScripts.has(chunk.file)) {
+      problems.push(`"${key}" is preloaded by a route, so its content is fetched before anyone opens that challenge`);
+    }
+  }
+
+  return problems;
+}
+
 const manifest = readManifest();
 const failures: string[] = [];
 const lines: string[] = [];
+/** Every script any route pulls in eagerly, pooled so the lazy check can be made once. */
+const eagerScripts = new Set<string>();
 let stylesheetBytes = 0;
+/** What each route has left, kept so the shared pool below can be reported rather than inferred. */
+const headroom: number[] = [];
 
-for (const { route, lazyKey, maxBytes } of BUDGETS) {
+for (const { route, lazyKey, maxBytes } of routeBudgets()) {
   // A split route whose module is no longer a chunk of its own has been folded into whatever
   // imported it -- almost always the entry, by someone replacing a `lazy()` with a plain import.
   // Named here rather than left to show up as an unexplained jump in another route's number,
@@ -147,11 +169,16 @@ for (const { route, lazyKey, maxBytes } of BUDGETS) {
   const roots = lazyKey === null ? [HTML_ENTRY_KEY] : [HTML_ENTRY_KEY, lazyKey].filter((key) => manifest.has(key));
   const closure = eagerClosure(manifest, roots);
   const bytes = totalBytes(closure.scripts);
+  for (const script of closure.scripts) eagerScripts.add(script);
   stylesheetBytes = Math.max(stylesheetBytes, totalBytes(closure.stylesheets));
 
+  headroom.push(maxBytes - bytes);
   const share = Math.round((bytes / maxBytes) * 100);
+  // The percentage alone became misleading once all three budgets were derived: they now leave the
+  // same absolute headroom, so the largest route reads as the closest to trouble purely because its
+  // slack is a smaller fraction of it. The remaining bytes are the comparable figure.
   lines.push(
-    `  ${route.padEnd(22)} ${format(bytes).padStart(9)} B of ${format(maxBytes).padStart(9)} B  ${String(share).padStart(3)}%  (${String(closure.scripts.size)} files)`,
+    `  ${route.padEnd(22)} ${format(bytes).padStart(9)} B of ${format(maxBytes).padStart(9)} B  ${String(share).padStart(3)}%  ${format(maxBytes - bytes).padStart(8)} B left  (${String(closure.scripts.size)} files)`,
   );
   if (bytes > maxBytes) {
     failures.push(`${route} is ${format(bytes - maxBytes)} B over its ${format(maxBytes)} B budget`);
@@ -165,23 +192,52 @@ process.stdout.write(`${lines.join('\n')}\n\n`);
 // per-route number that would count it three times.
 process.stdout.write(`  one shared stylesheet: ${format(stylesheetBytes)} B\n\n`);
 
+// The slack is a **shared pool**, and until this line said so nothing reported how far into it the
+// library had got. Every ceiling is the floor, plus 414 B for each challenge module on disk, plus
+// this fixed slack -- so a route's remaining bytes equal the slack exactly when the model is exactly
+// right, and the difference is the whole library's accumulated error in that 414 B. `attributes`'
+// entries measured 454.2 B each and `selection`'s 382.0 B, so the pool moves in both directions and
+// the figure below is where it stands. It is a reading, not a budget: nothing fails on it, because a
+// number that had to be re-baselined every time a category was written would be indistinguishable
+// from someone raising a ceiling to bury a regression (AGENTS.md section 7).
+const lowest = Math.min(...headroom);
+const highest = Math.max(...headroom);
+const spread =
+  lowest === highest ? `${format(lowest)} B left on every route` : `${format(lowest)}-${format(highest)} B left`;
+const drift = lowest - ROUTE_SLACK_BYTES;
+const direction = drift === 0 ? 'exactly as modelled' : `${drift > 0 ? '+' : '-'}${format(Math.abs(drift))} B`;
+process.stdout.write(`  slack pool: ${format(ROUTE_SLACK_BYTES)} B modelled, ${spread}  (${direction})\n\n`);
+
+failures.push(...assertChallengesAreLazy(manifest, eagerScripts));
+
 // Named inline rather than left to the reader. Someone who has just authored a challenge reads
-// "/ is 1,234 B over its 465,000 B budget" and the most available fix is a bigger number -- which
-// the following line forbids without saying why. Naming the eager registry is what makes refusing
-// the obvious fix reasonable rather than merely prohibited.
+// "/ is 1,234 B over its 380,000 B budget" and the most available fix is a bigger number -- which
+// the following line forbids without saying why. Naming what actually moves the number is what
+// makes refusing the obvious fix reasonable rather than merely prohibited.
 const OVER_BUDGET_GUIDANCE = [
-  'On `/` the usual cause is the eager registry: `Dashboard` imports every challenge module, so each',
-  'challenge authored puts another ~6.8 kB on the first paint of a page that shows only counts and',
-  'titles. The fix is the one AGENTS.md §10 describes -- a generated index module plus a per-challenge',
-  'dynamic import -- not a bigger number here. `src/challenges/registry.test.ts` pins the same rule by',
-  'count, and it trips a challenge earlier than this does.',
+  'Every budget here is derived rather than committed: a measured floor, 414 B of ceiling for every',
+  'registered challenge, a fixed 9,500 B of slack, and for the two split routes a measured constant',
+  'for the chunks they fetch and `/` does not (`scripts/budgets.ts`). Authoring is therefore already',
+  'paid for on all three, and this line tripping is not a library that grew. It is a challenge that',
+  'got more expensive than an index entry, or an import that dragged weight from a lazy route into',
+  'the entry. Measure which, rather than editing a constant: `scripts/budgets.test.ts` pins them, so',
+  'raising one means editing a test that records a measurement -- which is the friction it is for.',
+  '',
+  'A split route tripping on its own while / stays green localises the growth for you: the bytes are',
+  "in that route's own chunks, not in the shell. ChallengeList and its icons for /category/:categoryId;",
+  'ChallengePage, Monaco, the runner and the markdown pipeline for /challenge/:slug.',
+  '',
+  'Do not read any of these numbers as the laziness check. A single challenge module that stopped',
+  'being lazy costs between 2,178 B and 9,225 B and fits inside the slack either way -- measured,',
+  'with the most expensive one putting / at 383,559 B and all three routes at 100% and still green.',
+  '`assertChallengesAreLazy` is what sees that, and AGENTS.md §10 describes the shape it is holding.',
   '',
   'For anything else, measure before changing a number: AGENTS.md §7 has the method, and this check is',
   'what it says to use.',
 ].join('\n');
 
 if (failures.length > 0) {
-  process.stdout.write(`Over budget:\n${failures.map((failure) => `  - ${failure}`).join('\n')}\n\n`);
+  process.stdout.write(`Failed:\n${failures.map((failure) => `  - ${failure}`).join('\n')}\n\n`);
   process.stdout.write(`${OVER_BUDGET_GUIDANCE}\n\n`);
   process.exit(1);
 }

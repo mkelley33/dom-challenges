@@ -5,9 +5,9 @@ import { Profiler } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { challengesInCategory } from '@/challenges/registry';
+import { entriesInCategory } from '@/challenges/registry';
 import { useEditorStore } from '@/store/editorStore';
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeEntry } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
 
 import { ChallengeList } from './ChallengeList';
@@ -16,19 +16,19 @@ import { ChallengeList } from './ChallengeList';
  * The bar is never used on its own -- it exists to steer the list beside it -- so every test here
  * drives the real composition rather than a harness that could agree with a bar wired to nothing.
  */
-const challenges: Challenge[] = challengesInCategory('selection');
+const challenges: ChallengeEntry[] = entriesInCategory('selection');
 
-function challengeAt(index: number): Challenge {
+function challengeAt(index: number): ChallengeEntry {
   const challenge = challenges[index];
   if (!challenge) throw new Error(`the selection category has no challenge at index ${index}`);
   return challenge;
 }
 
-function inTier(difficulty: Challenge['difficulty']): Challenge[] {
+function inTier(difficulty: ChallengeEntry['difficulty']): ChallengeEntry[] {
   return challenges.filter((challenge) => challenge.difficulty === difficulty);
 }
 
-function firstInTier(difficulty: Challenge['difficulty']): Challenge {
+function firstInTier(difficulty: ChallengeEntry['difficulty']): ChallengeEntry {
   const challenge = inTier(difficulty)[0];
   if (!challenge) throw new Error(`the selection category has no ${difficulty} challenge`);
   return challenge;

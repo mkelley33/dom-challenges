@@ -1,13 +1,6 @@
-import type { Challenge } from '@/types/challenge';
+import type { ChallengeContent } from '@/types/challenge';
 
-export const queryBasics: Challenge = {
-  id: 'selection-query-basics',
-  slug: 'query-basics',
-  title: 'Find one element and mark it',
-  category: 'selection',
-  difficulty: 'novice',
-  concepts: ['getElementById', 'querySelector', 'classList'],
-  relatedIds: [],
+export const queryBasics: ChallengeContent = {
   prompt: [
     'The menu below has three items. One of them has the id `target`.',
     '',

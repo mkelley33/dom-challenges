@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Suspense } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { challengeBySlug } from '@/challenges/registry';
+import { loadChallenge } from '@/challenges/loader';
+import { entryBySlug } from '@/challenges/registry';
 import { PROGRESS_QUERY_KEY } from '@/hooks/useProgress';
 import { useEditorStore } from '@/store/editorStore';
 import type { Challenge } from '@/types/challenge';
@@ -28,26 +30,44 @@ vi.mock('@/lib/highlighter', () => ({
   highlightTypeScript: (code: string) => Promise.resolve(`<pre><code>${code}</code></pre>`),
 }));
 
-function requireChallenge(slug: string): Challenge {
-  const challenge = challengeBySlug(slug);
-  if (!challenge) throw new Error(`The registry has no challenge with slug "${slug}".`);
-  return challenge;
+/**
+ * The whole challenge, content included -- the fixtures below assert against its starter code, its
+ * tests and its solutions, which is what makes this file a test of the real page rather than of a
+ * stub. Awaited at the top level so those fixtures are plain values, exactly as they were when the
+ * registry was eager.
+ */
+async function requireChallenge(slug: string): Promise<Challenge> {
+  const entry = entryBySlug(slug);
+  if (!entry) throw new Error(`The registry has no challenge with slug "${slug}".`);
+  return loadChallenge(entry);
 }
 
-const first = requireChallenge('query-basics');
-const second = requireChallenge('closest-row');
+const first = await requireChallenge('query-basics');
+const second = await requireChallenge('closest-row');
 
-function renderChallengePage(slug: string) {
+/** Hoisted for the same reason `AppShell` hoists its own: an inline element is a fresh object. */
+const LOADING_FALLBACK = <p>Loading…</p>;
+
+async function renderChallengePage(slug: string) {
   const router = createMemoryRouter([{ path: '/challenge/:slug', element: <ChallengePage /> }], {
     initialEntries: [`/challenge/${slug}`],
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
 
-  render(
-    <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
+  // Awaited, because the page suspends on its own challenge module: React schedules the retry into
+  // the `act` queue the render opened, and a synchronous `render()` closes that queue without ever
+  // flushing it -- the page stays on the fallback forever and every query below times out.
+  await act(async () => {
+    render(
+      // The boundary `AppShell` owns in the real tree. Without one here the suspension throws
+      // instead of waiting.
+      <QueryClientProvider client={client}>
+        <Suspense fallback={LOADING_FALLBACK}>
+          <RouterProvider router={router} />
+        </Suspense>
+      </QueryClientProvider>,
+    );
+  });
 
   return { router, client };
 }
@@ -334,7 +354,7 @@ afterEach(() => {
 
 describe('ChallengePage', () => {
   it('shows the prompt, the editor, the preview and the results as one region each', async () => {
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     expect(await screen.findByRole('heading', { level: 1, name: first.title })).toBeInTheDocument();
 
@@ -347,7 +367,7 @@ describe('ChallengePage', () => {
   });
 
   it("falls back to the challenge's starter code when the learner has no draft yet", async () => {
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     expect(await editor()).toHaveValue(first.starterCode);
     expect(draftFor(first)).toBeUndefined();
@@ -356,13 +376,13 @@ describe('ChallengePage', () => {
   it('prefers a stored draft over the starter code', async () => {
     useEditorStore.setState({ drafts: { [first.id]: '// picked up where I left off' } });
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     expect(await editor()).toHaveValue('// picked up where I left off');
   });
 
   it("stores what the learner types under the current challenge's id", async () => {
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     const field = await editor();
 
     await userEvent.type(field, 'x');
@@ -376,7 +396,7 @@ describe('ChallengePage', () => {
   });
 
   it('switching challenges leaks neither text into the other editor nor drafts over each other', async () => {
-    const { router } = renderChallengePage(first.slug);
+    const { router } = await renderChallengePage(first.slug);
     await userEvent.type(await editor(), 'A');
     await waitFor(() => {
       expect(draftFor(first)).toBe(`${first.starterCode}A`);
@@ -408,7 +428,7 @@ describe('ChallengePage', () => {
     // something because there is something to run.
     expect(first.tests.length).toBeGreaterThan(0);
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     expect(await screen.findByRole('status')).toHaveTextContent('Not run yet');
 
     await userEvent.click(await screen.findByRole('button', { name: /run tests/i }));
@@ -424,7 +444,7 @@ describe('ChallengePage', () => {
   });
 
   it('runs the starter code and reports the individual failures instead of a pass', async () => {
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     await userEvent.click(await screen.findByRole('button', { name: /run tests/i }));
 
@@ -446,7 +466,7 @@ describe('ChallengePage', () => {
     const { settleProgress } = stubProgressApi([SOLVED]);
     settleProgress();
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Other approaches' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reveal solution' })).not.toBeInTheDocument();
@@ -458,7 +478,7 @@ describe('ChallengePage', () => {
     const user = userEvent.setup();
     const { calls, settleProgress } = stubProgressApi([STUCK]);
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     // The page has no record yet -- only `emptyProgress` -- so the panel is locked and the reveal
     // is offered. This is exactly the window in which a render-time spread would be destructive.
@@ -487,7 +507,7 @@ describe('ChallengePage', () => {
     const user = userEvent.setup();
     const { calls, settleProgress } = stubProgressApi([SOLVED]);
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     // Same cold-deep-link window, but the row behind it is an unaided solve. The panel offered the
     // reveal only because it had not finished loading; taking the learner up on it would set
@@ -509,7 +529,7 @@ describe('ChallengePage', () => {
     const user = userEvent.setup();
     const { calls, settleProgress } = stubProgressApi([ALREADY_REVEALED]);
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await confirmReveal(user);
 
     settleProgress();
@@ -529,7 +549,7 @@ describe('ChallengePage', () => {
     const { calls, settleProgress } = stubProgressApi([STUCK]);
     settleProgress();
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await user.click(await screen.findByRole('button', { name: /run tests/i }));
 
     const total = String(first.tests.length);
@@ -560,7 +580,7 @@ describe('ChallengePage', () => {
     const { calls, settleProgress } = stubProgressApi([STUCK], { deleteFailsWith: 500 });
     settleProgress();
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await user.click(await screen.findByRole('button', { name: /run tests/i }));
 
     const total = String(first.tests.length);
@@ -586,7 +606,7 @@ describe('ChallengePage', () => {
     const user = userEvent.setup();
     const { calls, settleProgress } = stubProgressApi([STUCK]);
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     // The cold deep-link window again: the page still holds `emptyProgress`, whose `id` is the
     // *challenge* id. A clear keyed on that would 404 against json-server's own row id, roll back,
@@ -607,7 +627,7 @@ describe('ChallengePage', () => {
     const { calls, settleProgress } = stubProgressApi([ALREADY_REVEALED]);
     settleProgress();
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     expect(await screen.findByRole('heading', { level: 2, name: 'Solution' })).toBeInTheDocument();
 
     const readsBeforeClear = progressReads(calls);
@@ -634,7 +654,7 @@ describe('ChallengePage', () => {
     const { calls, settleProgress } = stubProgressApi([STUCK]);
     settleProgress();
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     expect(await editor()).toHaveValue(first.starterCode);
 
     await confirmClear(user);
@@ -664,7 +684,7 @@ describe('ChallengePage', () => {
     // and this is what keeps the two from drifting apart again.
     const clearLabel = 'Clear solution';
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     // Checked before the dialog opens, because a modal dialog takes the rest of the page out of the
     // accessibility tree -- which is also why the copy describes what to do once it is closed.
@@ -678,7 +698,7 @@ describe('ChallengePage', () => {
 
   it('offers the three panels as a tablist and records the choice in the store', async () => {
     const user = userEvent.setup();
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     expect(screen.getByRole('tablist', { name: 'Challenge view' })).toBeInTheDocument();
@@ -697,7 +717,7 @@ describe('ChallengePage', () => {
   it('keeps every panel mounted on a phone, so switching tabs is presentation only', async () => {
     const user = userEvent.setup();
     stubViewport(false);
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
     const preview = previewSection();
 
@@ -717,7 +737,7 @@ describe('ChallengePage', () => {
   it('never puts the preview frame in a display:none subtree, whichever tab is showing', async () => {
     const user = userEvent.setup();
     stubViewport(false);
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     const observed: { tab: string; problem: boolean; code: boolean; result: boolean }[] = [];
@@ -745,7 +765,7 @@ describe('ChallengePage', () => {
   it('parks the inactive preview off-screen at a real size, rather than shrinking it away', async () => {
     const user = userEvent.setup();
     stubViewport(false);
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     await user.click(viewTab('Results'));
@@ -767,7 +787,7 @@ describe('ChallengePage', () => {
   it('makes the parked preview inert, so focus cannot reach the frame 200vw off-screen', async () => {
     const user = userEvent.setup();
     stubViewport(false);
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     await user.click(viewTab('Results'));
@@ -789,7 +809,7 @@ describe('ChallengePage', () => {
   it('keeps the parked results panel out of the tab order without making it inert', async () => {
     const user = userEvent.setup();
     stubViewport(false);
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     await user.click(viewTab('Results'));
@@ -809,7 +829,7 @@ describe('ChallengePage', () => {
     stubViewport(true);
     useEditorStore.setState({ mobileTab: 'problem' });
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     // Same reasoning as the preview's `aria-hidden`: above `lg` no column is parked, so keying this
@@ -819,7 +839,7 @@ describe('ChallengePage', () => {
   });
 
   it('names the column each tab controls, so the tablist is more than three labelled buttons', async () => {
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     // Asserted against the id the column actually carries, not merely "some id": a tablist whose
@@ -836,7 +856,7 @@ describe('ChallengePage', () => {
     stubViewport(true);
     useEditorStore.setState({ mobileTab: 'problem' });
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     // Every column is on screen above `lg`, so none of them is "inactive". `aria-hidden` cannot be
@@ -847,7 +867,7 @@ describe('ChallengePage', () => {
   });
 
   it('announces the run outcome through a polite live region rather than moving focus', async () => {
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     // `role="status"` is a polite live region by definition, which is what `<output>` carries. The
@@ -858,7 +878,7 @@ describe('ChallengePage', () => {
 
   it('runs from the keyboard, under a name that does not change while it is running', async () => {
     const user = userEvent.setup();
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     // Found by its exact name, not `/run/i`: the label a learner hears must be the same one before
     // and during the run, and a loose matcher would accept a button that renamed itself mid-action.
@@ -876,7 +896,7 @@ describe('ChallengePage', () => {
     const user = userEvent.setup();
     stubViewport(false);
     useEditorStore.setState({ mobileTab: 'code' });
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
 
     await user.click(await screen.findByRole('button', { name: 'Run tests' }));
 
@@ -892,7 +912,7 @@ describe('ChallengePage', () => {
   it('lays the desktop columns out from the persisted layout rather than a fixed ratio', async () => {
     useEditorStore.setState({ layout: { promptPercent: 20, editorPercent: 50 } });
 
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     // Deliberately not the stored defaults: a hardcoded ratio would pass against those and fail
@@ -903,7 +923,7 @@ describe('ChallengePage', () => {
   });
 
   it('puts a resize handle between each pair of columns, in the order the columns are laid out', async () => {
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     // The grid's children read in order, because a handle's whole meaning is which two panes it
@@ -923,7 +943,7 @@ describe('ChallengePage', () => {
 
   it('resizes the panes from the keyboard, and the new split reaches both the store and the grid', async () => {
     const user = userEvent.setup();
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     resizeHandle('Resize the Problem and Code panes').focus();
@@ -945,7 +965,7 @@ describe('ChallengePage', () => {
 
   it('cannot resize the results pane -- and the preview inside it -- out of the layout', async () => {
     const user = userEvent.setup();
-    renderChallengePage(first.slug);
+    await renderChallengePage(first.slug);
     await editor();
 
     resizeHandle('Resize the Code and Results panes').focus();
@@ -965,7 +985,7 @@ describe('ChallengePage', () => {
     const user = userEvent.setup();
     const calls = stubFailingProgressRead();
 
-    const { client } = renderChallengePage(first.slug);
+    const { client } = await renderChallengePage(first.slug);
     await confirmReveal(user);
 
     // A failed read changes nothing on screen, so there is no heading to wait on here. The query's
