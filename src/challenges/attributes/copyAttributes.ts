@@ -40,18 +40,27 @@ export const copyAttributes: ChallengeContent = {
   ].join('\n'),
   tests: [
     {
-      name: 'every attribute the preset carries lands on the button',
+      name: 'every attribute the preset carries lands on the button, including one added at run time',
       run: ({ doc, fn, expect }) => {
+        // Inverted control, and this challenge needs it more than any other here: its whole thesis
+        // is "you cannot write the list of attributes down". Every attribute in the markup *can* be
+        // written down, so an allow-list naming the five of them passes everything else in this
+        // file. This one is added after the markup was parsed, so no list written against the
+        // fixture can contain it.
+        const preset = requireElement(doc, 'preset-danger');
+        preset.setAttribute('data-analytics-id', 'delete-danger');
+
         const button = requireElement(doc, 'target');
-        fn<ApplyPreset>('applyPreset')(button, requireElement(doc, 'preset-danger'));
+        fn<ApplyPreset>('applyPreset')(button, preset);
 
         expect(button.getAttribute('class')).toBe('btn btn-danger');
         expect(button.getAttribute('title')).toBe('Deletes for everyone');
-        // `aria-label` and the two `data-*` attributes are the ones a property-by-property copy
-        // never reaches, because the author has to have thought of each of them by name.
+        // `aria-label` and the `data-*` attributes are the ones a property-by-property copy never
+        // reaches, because the author has to have thought of each of them by name.
         expect(button.getAttribute('aria-label')).toBe('Delete permanently');
         expect(button.getAttribute('data-variant')).toBe('danger');
         expect(button.getAttribute('data-size')).toBe('lg');
+        expect(button.getAttribute('data-analytics-id')).toBe('delete-danger');
       },
     },
     {
