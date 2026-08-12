@@ -40,6 +40,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  */
 export const eventsEntries: ChallengeEntry[] = [
   {
+    id: 'events-delegate-one-listener',
+    slug: 'delegate-one-listener',
+    title: 'One listener for a list that keeps growing',
+    category: 'events',
+    difficulty: 'novice',
+    concepts: ['event delegation', 'target versus currentTarget', 'closest', 'bubbling', 'dataset'],
+    relatedIds: ['events-composed-path'],
+    load: () => import('./delegateOneListener').then((module) => module.delegateOneListener),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
