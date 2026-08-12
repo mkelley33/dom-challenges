@@ -46,17 +46,25 @@ export const styleAttribute: ChallengeContent = {
   ].join('\n'),
   tests: [
     {
-      name: 'setting the height keeps the width, the tone and the border',
+      name: 'setting the height twice leaves one height, and keeps the width, tone and border',
       run: ({ doc, fn, expect }) => {
         const q1 = requireElement(doc, 'bar-q1');
-        fn<SetHeight>('setHeight')(q1, 24);
+        const setHeight = fn<SetHeight>('setHeight');
+        setHeight(q1, 24);
+        setHeight(q1, 30);
 
-        expect(q1.style.height).toBe('24px');
+        expect(q1.style.height).toBe('30px');
         expect(q1.style.width).toBe('40px');
         expect(q1.style.getPropertyValue('--tone')).toBe('teal');
         expect(q1.style.getPropertyValue('border-left-width')).toBe('2px');
         // Four declarations, not one. `style.length` counts them, custom properties included.
         expect(q1.style).toHaveLength(4);
+        // Counted in the attribute text for the same reason as the tone test below, and this is the
+        // function a learner reaches for first: appending `height` to the attribute reads back
+        // correctly through the CSSOM -- a later declaration of a property wins -- while the block
+        // grows by one declaration on every call. One call could never see it.
+        const written = (q1.getAttribute('style') ?? '').split(';').filter((part) => part.trim().startsWith('height'));
+        expect(written).toHaveLength(1);
       },
     },
     {
