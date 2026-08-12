@@ -188,9 +188,17 @@ you measure there.
   `:invalid`/`:valid`/`:required`.** The length attributes apply only to a user-edited value and happy-dom ignores that
   condition, so they look like they work here and do nothing in a browser; `validationMessage` is `''` here for every
   built-in failure, so only a message the challenge set with `setCustomValidity` is assertable; the validity
-  pseudo-classes never match at all. The rest of the Constraint Validation API is faithful, including `checkValidity`,
-  the `validity` flags, the `invalid` event, `setCustomValidity`, `willValidate`, `noValidate`, `FormData` and
-  `requestSubmit`.
+  pseudo-classes never match at all. Filling out the category found four more, each pinned in
+  `src/test/happyDomGaps.test.ts` and detailed in the category index's docblock: **never read a `<select multiple>`
+  through `FormData`** (one entry here -- the select's `.value` -- versus one per selected option in a browser, so the
+  recon's "`FormData` in full" was wider than its measurement; checkbox groups arrive whole and are the multi-value
+  device to use), **never read `validity` off a disabled or readonly field** (its flags stay raised here where a
+  browser computes them barred-aware -- `willValidate` and `checkValidity()` are the barred-aware reads that agree),
+  **never assert anything about a no-argument `requestSubmit()`'s submitter** (the form element here, `null` per
+  spec), and **never `reset()` a radio group carrying two `defaultChecked`** (both end up checked here, a state a
+  browser cannot represent). The rest of the Constraint Validation API is faithful, including `checkValidity`, the
+  `validity` flags on participating fields, the `invalid` event, `setCustomValidity`, `willValidate`, `noValidate`,
+  `FormData` otherwise, and `requestSubmit` with a named button.
 - **Never write ARIA state through the IDL properties.** happy-dom implements the `ARIAMixin` (`ariaExpanded`,
   `ariaSelected`, `ariaChecked`, …) as plain JavaScript properties that reflect **nothing**, so a solution written that
   way is right in a browser and invisible to every attribute selector in the suite. Use `setAttribute`/`getAttribute`.

@@ -11,13 +11,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  * reachable from one capture-phase listener on the form; `setCustomValidity` sets `customError`,
  * makes the field and the form invalid, round-trips its message through `validationMessage`, and is
  * cleared by `''`; `willValidate` is false for a disabled or readonly field while `checkValidity()`
- * on it still returns true; `noValidate` suppresses interactive validation only. `FormData` is full
- * fidelity including `getAll`, multi-selects, excluded disabled fields and the two-argument
- * `FormData(form, submitter)` form; `requestSubmit(submitter)` runs constraint validation first and
- * declines to fire on an invalid form in both; `form.reset()` restores defaults including radios;
- * radio-group exclusivity works; and a constructed `SubmitEvent` carries its `submitter`.
+ * on it still returns true; `noValidate` suppresses interactive validation only. `FormData` keeps
+ * repeated names as repeated entries (`getAll`), excludes disabled fields, and takes the
+ * two-argument `FormData(form, submitter)` form -- but see the fill-out findings below for the
+ * multi-select hole in what the reconnaissance called "full fidelity". `requestSubmit(submitter)`
+ * runs constraint validation first and declines to fire on an invalid form in both; `form.reset()`
+ * restores defaults including radios (single-default groups only -- below); radio-group exclusivity
+ * works; and a constructed `SubmitEvent` carries its `submitter`.
  *
- * **Four divergences, and each one removes something a Forms challenge would obviously want.**
+ * **Four divergences from the reconnaissance, and each one removes something a Forms challenge
+ * would obviously want.**
  *
  * | read                                            | Chrome                        | happy-dom  |
  * | ----------------------------------------------- | ----------------------------- | ---------- |
@@ -31,9 +34,86 @@ import type { ChallengeEntry } from '@/types/challenge';
  * by the user** (the dirty value flag again), and happy-dom ignores that condition. So no challenge
  * may use `minlength` or `maxlength` -- they would look like they worked here and do nothing in a
  * browser. `validationMessage` is only assertable for a message the challenge set itself with
- * `setCustomValidity`, which is what this one asserts. And **the validity pseudo-classes do not
- * match at all**, so "style the invalid fields" cannot be validated: any styling challenge in this
- * category has to key off an attribute the code sets rather than off `:invalid`.
+ * `setCustomValidity` (`sticky-custom-error` and `signup-validation` keep their custom-message
+ * fields free of platform constraints for exactly this reason). **The validity pseudo-classes do
+ * not match at all**, so "style the invalid fields" cannot key off `:invalid` -- which is why
+ * `one-invalid-signal` styles through `[aria-invalid="true"]`, taught as the better pattern rather
+ * than the workaround. And `button.willValidate` is why `who-blocks-submission`'s markup has no
+ * button: any walk that filters controls on `willValidate` is graded differently by the two hosts
+ * the moment a button is in it.
+ *
+ * **Re-measured when the category was filled out** (happy-dom 20.11.2 through `createMemoryHost`;
+ * scratch probes, then the wrong-answer runs). Unlike the styles fill-out, there was **no fresh
+ * Chrome pass**: every behaviour a challenge builds on sits inside the reconnaissance's
+ * browser-verified surface, and each claim below states which side was measured where. Four new
+ * divergences are pinned with positive controls in `src/test/happyDomGaps.test.ts`:
+ *
+ * - **A `<select multiple>` contributes one entry to FormData, not one per selected option.**
+ *   happy-dom reads the select's `.value` -- the first selected option -- in both the
+ *   markup-`selected` and property-write spellings; the spec appends one entry per selected
+ *   option. This narrows the recon's "FormData in full": a `getAll` over a multi-select is
+ *   correct in a browser and wrong here, so **no challenge may read a multi-select through
+ *   FormData** -- `getall-or-lose-them` uses two checkbox groups instead (checkbox groups arrive
+ *   whole, measured) and teaches the select's options-walk in prose.
+ * - **`requestSubmit()` with no argument reports the form element as `event.submitter`**, where
+ *   the spec says null. The dangerous direction: a non-null assertion passes here and lies about
+ *   every browser. No challenge asserts anything about a no-argument `requestSubmit`'s submitter;
+ *   solutions always name the button.
+ * - **A barred field's `validity` flags stay raised** (`required`+`readonly` reports
+ *   `valueMissing: true`, `valid: false`), where the spec conditions them on mutability.
+ *   `willValidate` and per-field/form `checkValidity()` are barred-aware and agree with Chrome --
+ *   so audits read those, and **never `validity` off a barred field**. An unguarded
+ *   `!field.validity.valid` walk is rejected by this suite and accepted by Chrome: same code, two
+ *   verdicts (`who-blocks-submission` runs that exact wrong answer).
+ * - **`form.reset()` over a radio group carrying two `defaultChecked` leaves both checked** -- a
+ *   state a browser cannot represent. Single-default groups reset faithfully. So
+ *   `commit-the-draft` catches the leave-the-old-default bug by asserting `defaultChecked` as a
+ *   value *before* any reset, and no test resets a two-default group.
+ *
+ * Also measured here, in the safe-to-build-on direction (happy-dom side measured; browser side
+ * spec'd or recon-covered, as noted):
+ *
+ * - **`form.submit()` fires no `submit` event and is otherwise a silent no-op here** (no throw, no
+ *   navigation, document intact). The spec also fires no event -- it navigates, which this engine
+ *   simply omits -- so "the listener never ran" rejects the back-door wrong answer identically in
+ *   both, and `request-submit-gate` says out loud that in a real page the same call navigates.
+ * - **`requestSubmit(button)` on a valid form fires one cancelable `submit` event whose
+ *   `submitter` is that button**, and under `form.noValidate = true` fires despite invalid fields
+ *   (recon: "noValidate suppresses interactive validation only"; spec agrees). The `noValidate`
+ *   half is what makes the checkValidity-gated hand-dispatch rejectable at all.
+ * - **`button.click()` drives the full submission pipeline** -- refuses when invalid, fires with
+ *   the button as submitter when valid, honours `noValidate`. In a browser a click on a submit
+ *   button is the definitional user path, which is what makes it `request-submit-gate`'s honest
+ *   second solution.
+ * - **`FormData(form, null)` is accepted and simply omits the pair** (spec: nullable). Solutions
+ *   still branch (`submitter ? new FormData(form, submitter) : new FormData(form)`) so every
+ *   exercised path is one the recon measured in both hosts.
+ * - **Validity-flag edges**: empty `required`+`pattern` raises `valueMissing` only (constraints
+ *   other than `required` skip the empty value); `'Ada99'` against `[a-z]+` is `patternMismatch`;
+ *   `42` past `max="10"` is `rangeOverflow` alone; `2.5` against `step="1"` is `stepMismatch`
+ *   alone. All spec-conformant; the flags themselves are recon-verified in both hosts.
+ * - **`form.checkValidity()` skips barred fields in its walk** -- no `invalid` events at them, and
+ *   a form whose only "invalid-looking" fields are barred answers true. Matches the spec's
+ *   "candidate for constraint validation".
+ *
+ * **`reportValidity` was probed here and is built on nowhere.** It was not in the reconnaissance
+ * pass; the resolution was to measure both hosts before using it, and only the happy-dom half was
+ * taken (it exists on form and fields, returns the right booleans, fires `invalid` events). Its
+ * value over `checkValidity` -- the browser's own bubbles and focus -- is unassertable in this
+ * suite regardless, so it appears in prose only. One-sided reading; do not author against it
+ * without the Chrome half.
+ *
+ * **Why the category stops at ten.** Reading a form: `formdata-not-a-walk` (the entry list and its
+ * exclusions), `getall-or-lose-them` (repeated names), `submitter-in-the-payload` (the submitter's
+ * pair). The validity engine: `explain-the-failure` (reading the flags), `sticky-custom-error`
+ * (joining it), `who-blocks-submission` (who participates), `signup-validation` (gating a real
+ * submit flow with it). Submission itself: `request-submit-gate` (the front door versus the
+ * imitations). State and defaults: `commit-the-draft` (the dirty/default split, `attributes`'
+ * sequel). Reporting: `one-invalid-signal` (one attribute for CSS and assistive tech).
+ * Deliberately absent: the four exclusions above; **multi-selects read through FormData** (the
+ * fill-out divergence); **`tooShort`/`tooLong` in any costume**; **RadioNodeList and
+ * `form.elements` named access** (unmeasured -- measure before authoring); and **file inputs**,
+ * whose `File` entries no memory-host test can populate.
  *
  * See AGENTS.md §3 and §10.
  */
@@ -45,7 +125,7 @@ export const formsEntries: ChallengeEntry[] = [
     category: 'forms',
     difficulty: 'novice',
     concepts: ['validity', 'valueMissing', 'typeMismatch', 'patternMismatch', 'stepMismatch'],
-    relatedIds: ['forms-signup-validation'],
+    relatedIds: ['forms-signup-validation', 'forms-sticky-custom-error', 'forms-who-blocks-submission'],
     load: () => import('./explainTheFailure').then((module) => module.explainTheFailure),
   },
   {
@@ -55,7 +135,7 @@ export const formsEntries: ChallengeEntry[] = [
     category: 'forms',
     difficulty: 'novice',
     concepts: ['FormData', 'form.elements', 'disabled', 'checkboxes', 'select'],
-    relatedIds: ['attributes-boolean-attributes'],
+    relatedIds: ['forms-getall-or-lose-them', 'attributes-boolean-attributes'],
     load: () => import('./formdataNotAWalk').then((module) => module.formdataNotAWalk),
   },
   {
@@ -75,7 +155,7 @@ export const formsEntries: ChallengeEntry[] = [
     category: 'forms',
     difficulty: 'intermediate',
     concepts: ['FormData.getAll', 'entry list', 'checkbox groups', 'Object.fromEntries', 'document order'],
-    relatedIds: ['forms-formdata-not-a-walk'],
+    relatedIds: ['forms-formdata-not-a-walk', 'forms-submitter-in-the-payload'],
     load: () => import('./getallOrLoseThem').then((module) => module.getallOrLoseThem),
   },
   {
@@ -135,7 +215,13 @@ export const formsEntries: ChallengeEntry[] = [
     category: 'forms',
     difficulty: 'advanced',
     concepts: ['checkValidity', 'setCustomValidity', 'validity', 'SubmitEvent.submitter', 'novalidate'],
-    relatedIds: ['attributes-dirty-value'],
+    relatedIds: [
+      'attributes-dirty-value',
+      'forms-sticky-custom-error',
+      'forms-submitter-in-the-payload',
+      'forms-request-submit-gate',
+      'forms-one-invalid-signal',
+    ],
     load: () => import('./signupValidation').then((module) => module.signupValidation),
   },
 ];
