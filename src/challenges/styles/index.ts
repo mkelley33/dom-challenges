@@ -76,6 +76,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./shorthandReset').then((module) => module.shorthandReset),
   },
   {
+    id: 'styles-token-dial',
+    slug: 'token-dial',
+    title: 'A default you can borrow and hand back',
+    category: 'styles',
+    difficulty: 'intermediate',
+    concepts: ['custom properties', 'getComputedStyle', 'setProperty', 'removeProperty', 'source order'],
+    relatedIds: ['styles-density-token', 'attributes-style-attribute'],
+    load: () => import('./tokenDial').then((module) => module.tokenDial),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
