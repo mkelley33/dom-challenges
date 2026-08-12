@@ -103,7 +103,7 @@ export const submitterInThePayload: ChallengeContent = {
         fire.submit(form);
 
         expect(deliveries).toHaveLength(1);
-        expect(Object.hasOwn(deliveries[0], 'action')).toBe(false);
+        expect(Object.hasOwn(deliveries[0] ?? {}, 'action')).toBe(false);
         expect(deliveries[0]).toEqual({ title: 'Draft one', tags: 'dom' });
       },
     },
@@ -119,7 +119,7 @@ export const submitterInThePayload: ChallengeContent = {
         // One name, one pair: an implementation that appends *every* button's value -- or both --
         // reports "archive" here, because a later entry wins the flattening.
         expect(deliveries).toHaveLength(1);
-        expect(deliveries[0].action).toBe('publish');
+        expect(deliveries[0]?.action).toBe('publish');
       },
     },
   ],

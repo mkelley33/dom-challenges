@@ -92,10 +92,10 @@ export const requestSubmitGate: ChallengeContent = {
         expect(seen).toHaveLength(1);
         // The submitter is how every listener downstream tells this apart from other ways the
         // form can submit -- the signup challenge builds a whole draft flow on it.
-        expect(seen[0].submitter).toBe(go);
+        expect(seen[0]?.submitter).toBe(go);
         // Cancelable, because a real submission is a request, not an announcement: submit
         // listeners are entitled to veto it, which is what progressive enhancement does.
-        expect(seen[0].cancelable).toBe(true);
+        expect(seen[0]?.cancelable).toBe(true);
       },
     },
     {

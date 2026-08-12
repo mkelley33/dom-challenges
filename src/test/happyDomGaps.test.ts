@@ -1047,7 +1047,10 @@ describe('what filling out the forms category found', () => {
     const go = context.document.querySelector<HTMLButtonElement>('#go');
     if (!form || !go) throw new Error('the fixture is missing its form');
 
-    const submitters: Array<EventTarget | null> = [];
+    // The string arm is a legible sentinel: if the engine ever stops dispatching SubmitEvents at
+    // all, the identity assertions below fail printing it, rather than conflating "not a
+    // SubmitEvent" with "a SubmitEvent whose submitter was null".
+    const submitters: Array<EventTarget | string | null> = [];
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       submitters.push(event instanceof context.window.SubmitEvent ? event.submitter : 'not a SubmitEvent');
