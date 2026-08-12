@@ -3,13 +3,16 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan
 > task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Finish `styles` and `async`, verify all six shipping categories in a real browser once, and make the app
+**Goal:** Finish `styles` and `forms`, verify all six shipping categories in a real browser once, and make the app
 honest about what it contains. This is the last phase.
 
 **Scope decision, made by the owner and binding on everything below:** the target is **six categories a learner can
 finish and trust** — not the ~103 challenges across twelve categories the original spec described. `selection`,
-`creation`, `attributes` and `events` are done; `styles` and `async` are this phase; the other six categories do not
-ship.
+`creation`, `attributes` and `events` are done; `styles` and `forms` are this phase; the other six categories do not
+ship. `forms` takes the sixth slot over `async` — the findings order put `async` first on engine risk, but the shipping
+six are now chosen by learner value, and a learner practising DOM manipulation meets forms constantly and
+`requestIdleCallback` never. The cost is real and priced: findings §4.2's four exclusions mean more design work per
+challenge, including the loss of the category's natural styling challenge.
 
 **Tech Stack:** unchanged, plus Playwright/Chromium for a one-time verification pass that does not become
 infrastructure.
@@ -29,7 +32,8 @@ rather than deferred:
 
 The word doing the work in the owner's answer is **trust**, and it points at exactly the two categories left. `styles`
 is where happy-dom's lying is worst — findings §4.1 lists a whole class of "green here, wrong in a browser" computed
-values — and `async` is timing. So the verification pass is not optional decoration on the scope decision; it is the
+values — and `forms` is where two of its four exclusions fail in the dangerous direction, looking like they work here
+while doing nothing in a browser. So the verification pass is not optional decoration on the scope decision; it is the
 half of it that says "and trust".
 
 ## Global Constraints
@@ -80,27 +84,45 @@ Ten to twelve expected, `density-token` included. Say so if the category is genu
 
 ---
 
-### Task 2: `async` — Async & Scheduling, to depth
+### Task 2: `forms` — Forms & Validation, to depth
 
-**Files:** new modules under `src/challenges/async/`, plus its `index.ts`
+**Files:** new modules under `src/challenges/forms/`, plus its `index.ts`
 
-The category already holds `frame-batch`. **Absorb it.** Note it is the challenge whose flakiness found the
-`FRAME_FALLBACK_MS` defect, so it is also the category's canary — if Task 3 turns anything up in `async`, expect it
-here.
+The category already holds `signup-validation` from reconnaissance. **Absorb it.**
 
-Recon verdict: **green + subset** on four schedulers — `rAF`, microtasks, timers, `AbortController`.
+Recon verdict: **green minus exactly four things**, every one enumerated in findings §4.2 and mirrored in `AGENTS.md`
+§3's Forms bullet. Read both before authoring; the boundary is precise enough to author against, which is what the
+reconnaissance was for.
 
-Two hard rules, both measured. **`requestIdleCallback` is absent** from the pinned happy-dom — do not shim it; a
-challenge about the `setTimeout` fallback is authorable today and teaches the more useful thing. And **never assert
-ordering between two schedulers** — `micro → timeout0 → raf` in Chrome, `micro → raf → timeout0` here. Ordering _within_
-one scheduler is fine, and an ordered log is how to teach the passes.
+Faithful, measured identical in both hosts, and therefore fair game: `valueMissing`, `typeMismatch`, `patternMismatch`,
+`rangeOverflow`, `stepMismatch`; `checkValidity()` and its per-field `invalid` event, collectable from one
+capture-phase listener on the form; `setCustomValidity` including its round-trip through `validationMessage` and its
+clearing on `''`; `willValidate` on inputs; `noValidate`; `FormData` in full — `getAll`, multi-selects, excluded
+disabled fields, the two-argument `FormData(form, submitter)`; `requestSubmit(submitter)` declining to fire on an
+invalid form; `form.reset()` including radios; and `SubmitEvent.submitter`.
 
-Cover: the microtask/macrotask split and why `queueMicrotask` starves the frame; `rAF` for coalescing writes; debounce
-versus throttle built by hand; `AbortController` for cancellation, including aborting a listener and aborting a chain;
-`setTimeout(0)` versus `queueMicrotask` for "after this turn"; and the reentrancy trap where a callback schedules
-itself.
+The four exclusions, each of which is a challenge that must not be written rather than a detail to work around:
 
-Ten to twelve expected, `frame-batch` included.
+1. **`minlength`/`maxlength`** — `tooShort`/`tooLong` apply only to a user-edited value; happy-dom ignores that
+   condition, so they look like they work here and do nothing in a browser. The dangerous direction.
+2. **Browser-supplied `validationMessage`** — `''` here for every built-in failure. Only a message the challenge set
+   with `setCustomValidity` is assertable.
+3. **`:invalid`/`:valid`/`:required`** — never match here. This costs the category its natural styling challenge; a
+   styling challenge must key off an attribute the code sets (`aria-invalid`, a `data-*` state), which happens to be
+   the more accessible pattern anyway — teach that as the lesson, not as the workaround.
+4. **`button.willValidate`** — `undefined` here, `true` in Chrome.
+
+Ideas, each stated as its trap: `submit()` versus `requestSubmit()` and which one skips validation entirely; reading a
+form with `FormData` versus walking `.value` by hand, and what disabled fields do to each; `checkValidity` versus
+`reportValidity` (probe the second before relying on it — it was not in the recon pass); one capture-phase `invalid`
+listener versus a listener per field; `setCustomValidity` and the empty-string clearing trap that leaves a form
+permanently invalid; `defaultValue`/`defaultChecked` and `reset()`, tying back to `attributes`' dirty-value-flag
+challenge; which submitter a two-argument `FormData(form, submitter)` records and why that matters for multi-button
+forms; and marking invalid state with `aria-invalid` so CSS and assistive tech read the same signal.
+
+Ten to twelve expected, `signup-validation` included. Note the shipped app's own storage protection (`AGENTS.md` §2)
+if any challenge touches persistence — a form-draft challenge is where someone would naturally reach for
+`localStorage`, and the `dom-challenges-*` prefix is off limits.
 
 ---
 
@@ -143,9 +165,10 @@ export default defineConfig({
       `pnpm test`; the file count must not move.
 
 - [ ] **Step 4: Prove the harness delivers before trusting any negative from it.** Findings §5.1 records this as the
-      unknown the whole idea rests on: a document the browser is not rendering delivers no observer entries and services
-      no frames, and a headless run that silently does not render would turn every `async` result into a false negative.
-      Write this probe first, with its positive control, and do not proceed while it fails.
+      unknown the whole idea rests on: a document the browser is not rendering services no frames, and in a headless run
+      that silently does not render, `tick()` escapes through `FRAME_FALLBACK_MS` on every call — so every
+      frame-dependent challenge would "pass" without its paint-dependent work ever running, which is a false positive
+      wearing a green suite. Write this probe first, with its positive control, and do not proceed while it fails.
 
 ```ts
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -218,7 +241,7 @@ it('services requestAnimationFrame, with a microtask as the control', async () =
 categories, `README.md`, `docs/superpowers/specs/2026-08-09-dom-challenges-design.md`
 
 Six categories ship. Six do not, and each of those six holds exactly one reconnaissance challenge: `a11y`
-(`roving-tabindex`), `forms` (`signup-validation`), `observers` (`mutation-batch`), `performance` (`layout-thrash`),
+(`roving-tabindex`), `async` (`frame-batch`), `observers` (`mutation-batch`), `performance` (`layout-thrash`),
 `storage` (`filter-state`), `web-apis` (`copy-handler`). A learner opening the app today sees twelve categories, half of
 them with one challenge — which is the precise opposite of "a learner can finish".
 
@@ -245,14 +268,15 @@ categories from the browse UI; keep the content in the repo and in the suites.
 
 ## Deliberately not in this phase, and not in any phase
 
-`forms`, `performance`, `a11y`, `observers`, `web-apis`, `storage`, `react`; the browser route as permanent
-infrastructure; the `iframeHost` URL decision. All retired by the scope decision, not deferred by it. The findings
-document stays in the repo as the record of what was measured and why these were possible — if the scope ever widens
-again, it is still the map.
+`async`, `performance`, `a11y`, `observers`, `web-apis`, `storage`, `react`; the browser route as permanent
+infrastructure; the `iframeHost` URL decision. All retired by the scope decision, not deferred by it. `async` was the
+findings order's position 5 and is the nearest miss — it lost the sixth slot to `forms` on learner value, and its
+reconnaissance challenge stays in the repo like the others'. The findings document stays as the record of what was
+measured and why these were possible — if the scope ever widens again, it is still the map.
 
 ## Phase 4 Done When
 
-- `styles` and `async` each teach a complete mental model, absorbing their reconnaissance challenge, and each says why
+- `styles` and `forms` each teach a complete mental model, absorbing their reconnaissance challenge, and each says why
   it stopped where it did.
 - Every challenge names the wrong solution its tests reject, verified by running that exact code.
 - All six shipping categories have been run through the production host in real Chromium, the failure count is written
