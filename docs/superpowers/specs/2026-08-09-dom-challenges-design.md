@@ -9,7 +9,7 @@ Branch: `feat/dom-challenges-app`
 > Attributes/Properties/Data, Classes/Styles/CSSOM, Events, and Forms & Validation. The other seven do not ship —
 > six of them hold one reconnaissance challenge each, and React has none. Those categories are hidden from browsing
 > by the `shipping` flag in `CATEGORY_META` rather than deleted; their challenges stay registered, tested and
-> reachable by URL. §5, §9 and §10 below are marked where the amendment overrides them; everything else in this
+> reachable by URL. §1, §5, §9 and §10 below are marked where the amendment overrides them; everything else in this
 > document — the execution model, the content model, the testing strategy, solution visibility — still holds and is
 > still what the code is written against. `docs/superpowers/plans/2026-08-12-phase-4-final-two-categories-and-ship.md`
 > records the reasoning.
@@ -25,8 +25,9 @@ Most challenges carry more than one accepted solution, each with its own tradeof
 analysis, so the app teaches *when* to reach for a technique rather than only *how*.
 
 Audience ranges from novice to expert; challenges are graded across four difficulty
-levels. Framework-free TypeScript throughout — the React category specified in §5
-was never authored and does not ship.
+levels. **Amended.** Framework-free TypeScript throughout — the React category specified in §5
+was never authored and does not ship. (As specified, this section read "cover both
+framework-free TypeScript and React.")
 
 Success criteria:
 
@@ -274,8 +275,9 @@ For every challenge, for every entry in `solutions`:
 1. the solution passes **all** of that challenge's tests, and
 2. the `starterCode` fails **at least one** test.
 
-Check 1 guarantees no reference solution is broken — indispensable at ~100
-challenges. Check 2 catches challenges that are accidentally pre-solved by their own
+Check 1 guarantees no reference solution is broken — indispensable at the library's actual size, 68 shipping
+challenges across six categories (74 on disk: the other six categories each hold one unshipped reconnaissance
+challenge, and React ships none). Check 2 catches challenges that are accidentally pre-solved by their own
 starter, which would otherwise ship as a challenge that passes before the user types
 anything.
 
@@ -338,6 +340,10 @@ live region.
 Specified: React 19, TypeScript 7, Vite, Vitest, Zustand, TanStack Query, React Hook
 Form, json-server, Faker, pnpm 11 via corepack, Node 24, ESLint 9 flat config,
 Prettier (120 cols, single quotes, trailing commas), shadcn/ui.
+
+**Amended.** Below, the `react-router` row was rewritten from "100 challenges across 13 categories need deep
+links" to "every challenge and category needs a deep link" -- the count no longer holds, the need for routing
+does. Nothing else in this section changed.
 
 Additions, with justification:
 

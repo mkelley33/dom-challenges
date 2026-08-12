@@ -10,9 +10,9 @@ reveal the reference solutions; when you solve it unaided, the same solutions un
 Most challenges carry more than one accepted solution, each with an explanation and a tradeoff analysis, so the app
 teaches _when_ to reach for a technique rather than only _how_.
 
-**Six categories ship**, each one authored end to end and verified in a real browser: Selection & Traversal, Create,
-Insert & Remove, Attributes, Properties & Data, Classes, Styles & CSSOM, Events, and Forms & Validation. Every one of
-them is finishable — the dashboard's progress bar measures you against what is actually there.
+**Six categories ship**, each one authored end to end and verified in a real browser: Selection & Traversal;
+Create, Insert & Remove; Attributes, Properties & Data; Classes, Styles & CSSOM; Events; and Forms & Validation.
+Every one of them is finishable — the dashboard's progress bar measures you against what is actually there.
 
 The design doc under `docs/superpowers/specs/` specifies seven further categories. They are **not** shipping: six of
 them hold a single reconnaissance challenge each, written to find out what the engine could carry rather than to be

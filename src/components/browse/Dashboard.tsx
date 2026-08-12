@@ -114,8 +114,12 @@ export function Dashboard() {
                 <span className="font-medium">{meta.title}</span>
                 <p className="mt-1 text-sm text-muted">{meta.blurb}</p>
                 <p className="mt-2 text-sm text-muted">
-                  {/* Most categories have no challenges written yet, and "0 of 0 solved" reads as
-                      a broken counter rather than as an empty shelf. */}
+                  {/* Unreachable through the real registry today -- every shipping category has
+                      content (registry.test.ts). It guards a category flipped on (`shipping: true`)
+                      before its first challenge is authored, so "0 of 0 solved" never reads as a
+                      broken counter instead of an empty shelf. Covered by
+                      Dashboard.emptyRegistry.test.tsx, the file for states the real registry cannot
+                      reach. See AGENTS.md §10. */}
                   {bucket.total === 0 ? 'No challenges yet' : `${bucket.solved} of ${bucket.total} solved`}
                 </p>
               </Link>

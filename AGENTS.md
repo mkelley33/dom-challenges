@@ -658,18 +658,25 @@ the other.
 live-region test in a different file, which waits against `waitFor`'s 1000 ms default. Raising it past ~800 ms flakes
 that test.
 
-**A test file can mount the challenge _route_ for exactly one distinct challenge.** A second one never comes out of
-suspense: the page sits on the shell's `Loading…` until the test times out, and nothing in the output says why — the
-failure reads as "your route 404s" or "the assertion is wrong", which is where an hour goes. Mounting the **same**
-challenge again is fine, and so is mounting the browse routes as often as you like.
+**A suspending challenge-route mount needs its `render()` inside `await act(async () => …)`.** The page suspends on
+its own challenge module, so React schedules the retry that ends the suspense into the `act` queue the render
+opened; a synchronous `render()` closes that queue without ever flushing it, and the page sits on the shell's
+`Loading…` until the test times out, with nothing in the output saying why — the failure reads as "your route 404s"
+or "the assertion is wrong", which is where an hour goes. The mechanism is written down at
+`ChallengePage.test.tsx:57-59`. **The first plain, un-awaited `render()` of the challenge route in a file happens to
+get away with it; a second, distinct one does not** — the asymmetry is not diagnosed further, so do not rely on it:
+wrap every such mount in `await act`, always, and a file can hold as many distinct challenges as it needs.
 
-Measured, with the controls that separate the candidate causes, because the obvious ones are all wrong: re-mounting the
-same challenge resolves from `loadChallenge`'s cache in ~13 ms, awaiting the second challenge's `load()` directly
-resolves in ~3 ms — so it is neither the module transform nor the import — and it reproduces with two _shipping_
-challenges, so it has nothing to do with which category they are in. It is the mount. The cause is not diagnosed
-further; the constraint is what matters, and it is why `routes.unshipped.test.tsx` is a file of its own rather than two
-more cases in `routes.test.tsx`, which already spends its one mount on `query-basics`. `ChallengePage.loadFailure`
-and `routes.errorElement` are separate files for their own `vi.mock` reasons and happen to obey this too.
+Measured against the real `routeDefinitions`: four distinct challenges (`query-basics`, `closest-row`,
+`delegate-one-listener`, `empty-or-absent`) mounted through `RouterProvider` in one file, each `render()` awaited in
+`act`, all four passed (~1.3 s total). The same file reproduced the failure this rule exists to prevent: a first
+plain `render()` of `query-basics` resolved, and a second plain `render()` of `closest-row` right after it never came
+out of suspense, rejecting a 500 ms `findByRole` wait rather than waiting out the suite's default. Existing files
+already follow the corrected rule, for reasons independent of it: `routes.test.tsx` mounts the challenge route with a
+plain `render()` and only ever one distinct challenge (`query-basics`); `ChallengePage.test.tsx` mounts two
+(`query-basics`, `closest-row`) and awaits both in `act`. `routes.unshipped.test.tsx`,
+`ChallengePage.loadFailure.test.tsx` and `routes.errorElement.test.tsx` are separate files for their own `vi.mock`
+reasons.
 
 ---
 
@@ -825,6 +832,11 @@ checked against a mutation that 404s an unshipped category. Do not add a shippin
 `challengeIndex`, because every figure on that page is a fraction of something a learner is being invited to finish —
 counting challenges no card links to is a bar that cannot fill. A solve on an unshipped challenge reached by URL is
 therefore not counted anywhere, which is the honest reading and not an oversight.
+
+**The user-visible cost of that reading:** every category was browsable before this commit, so a learner who had
+already solved one of the six reconnaissance challenges will watch their headline total go **down by one** the moment
+this ships, with nothing on screen explaining why. That is the whole consequence of the arithmetic decision above, and
+it is the fact an owner overruling it would be overruling.
 
 Two consequences worth knowing before you author:
 

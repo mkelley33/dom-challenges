@@ -157,6 +157,10 @@ export const challengeIndex: readonly ChallengeEntry[] = [
  * challenge and solves it is not counted here -- `summarise` folds over challenges and looks their
  * records up, so an unreachable solve is simply not part of the total it is measured against.
  *
+ * The user-visible cost of that: every category was browsable before this flag shipped, so a learner
+ * who had already solved one of the six reconnaissance challenges watches their headline total go
+ * down by one the moment this ships. See AGENTS.md §10.
+ *
  * A `filter` over the same array the lookups are built from, not a second list to keep in step.
  */
 export const shippingEntries: readonly ChallengeEntry[] = challengeIndex.filter((entry) =>
