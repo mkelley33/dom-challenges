@@ -56,6 +56,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./stateInAClass').then((module) => module.stateInAClass),
   },
   {
+    id: 'styles-inline-wins',
+    slug: 'inline-wins',
+    title: 'The rule that could not win',
+    category: 'styles',
+    difficulty: 'intermediate',
+    concepts: ['cascade', 'inline styles', 'specificity', 'removeProperty', '!important'],
+    relatedIds: ['styles-computed-not-inline', 'attributes-style-attribute'],
+    load: () => import('./inlineWins').then((module) => module.inlineWins),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
