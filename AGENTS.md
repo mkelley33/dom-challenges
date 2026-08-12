@@ -519,13 +519,13 @@ ever measured; filling out `attributes` falsified that. Measured against a 46-ch
 category's array and moving its modules out together, `selection`'s 13 entries cost **382.0 B** each and
 `attributes`' 11 cost **454.2 B** — the difference is the length of the ids, titles, concepts and `relatedIds`
 themselves, and nothing structural. The fixed slack absorbs the variance both ways (`attributes` takes 442 B of it,
-`selection` gives 416 B back, and every route still has 9,648 B left), so ordinary authoring still needs no
+`selection` gives 416 B back, and every route still had 9,648 B left at that build), so ordinary authoring still needs no
 re-baseline. Do not trim a challenge's metadata to hit the number: the budget exists to catch a step change, not a few
 tens of bytes of prose. `scripts/budgets.ts` carries the table.
 
 Deriving moved `/challenge/:slug` down 5,231 B and `/category/:categoryId` up 706 B from the round literals they
 replaced, and left all three leaving the **same** headroom — which is the property worth keeping, not the figure. It
-was 10,217 B when that was written and is 9,648 B today, because headroom is a **shared pool** every category draws
+was 10,217 B when that was written and is 8,509 B today, because headroom is a **shared pool** every category draws
 from: a route's remaining bytes equal the 9,500 B slack exactly when the 414 B model is exactly right, and the
 difference is the library's accumulated error in it. `pnpm build` therefore prints remaining bytes as well as a
 percentage — the percentage alone made the largest route look nearest the edge when all three are equidistant — and
