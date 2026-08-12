@@ -89,6 +89,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./commitTheDraft').then((module) => module.commitTheDraft),
   },
   {
+    id: 'forms-who-blocks-submission',
+    slug: 'who-blocks-submission',
+    title: 'The required field that cannot block',
+    category: 'forms',
+    difficulty: 'intermediate',
+    concepts: ['willValidate', 'checkValidity', 'disabled', 'readonly', 'barred from validation'],
+    relatedIds: ['forms-explain-the-failure', 'forms-formdata-not-a-walk', 'attributes-boolean-attributes'],
+    load: () => import('./whoBlocksSubmission').then((module) => module.whoBlocksSubmission),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
