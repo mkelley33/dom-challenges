@@ -569,9 +569,11 @@ tens of bytes of prose. `scripts/budgets.ts` carries the table.
 
 Deriving moved `/challenge/:slug` down 5,231 B and `/category/:categoryId` up 706 B from the round literals they
 replaced, and left all three leaving the **same** headroom — which is the property worth keeping, not the figure. It
-was 10,217 B when that was written and is 8,509 B today, because headroom is a **shared pool** every category draws
-from: a route's remaining bytes equal the 9,500 B slack exactly when the 414 B model is exactly right, and the
-difference is the library's accumulated error in it. `pnpm build` therefore prints remaining bytes as well as a
+was 10,217 B when that was written, 8,509 B one task later, and was 8,322–8,327 B (it differs slightly by route) as of
+this fix wave's own `pnpm build` — read your own build's `slack pool` line rather than trusting this one, because
+headroom is a **shared pool** every category draws from: a route's remaining bytes equal the 9,500 B slack exactly
+when the 414 B model is exactly right, and the difference is the library's accumulated error in it. `pnpm build`
+therefore prints remaining bytes as well as a
 percentage — the percentage alone made the largest route look nearest the edge when all three are equidistant — and
 prints the pool's position against the modelled slack on its own line, so the drawdown is a reading on every build
 rather than something discovered when a ceiling is finally crossed. It is deliberately **not** a failure: a number
@@ -658,6 +660,10 @@ the other.
 live-region test in a different file, which waits against `waitFor`'s 1000 ms default. Raising it past ~800 ms flakes
 that test.
 
+**`routes.errorElement.test.tsx` and `ChallengePage.loadFailure.test.tsx` are known to flake under CPU contention.**
+Both fail intermittently when the machine is busy and pass every time when run solo; the mechanism is undiagnosed, so
+that is the whole claim — re-run solo before attributing a failure in either file to your own change.
+
 **A suspending challenge-route mount needs its `render()` inside `await act(async () => …)`.** The page suspends on
 its own challenge module, so React schedules the retry that ends the suspense into the `act` queue the render
 opened; a synchronous `render()` closes that queue without ever flushing it, and the page sits on the shell's
@@ -672,11 +678,15 @@ Measured against the real `routeDefinitions`: four distinct challenges (`query-b
 `act`, all four passed (~1.3 s total). The same file reproduced the failure this rule exists to prevent: a first
 plain `render()` of `query-basics` resolved, and a second plain `render()` of `closest-row` right after it never came
 out of suspense, rejecting a 500 ms `findByRole` wait rather than waiting out the suite's default. Existing files
-already follow the corrected rule, for reasons independent of it: `routes.test.tsx` mounts the challenge route with a
-plain `render()` and only ever one distinct challenge (`query-basics`); `ChallengePage.test.tsx` mounts two
-(`query-basics`, `closest-row`) and awaits both in `act`. `routes.unshipped.test.tsx`,
+are safe under it, for reasons independent of it: `routes.test.tsx` mounts the challenge route with a plain
+`render()` and only ever one distinct challenge (`query-basics`) -- it survives on the first-mount exemption above,
+not by following the rule, so do not cite it as an example of wrapping a mount in `await act`; `ChallengePage.test.tsx`
+mounts two (`query-basics`, `closest-row`) and awaits both in `act`, which does follow the rule.
 `ChallengePage.loadFailure.test.tsx` and `routes.errorElement.test.tsx` are separate files for their own `vi.mock`
-reasons.
+reasons: each throws from a factory to make a module unloadable, which every other test of that page or route needs
+to stay loadable. `routes.unshipped.test.tsx` carries the identical monaco mock pair `routes.test.tsx` does -- it is a
+file of its own because it mounts the challenge route with its own plain, un-awaited `render()`, not for a `vi.mock`
+reason.
 
 ---
 
@@ -772,8 +782,8 @@ justified separately, in `scripts/budgets.ts`, and not by this table.
 
 - `scripts/routeBudget.ts` budgets each route's eager bytes against `scripts/budgets.ts`. Every ceiling is the measured
   365,115 B shared floor, plus 414 B for every challenge module on disk, plus a fixed 9,500 B of slack, plus that
-  route's own measured chunks (0, 166,155 B, 415,218 B) — 384,551 B, 550,706 B and 799,769 B for the 24 challenges here
-  today, against measured 374,334 B, 540,489 B and 789,552 B. Authoring therefore moves every budget and every route's
+  route's own measured chunks (0, 166,155 B, 415,218 B) — 384,551 B, 550,706 B and 799,769 B at that 24-challenge
+  build, against measured 374,334 B, 540,489 B and 789,552 B. Authoring therefore moves every budget and every route's
   bytes by the same 414 B and needs no re-baseline; what has to fit in the fixed slack is everything that is _not_ a
   challenge.
   **Do not read it as the laziness check** — it cannot see a challenge going eager at all. Re-measured after the

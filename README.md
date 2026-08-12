@@ -130,24 +130,35 @@ TypeScript modules where they are typechecked, unit-tested and reviewable in a d
 
 ## Adding a challenge
 
-A challenge is one module exporting one `Challenge` object:
+A challenge is two files' worth of edit, split so the browsing pages never have to load the expensive half
+(`AGENTS.md` §3, §10):
 
 ```ts
-export interface Challenge {
+// The category's index.ts holds one of these per challenge, inline, next to a `load()` that fetches
+// the rest. Cheap, and what `/` and the category listing read and search.
+export interface ChallengeMeta {
   id: string; // globally unique, conventionally `<category>-<slug>`
   slug: string; // the URL segment, globally unique
   title: string;
   category: CategoryId;
   difficulty: 'novice' | 'intermediate' | 'advanced' | 'expert';
+  concepts: string[];
+  relatedIds: string[]; // must resolve to real challenge ids
+}
+
+// The challenge's own module exports one of these. Expensive, and loaded only by the challenge route,
+// only for the one challenge it is showing.
+export interface ChallengeContent {
   prompt: string; // markdown, shown to the learner
   html: string; // the starting DOM, parsed into the frame before every test
   starterCode: string; // what the editor opens with; must fail at least one test
   tests: ChallengeTest[]; // hidden from the learner; each gets a fresh document
   solutions: Solution[]; // label + code + explanation + tradeoffs
-  concepts: string[];
-  relatedIds: string[]; // must resolve to real challenge ids
 }
 ```
+
+`ChallengeMeta` and `ChallengeContent` are never authored together: there is no `Challenge` object to write by hand.
+`loadChallenge` joins the two at runtime for the route that needs both.
 
 Each test receives a `TestContext`: `doc` and `win` (the frame's document and window), `expect`, `exports` and
 `fn<T>(name)` for reading a named export off the submitted code, `tick()` for waiting a frame, and `fire` for

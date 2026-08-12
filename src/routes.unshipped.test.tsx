@@ -15,13 +15,15 @@ import { routeDefinitions } from './routes';
  * reconnaissance challenges are still registered, still opened by `content.test.ts`, and still
  * reachable by anyone who bookmarked one. Unshipped is not withdrawn.
  *
- * **A file of its own, and not by preference.** A test file can mount the challenge *route* for
- * exactly one distinct challenge: a second one never comes out of suspense, and the page sits on the
- * shell's "Loading…" until the test times out. Measured, with two controls that separate the causes
- * -- re-mounting the *same* challenge resolves from `loadChallenge`'s cache in ~13 ms, and awaiting
- * the second challenge's `load()` directly resolves in ~3 ms, so the module import is not what
- * stalls. `routes.test.tsx` already spends its one mount on `query-basics`, so this had to go
- * somewhere else or one of the two would hang. See AGENTS.md §8.
+ * **A file of its own, and not by preference.** A plain, un-awaited `render()` of the challenge
+ * *route* for a second, distinct challenge never comes out of suspense in a file that already
+ * mounted one that way -- wrapping the mount in `await act` avoids this, and then a file can hold as
+ * many distinct challenges as it needs. See AGENTS.md §8 for the mechanism and the corrected rule.
+ * Measured, with two controls that separate the causes -- re-mounting the *same* challenge resolves
+ * from `loadChallenge`'s cache in ~13 ms, and awaiting the second challenge's `load()` directly
+ * resolves in ~3 ms, so the module import is not what stalls. `routes.test.tsx` already spends its
+ * one plain `render()` on `query-basics`, so this had to go somewhere else or one of the two would
+ * hang.
  */
 vi.mock('@monaco-editor/react', async () => {
   const { createMonacoReactMock } = await import('@/test/monacoMock');
