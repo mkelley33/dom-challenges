@@ -4,10 +4,9 @@ import { createTick } from '@/runner/context';
 import type { HostHandle } from '@/runner/harness';
 import { runChallenge } from '@/runner/harness';
 import { createIframeHost } from '@/runner/iframeHost';
-import type { CategoryId } from '@/types/challenge';
 
 import { loadChallenge } from './loader';
-import { challengeIndex } from './registry';
+import { SHIPPING_CATEGORY_IDS, shippingEntries } from './registry';
 
 /**
  * A one-off Chromium verification pass over the shipping library. **Not a gate, and not a
@@ -23,10 +22,13 @@ import { challengeIndex } from './registry';
  * Deliberately narrow: the six shipping categories, the run assertions only. Everything
  * `content.test.ts` checks that is engine-independent -- labels, explanations, tradeoffs, the
  * index/module correspondence -- is already checked there and is not repeated here.
+ *
+ * The set of categories comes from the registry, which is also what the browse UI filters on, so
+ * "shipping" means one thing in this project and is decided in one place. That is only safe because
+ * the count below is a literal: a category dropped from the flag would otherwise shrink this pass
+ * and its own expectation together, silently. Which categories ship is pinned as a literal from the
+ * other side too, in `registry.test.ts`, and that one runs in `pnpm test`.
  */
-const SHIPPING_CATEGORIES: readonly CategoryId[] = ['selection', 'creation', 'attributes', 'styles', 'events', 'forms'];
-
-const shippingEntries = challengeIndex.filter((entry) => SHIPPING_CATEGORIES.includes(entry.category));
 const shippingChallenges = await Promise.all(shippingEntries.map((entry) => loadChallenge(entry)));
 
 let container: HTMLDivElement;
@@ -109,16 +111,19 @@ describe('the environment services animation frames', () => {
 describe('every shipping challenge, in Chromium', () => {
   it('covers the six shipping categories and nothing else', () => {
     // A `describe.each` over an empty list expands to no tests at all, so "nothing failed" and
-    // "nothing ran" are the same output. Pin both the count and the category set: a category
-    // dropped from the list above would otherwise silently shrink this pass to whatever remained.
+    // "nothing ran" are the same output. Pin both the count and the category set.
     expect(shippingChallenges.length).toBeGreaterThan(0);
+    // Every shipping category is really represented here. Now that both sides come from the
+    // registry this can no longer catch a category being dropped -- the literal below is what does
+    // that -- but it still catches a shipping category that has no challenges to run.
     expect([...new Set(shippingChallenges.map((challenge) => challenge.category))].toSorted()).toEqual(
-      [...SHIPPING_CATEGORIES].toSorted(),
+      [...SHIPPING_CATEGORY_IDS].toSorted(),
     );
     // A literal, not a comparison against a value built from the same filter: `shippingChallenges`
     // is derived from `shippingEntries` by construction, so comparing the two back to each other
-    // passes even if every category but one lost every entry but one. Bump this when authoring adds
-    // or removes a challenge in a shipping category.
+    // passes even if every category but one lost every entry but one -- and, since the filter is now
+    // the production one, it would pass just as happily on a library that had stopped shipping half
+    // of itself. Bump this when authoring adds or removes a challenge in a shipping category.
     expect(shippingChallenges).toHaveLength(68);
   });
 

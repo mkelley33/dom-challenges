@@ -13,13 +13,37 @@ import { storageEntries } from './storage';
 import { stylesEntries } from './styles';
 import { webApisEntries } from './web-apis';
 
-export const CATEGORY_META: Record<CategoryId, { title: string; blurb: string }> = {
-  selection: { title: 'Selection & Traversal', blurb: 'Finding elements and walking the tree.' },
-  creation: { title: 'Create, Insert & Remove', blurb: 'Building and placing nodes efficiently.' },
-  attributes: { title: 'Attributes, Properties & Data', blurb: 'The attribute/property split and datasets.' },
-  styles: { title: 'Classes, Styles & CSSOM', blurb: 'classList, custom properties, computed styles.' },
-  events: { title: 'Events', blurb: 'Propagation, delegation, custom events, AbortController.' },
-  forms: { title: 'Forms & Validation', blurb: 'FormData and the Constraint Validation API.' },
+export interface CategoryMeta {
+  title: string;
+  blurb: string;
+  /**
+   * Whether a learner is offered this category at all. **Absent means no**, and that default is the
+   * whole point of the flag.
+   *
+   * A category is half-finished for as long as it takes to author it, and a half-finished category
+   * on the dashboard is a promise the app cannot keep: six of the thirteen below hold a single
+   * reconnaissance challenge each, which is the precise opposite of "a learner can finish this".
+   * Opt-in means the only way to advertise a category is to say so, and saying so is a line a
+   * reviewer can see.
+   *
+   * It hides a category from *browsing* and from nothing else. The challenges of an unshipped
+   * category stay registered in `challengeIndex`, stay opened by `content.test.ts` (AGENTS.md §10),
+   * and stay reachable by URL -- unshipped is not withdrawn, and a stale bookmark should not break.
+   */
+  shipping?: boolean;
+}
+
+export const CATEGORY_META: Record<CategoryId, CategoryMeta> = {
+  selection: { title: 'Selection & Traversal', blurb: 'Finding elements and walking the tree.', shipping: true },
+  creation: { title: 'Create, Insert & Remove', blurb: 'Building and placing nodes efficiently.', shipping: true },
+  attributes: {
+    title: 'Attributes, Properties & Data',
+    blurb: 'The attribute/property split and datasets.',
+    shipping: true,
+  },
+  styles: { title: 'Classes, Styles & CSSOM', blurb: 'classList, custom properties, computed styles.', shipping: true },
+  events: { title: 'Events', blurb: 'Propagation, delegation, custom events, AbortController.', shipping: true },
+  forms: { title: 'Forms & Validation', blurb: 'FormData and the Constraint Validation API.', shipping: true },
   observers: { title: 'Observers', blurb: 'Mutation, Intersection, and Resize observers.' },
   async: { title: 'Async & Scheduling', blurb: 'Frames, microtasks, idle callbacks, throttling.' },
   storage: { title: 'Storage, URL & History', blurb: 'localStorage, IndexedDB, URL and History APIs.' },
@@ -65,6 +89,25 @@ export const CATEGORY_IDS: readonly CategoryId[] = Object.keys(CATEGORY_META).fi
 export const DIFFICULTIES: readonly Difficulty[] = Object.keys(DIFFICULTY_LABELS).filter(isDifficulty);
 
 /**
+ * The categories a given metadata record advertises, in declaration order.
+ *
+ * Takes the record rather than reading `CATEGORY_META` directly so that the flag's semantics --
+ * `shipping === true` and nothing else, absence meaning hidden -- are stated in one testable place.
+ * Walks `CATEGORY_IDS` rather than `Object.keys(meta)`: the parameter's type says the key set is
+ * exactly `CategoryId`, so this needs no narrowing and cannot be handed a key the union lacks.
+ */
+export function shippingCategoryIds(meta: Record<CategoryId, CategoryMeta>): CategoryId[] {
+  return CATEGORY_IDS.filter((id) => meta[id].shipping === true);
+}
+
+/**
+ * The categories the browse UI offers: the dashboard's cards, and the challenges its counters are
+ * measured against. Everything else in the app -- the index, the loader, the routes, the content
+ * suite -- reads `challengeIndex` and knows nothing about this. See AGENTS.md §10.
+ */
+export const SHIPPING_CATEGORY_IDS: readonly CategoryId[] = shippingCategoryIds(CATEGORY_META);
+
+/**
  * Orders one category's challenges the way a learner should meet them: easiest first.
  *
  * `ChallengeList` renders a category top to bottom in this order, so registration order *is* the
@@ -104,6 +147,21 @@ export const challengeIndex: readonly ChallengeEntry[] = [
   ...byAscendingDifficulty(storageEntries),
   ...byAscendingDifficulty(webApisEntries),
 ];
+
+/**
+ * The part of the index a learner can actually reach by browsing.
+ *
+ * The dashboard's totals are measured against this rather than against `challengeIndex`, and the
+ * difference is the honesty this exists for: a bar reading "0 of 74" on a library where only 68 are
+ * findable is a bar that can never fill. A learner who follows a stale link into an unshipped
+ * challenge and solves it is not counted here -- `summarise` folds over challenges and looks their
+ * records up, so an unreachable solve is simply not part of the total it is measured against.
+ *
+ * A `filter` over the same array the lookups are built from, not a second list to keep in step.
+ */
+export const shippingEntries: readonly ChallengeEntry[] = challengeIndex.filter((entry) =>
+  SHIPPING_CATEGORY_IDS.includes(entry.category),
+);
 
 const byId = new Map(challengeIndex.map((entry) => [entry.id, entry]));
 const bySlug = new Map(challengeIndex.map((entry) => [entry.slug, entry]));
