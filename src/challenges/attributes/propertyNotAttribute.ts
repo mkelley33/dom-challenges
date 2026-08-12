@@ -24,9 +24,9 @@ export const propertyNotAttribute: ChallengeContent = {
   ].join('\n'),
   html: [
     '<ul id="gallery">',
-    '  <li class="card" id="card-dawn">Dawn</li>',
+    '  <li class="card" id="card-sunrise">Sunrise</li>',
     '  <li class="card" id="card-noon">Noon</li>',
-    '  <li class="card" id="card-dusk">Dusk</li>',
+    '  <li class="card" id="card-evening">Evening</li>',
     '</ul>',
   ].join('\n'),
   starterCode: [
@@ -63,33 +63,40 @@ export const propertyNotAttribute: ChallengeContent = {
         // Inverted control: the mark is written by the test, never by the submitted code. A function
         // that both records the selection and reports it can agree with itself forever and still be
         // saying nothing about the document -- which is exactly the starter's failure.
-        requireElement(doc, 'card-dusk').setAttribute('data-selected', '');
+        requireElement(doc, 'card-evening').setAttribute('data-selected', '');
 
         const isSelected = fn<IsSelected>('isSelected');
-        expect(isSelected(requireElement(doc, 'card-dusk'))).toBe(true);
-        expect(isSelected(requireElement(doc, 'card-dawn'))).toBe(false);
+        expect(isSelected(requireElement(doc, 'card-evening'))).toBe(true);
+        expect(isSelected(requireElement(doc, 'card-sunrise'))).toBe(false);
       },
     },
     {
       name: 'selectedIds reports marks it did not make, in document order',
       run: ({ doc, fn, expect }) => {
-        requireElement(doc, 'card-dusk').setAttribute('data-selected', 'true');
-        requireElement(doc, 'card-dawn').dataset.selected = '';
+        requireElement(doc, 'card-evening').setAttribute('data-selected', 'true');
+        requireElement(doc, 'card-sunrise').dataset.selected = '';
 
-        expect(fn<SelectedIds>('selectedIds')(requireElement(doc, 'gallery'))).toEqual(['card-dawn', 'card-dusk']);
+        // The cards are named so that document order and alphabetical order disagree: sunrise comes
+        // first in the markup and second in the alphabet. With ids that happened to sort the right
+        // way, a `selectedIds` ending in `.sort()` would pass this and "in document order" would be
+        // a claim nothing checked.
+        expect(fn<SelectedIds>('selectedIds')(requireElement(doc, 'gallery'))).toEqual([
+          'card-sunrise',
+          'card-evening',
+        ]);
       },
     },
     {
       name: 'the mark travels with a copy of the card',
       run: ({ doc, fn, expect }) => {
-        const dusk = requireElement(doc, 'card-dusk');
-        fn<Select>('select')(dusk);
+        const evening = requireElement(doc, 'card-evening');
+        fn<Select>('select')(evening);
 
         // `cloneNode` copies attributes and nothing else. A selection held in a Set, a WeakMap or a
         // property on the element is not part of the node, so it does not survive being copied,
         // serialised, or sent to a server -- and the copy is the honest way to ask whether the state
         // is really *in* the DOM.
-        const copy = dusk.cloneNode(true);
+        const copy = evening.cloneNode(true);
         expect(copy).toHaveAttribute('data-selected');
         expect(requireElement(doc, 'gallery').innerHTML).toContain('data-selected');
       },
@@ -98,12 +105,12 @@ export const propertyNotAttribute: ChallengeContent = {
       name: 'selecting a second card leaves the first one selected',
       run: ({ doc, fn, expect }) => {
         const select = fn<Select>('select');
-        select(requireElement(doc, 'card-dawn'));
-        select(requireElement(doc, 'card-dusk'));
+        select(requireElement(doc, 'card-sunrise'));
+        select(requireElement(doc, 'card-evening'));
 
         expect(idsOf(requireElement(doc, 'gallery').querySelectorAll('[data-selected]'))).toEqual([
-          'card-dawn',
-          'card-dusk',
+          'card-sunrise',
+          'card-evening',
         ]);
       },
     },
