@@ -59,6 +59,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./formdataNotAWalk').then((module) => module.formdataNotAWalk),
   },
   {
+    id: 'forms-sticky-custom-error',
+    slug: 'sticky-custom-error',
+    title: 'The error you must take back',
+    category: 'forms',
+    difficulty: 'intermediate',
+    concepts: ['setCustomValidity', 'validationMessage', 'customError', 'checkValidity', 'input event'],
+    relatedIds: ['forms-explain-the-failure', 'forms-signup-validation'],
+    load: () => import('./stickyCustomError').then((module) => module.stickyCustomError),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
