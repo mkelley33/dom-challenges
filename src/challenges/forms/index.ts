@@ -119,6 +119,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./requestSubmitGate').then((module) => module.requestSubmitGate),
   },
   {
+    id: 'forms-one-invalid-signal',
+    slug: 'one-invalid-signal',
+    title: 'One signal for styles and screen readers',
+    category: 'forms',
+    difficulty: 'expert',
+    concepts: ['aria-invalid', 'invalid event', 'capture phase', 'setAttribute', 'attribute selectors'],
+    relatedIds: ['forms-signup-validation', 'attributes-enumerated-state', 'forms-who-blocks-submission'],
+    load: () => import('./oneInvalidSignal').then((module) => module.oneInvalidSignal),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
