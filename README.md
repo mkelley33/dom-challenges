@@ -52,19 +52,20 @@ you can still write and run code — but nothing is recorded as solved, and ther
 
 ## Scripts
 
-| Script            | What it does                                                                   |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `pnpm dev`        | Vite dev server + json-server together                                         |
-| `pnpm api`        | json-server alone, on port 4000                                                |
-| `pnpm seed`       | Generates `server/db.json` (Faker, fixed seed — reproducible; resets progress) |
-| `pnpm test`       | Full Vitest suite, once                                                        |
-| `pnpm test:watch` | Vitest in watch mode                                                           |
-| `pnpm typecheck`  | `tsc --build` over both projects: `src/`, and `server/` + `scripts/`           |
-| `pnpm lint`       | oxlint, including the type-aware rules                                         |
-| `pnpm build`      | Typechecks, builds into `dist/`, then checks the route budgets                 |
-| `pnpm budget`     | Route-level eager bytes against their budgets, over the existing `dist/`       |
-| `pnpm preview`    | Serves the built `dist/` locally                                               |
-| `pnpm format`     | Prettier over the repo                                                         |
+| Script              | What it does                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`          | Vite dev server + json-server together                                                                      |
+| `pnpm api`          | json-server alone, on port 4000                                                                             |
+| `pnpm seed`         | Generates `server/db.json` (Faker, fixed seed — reproducible; resets progress)                              |
+| `pnpm test`         | Full Vitest suite, once                                                                                     |
+| `pnpm test:watch`   | Vitest in watch mode                                                                                        |
+| `pnpm test:browser` | Every shipping challenge's solutions and starter through a real headless Chromium (see [Testing](#testing)) |
+| `pnpm typecheck`    | `tsc --build` over both projects: `src/`, and `server/` + `scripts/`                                        |
+| `pnpm lint`         | oxlint, including the type-aware rules                                                                      |
+| `pnpm build`        | Typechecks, builds into `dist/`, then checks the route budgets                                              |
+| `pnpm budget`       | Route-level eager bytes against their budgets, over the existing `dist/`                                    |
+| `pnpm preview`      | Serves the built `dist/` locally                                                                            |
+| `pnpm format`       | Prettier over the repo                                                                                      |
 
 ## Using the app
 
@@ -150,6 +151,9 @@ To add one:
 2. Add an entry to that category's `index.ts`: the metadata (`id`, `slug`, `title`, `category`, `difficulty`,
    `concepts`, `relatedIds`) and `load: () => import('./<name>').then((module) => module.<name>)`.
 3. Run `pnpm test`.
+4. Run `pnpm test:browser` (`AGENTS.md` §1) — the happy-dom suite in step 3 proves the new challenge is
+   self-consistent, not that it runs in a real browser, and `AGENTS.md` §3 documents divergences between the two
+   engines that only a Chromium run can catch.
 
 The index is what the dashboard and the category listing read, and the `import()` is what keeps a challenge's content
 off every page but its own — `pnpm build` fails if a challenge module ever stops being fetched on demand. Registration
@@ -184,6 +188,18 @@ itself — an entry carries metadata and a loader and no challenge content, whic
 
 Under Vitest the harness runs against happy-dom; in the browser it runs against a real iframe. The engine is the same
 code either way — that is the point of the host contract described in `AGENTS.md`.
+
+```bash
+pnpm test:browser
+```
+
+A second, deliberately separate suite: `src/challenges/content.browser.test.ts` runs every shipping challenge's
+solutions and starter through the production `createIframeHost`, in a real headless Chromium via
+`vitest.browser.config.ts`. It proves the content the happy-dom suite above only proves self-consistent actually runs
+in a browser — `AGENTS.md` §3 lists a dozen places the two engines disagree, several in the direction where the wrong
+answer is the one `pnpm test` accepts. It needs `pnpm exec playwright install chromium` once, is not part of
+`pnpm test` or the four gates (`AGENTS.md` §1 says why), and is run deliberately — see the authoring recipe above
+and `AGENTS.md` §1 for the occasions.
 
 ## Known limitations
 
