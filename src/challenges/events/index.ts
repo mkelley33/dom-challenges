@@ -130,6 +130,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./abortMany').then((module) => module.abortMany),
   },
   {
+    id: 'events-outside-click',
+    slug: 'outside-click',
+    title: 'The menu that closes the moment it opens',
+    category: 'events',
+    difficulty: 'expert',
+    concepts: ['propagation', 'listeners added during dispatch', 'capture phase', 'contains', 'teardown'],
+    relatedIds: ['events-capture-phase', 'events-stop-propagation', 'events-listener-identity'],
+    load: () => import('./outsideClick').then((module) => module.outsideClick),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
