@@ -10,8 +10,15 @@ reveal the reference solutions; when you solve it unaided, the same solutions un
 Most challenges carry more than one accepted solution, each with an explanation and a tradeoff analysis, so the app
 teaches _when_ to reach for a technique rather than only _how_.
 
-This is Phase 1: the engine plus one category authored end to end — **Selection & Traversal**, 13 challenges from
-novice to expert. Twelve further categories are specified in §5 of the design doc under `docs/superpowers/specs/`.
+**Six categories ship**, each one authored end to end and verified in a real browser: Selection & Traversal, Create,
+Insert & Remove, Attributes, Properties & Data, Classes, Styles & CSSOM, Events, and Forms & Validation. Every one of
+them is finishable — the dashboard's progress bar measures you against what is actually there.
+
+The design doc under `docs/superpowers/specs/` specifies seven further categories. They are **not** shipping: six of
+them hold a single reconnaissance challenge each, written to find out what the engine could carry rather than to be
+practised, and the seventh (React) has no content at all. Those categories are hidden from browsing by the `shipping`
+flag in `CATEGORY_META` (`src/challenges/registry.ts`) rather than deleted — their challenges are still registered,
+still covered by the test suites, and still reachable by direct URL.
 
 ## Requirements
 
@@ -69,8 +76,9 @@ you can still write and run code — but nothing is recorded as solved, and ther
 
 ## Using the app
 
-**Dashboard (`/`)** — overall solved count, a bar per difficulty tier, and a card per category. Categories with no
-challenges yet say so rather than rendering an empty progress bar.
+**Dashboard (`/`)** — overall solved count, a bar per difficulty tier, and a card per shipping category. Every figure
+on the page is measured against the challenges those cards lead to, so the bar can actually reach the end; the
+categories that do not ship are neither listed nor counted.
 
 **Category (`/category/:categoryId`)** — the challenges in one category, easiest first, with a search box, a difficulty
 filter, and a "hide solved" switch.
@@ -99,7 +107,8 @@ split. Progress — attempts, solved and revealed state — is saved to json-ser
 src/
   runner/        the execution engine: transpile, assertions, harness, iframe host
   challenges/    the metadata index, the on-demand loader, and the content modules
-    selection/   Selection & Traversal — one file per challenge, plus the index that registers them
+    <category>/  one directory per category — one file per challenge, plus the index that registers
+                 them and records what its authors measured about the two engines
   components/
     browse/      dashboard, category list, filter bar
     challenge/   the challenge workspace: prompt, editor, preview, results, solutions
@@ -155,6 +164,12 @@ To add one:
    self-consistent, not that it runs in a real browser, and `AGENTS.md` §3 documents divergences between the two
    engines that only a Chromium run can catch. In one of the six shipping categories, this step also fails until you
    bump the literal count `content.browser.test.ts` pins for that pass.
+
+Authoring in a category that does not ship adds a challenge nobody can browse to. A category is offered only when its
+entry in `CATEGORY_META` says `shipping: true`, and the default is off deliberately: a category is half-finished for as
+long as it takes to author, and a half-finished category on the dashboard is a promise the app cannot keep. Turning one
+on is a one-word edit plus the literal in `src/challenges/registry.test.ts`, which is there so the decision is made
+rather than drifted into.
 
 The index is what the dashboard and the category listing read, and the `import()` is what keeps a challenge's content
 off every page but its own — `pnpm build` fails if a challenge module ever stops being fetched on demand. Registration

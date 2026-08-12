@@ -105,6 +105,10 @@ in the index and the content lives only in the module, so neither can drift from
 shared between a category's challenges goes in that category's `support.ts`, which is the one other filename the build
 check treats as not-a-challenge.
 
+**In any other category the challenge is authored, tested and unreachable**, because browsing is opt-in per category
+and those six are the ones opted in. That is deliberate rather than an oversight — §10's _Six categories ship_ has the
+flag, what it does and does not hide, and what turning one on costs.
+
 Every new challenge needs **at least one documented alternative solution with tradeoffs**. This is the point of the
 app: it teaches _when_ to reach for a technique, not only _how_, and a challenge with one solution teaches only that
 one way exists. `content.test.ts` enforces that every solution carries a label, an explanation and a tradeoff
@@ -654,6 +658,19 @@ the other.
 live-region test in a different file, which waits against `waitFor`'s 1000 ms default. Raising it past ~800 ms flakes
 that test.
 
+**A test file can mount the challenge _route_ for exactly one distinct challenge.** A second one never comes out of
+suspense: the page sits on the shell's `Loading…` until the test times out, and nothing in the output says why — the
+failure reads as "your route 404s" or "the assertion is wrong", which is where an hour goes. Mounting the **same**
+challenge again is fine, and so is mounting the browse routes as often as you like.
+
+Measured, with the controls that separate the candidate causes, because the obvious ones are all wrong: re-mounting the
+same challenge resolves from `loadChallenge`'s cache in ~13 ms, awaiting the second challenge's `load()` directly
+resolves in ~3 ms — so it is neither the module transform nor the import — and it reproduces with two _shipping_
+challenges, so it has nothing to do with which category they are in. It is the mount. The cause is not diagnosed
+further; the constraint is what matters, and it is why `routes.unshipped.test.tsx` is a file of its own rather than two
+more cases in `routes.test.tsx`, which already spends its one mount on `query-basics`. `ChallengePage.loadFailure`
+and `routes.errorElement` are separate files for their own `vi.mock` reasons and happen to obey this too.
+
 ---
 
 ## 9. Owner decisions — settled, not open
@@ -733,8 +750,9 @@ rebuild — §7's method, and the only one that is trustworthy here):
 | **per challenge**             | 6,756   | 414     |
 
 The floor is byte-identical either way, so the refactor added no fixed overhead: a challenge went from **6,756 B on the
-first paint to 414 B**, a factor of sixteen. At the ~103 challenges the project targets, that is ~408 kB of eager
-JavaScript on `/` rather than ~1.05 MB.
+first paint to 414 B**, a factor of sixteen. At the 74 challenge modules in the tree today that is ~31 kB of eager
+JavaScript on `/` rather than ~500 kB — and at the ~100 the project targeted before the scope narrowed to six shipping
+categories (below), ~41 kB rather than ~676 kB. The ratio is the claim; the absolute figure moves with the library.
 
 Both columns subtract a zero-challenge build, which §7 records is structurally a different one. For the after column
 that is measurable and measured: net out `/`'s own one-time 0 → 1 cost and its 414.2 B becomes ~393.5 B. For the before
@@ -784,6 +802,39 @@ guarantee has a hole in it that nothing else can see.
 **One accepted cost:** opening a challenge is now two sequential fetches — the route chunk, then the challenge chunk —
 where it used to be one. The second is a few kilobytes. Prefetching on hover from `ChallengeList` would remove it and
 has not been done.
+
+### Six categories ship, and the flag that says so is opt-in
+
+`CATEGORY_META[id].shipping` decides whether a learner is offered a category. **Absent means no**, and that default is
+the point: a category is half-finished for as long as it takes to author, and the state this flag was introduced to fix
+was a dashboard advertising twelve categories, six of which held a single reconnaissance challenge each. Opt-in means
+the only way to advertise a category is to say so, in a word a reviewer can see.
+
+`selection`, `creation`, `attributes`, `styles`, `events` and `forms` ship. `observers`, `async`, `storage`,
+`web-apis`, `performance` and `a11y` each keep their one reconnaissance challenge, and `react` has none. **Which six
+is an owner decision** (§9's kind, not a default to be re-derived) and is pinned as a literal in `registry.test.ts`, so
+flipping one on is a deliberate edit in two places rather than a word nobody reviews.
+
+**It hides a category from browsing and from nothing else.** The index still holds every challenge, `content.test.ts`
+still opens every one of them, and both URLs still resolve — `/challenge/:slug` and `/category/:categoryId` alike.
+Unshipped is not withdrawn, and a stale bookmark must not break; `routes.unshipped.test.tsx` holds both, and each was
+checked against a mutation that 404s an unshipped category. Do not add a shipping check to `ChallengePage` or
+`ChallengeList`.
+
+**What the flag does change is the dashboard's arithmetic.** `Dashboard` summarises `shippingEntries`, not
+`challengeIndex`, because every figure on that page is a fraction of something a learner is being invited to finish —
+counting challenges no card links to is a bar that cannot fill. A solve on an unshipped challenge reached by URL is
+therefore not counted anywhere, which is the honest reading and not an oversight.
+
+Two consequences worth knowing before you author:
+
+- **Authoring in an unshipped category adds a challenge nobody can browse to.** It still costs every route its 414 B
+  (§7) and still has to pass every gate. That is the deal, and it is deliberate: the content is kept because
+  `content.test.ts` opening every challenge is what keeps the index honest.
+- **The "no challenges yet" branch on a category card is now unreachable through the real registry**, since every
+  shipping category has content — `registry.test.ts` holds that. Its coverage lives in
+  `Dashboard.emptyRegistry.test.tsx`, which is the file for states the real registry cannot reach. It is not dead code:
+  a category flipped on before its first challenge is authored lands in exactly that state.
 
 ---
 

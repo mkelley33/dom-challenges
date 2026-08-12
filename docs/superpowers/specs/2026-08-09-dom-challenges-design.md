@@ -1,8 +1,18 @@
 # DOM Challenges — Design
 
 Date: 2026-08-09
-Status: Approved
+Status: Approved; **scope amended 2026-08-12** — see the note below
 Branch: `feat/dom-challenges-app`
+
+> **Scope amendment (Phase 4, owner decision).** This document specified thirteen categories and ~100 challenges. The
+> target is now **six categories a learner can finish and trust**: Selection & Traversal, Create/Insert/Remove,
+> Attributes/Properties/Data, Classes/Styles/CSSOM, Events, and Forms & Validation. The other seven do not ship —
+> six of them hold one reconnaissance challenge each, and React has none. Those categories are hidden from browsing
+> by the `shipping` flag in `CATEGORY_META` rather than deleted; their challenges stay registered, tested and
+> reachable by URL. §5, §9 and §10 below are marked where the amendment overrides them; everything else in this
+> document — the execution model, the content model, the testing strategy, solution visibility — still holds and is
+> still what the code is written against. `docs/superpowers/plans/2026-08-12-phase-4-final-two-categories-and-ship.md`
+> records the reasoning.
 
 ## 1. Purpose
 
@@ -15,7 +25,8 @@ Most challenges carry more than one accepted solution, each with its own tradeof
 analysis, so the app teaches *when* to reach for a technique rather than only *how*.
 
 Audience ranges from novice to expert; challenges are graded across four difficulty
-levels and cover both framework-free TypeScript and React.
+levels. Framework-free TypeScript throughout — the React category specified in §5
+was never authored and does not ship.
 
 Success criteria:
 
@@ -191,23 +202,28 @@ array entry.
 
 ## 5. Categories
 
-Approximately eight challenges each, target ~100 total.
+**Amended.** Six of the thirteen below ship, and they are the first six. The rest are hidden from
+browsing (`shipping` in `CATEGORY_META`); rows 7–12 each hold one reconnaissance challenge, still
+registered and still tested, and row 13 has no content. The **Ships** column is the current state;
+the coverage column is what each category was specified to teach, kept because it is the record of
+what the reconnaissance was aimed at. Counts are not written here — they change whenever content is
+authored, and `pnpm test` is what knows them.
 
-| # | Category | Representative coverage |
-|---|----------|-------------------------|
-| 1 | Selection & Traversal | `querySelector*`, `closest`, `matches`, live vs static collections, `TreeWalker` |
-| 2 | Create, Insert & Remove | `createElement`, `DocumentFragment`, `insertAdjacentHTML`, `replaceChildren`, `cloneNode` |
-| 3 | Attributes, Properties & Data | attribute vs property, `dataset`, boolean attributes, `toggleAttribute` |
-| 4 | Classes, Styles & CSSOM | `classList`, custom properties, `getComputedStyle`, stylesheet manipulation |
-| 5 | Events | bubbling/capture, delegation, `CustomEvent`, `AbortController`, passive listeners |
-| 6 | Forms & Validation | `FormData`, Constraint Validation API, controlled inputs, `input` vs `change` |
-| 7 | Observers | `MutationObserver`, `IntersectionObserver`, `ResizeObserver` |
-| 8 | Async & Scheduling | `requestAnimationFrame`, microtasks, `requestIdleCallback`, debounce/throttle |
-| 9 | Storage, URL & History | `localStorage`, IndexedDB, `URLSearchParams`, History API |
-| 10 | Web APIs | Shadow DOM & custom elements, Clipboard, Canvas, Drag & Drop, `fetch` + abort |
-| 11 | Performance | layout thrashing, read/write batching, virtualization, `content-visibility` |
-| 12 | Accessibility | focus management, focus traps, ARIA state, roving tabindex, live regions |
-| 13 | React | refs, portals, `useSyncExternalStore`, effect cleanup, escape hatches, RHF |
+| # | Category | Ships | Representative coverage |
+|---|----------|-------|-------------------------|
+| 1 | Selection & Traversal | yes | `querySelector*`, `closest`, `matches`, live vs static collections, `TreeWalker` |
+| 2 | Create, Insert & Remove | yes | `createElement`, `DocumentFragment`, `insertAdjacentHTML`, `replaceChildren`, `cloneNode` |
+| 3 | Attributes, Properties & Data | yes | attribute vs property, `dataset`, boolean attributes, `toggleAttribute` |
+| 4 | Classes, Styles & CSSOM | yes | `classList`, custom properties, `getComputedStyle`, stylesheet manipulation |
+| 5 | Events | yes | bubbling/capture, delegation, `CustomEvent`, `AbortController`, passive listeners |
+| 6 | Forms & Validation | yes | `FormData`, Constraint Validation API, controlled inputs, `input` vs `change` |
+| 7 | Observers | no — one recon challenge | `MutationObserver`, `IntersectionObserver`, `ResizeObserver` |
+| 8 | Async & Scheduling | no — one recon challenge | `requestAnimationFrame`, microtasks, `requestIdleCallback`, debounce/throttle |
+| 9 | Storage, URL & History | no — one recon challenge | `localStorage`, IndexedDB, `URLSearchParams`, History API |
+| 10 | Web APIs | no — one recon challenge | Shadow DOM & custom elements, Clipboard, Canvas, Drag & Drop, `fetch` + abort |
+| 11 | Performance | no — one recon challenge | layout thrashing, read/write batching, virtualization, `content-visibility` |
+| 12 | Accessibility | no — one recon challenge | focus management, focus traps, ARIA state, roving tabindex, live regions |
+| 13 | React | no — never authored | refs, portals, `useSyncExternalStore`, effect cleanup, escape hatches, RHF |
 
 ## 6. State and persistence
 
@@ -330,7 +346,7 @@ Additions, with justification:
 | `tailwindcss` + shadcn deps | shadcn/ui requires Tailwind |
 | `monaco-editor`, `@monaco-editor/react` | editor with inline TS diagnostics |
 | `sucrase` | fast browser type-stripping for the runner |
-| `react-router` | 100 challenges across 13 categories need deep links |
+| `react-router` | every challenge and category needs a deep link |
 | `react-markdown`, `remark-gfm` | prompts, explanations, and tradeoffs are markdown |
 | `shiki` | static syntax highlighting for solution display |
 | `happy-dom` | DOM host for the harness under Vitest |
@@ -341,7 +357,10 @@ Commits, no AI attribution in commit messages.
 
 ## 10. Delivery phases
 
-Each phase ends green — typecheck, lint, and full test suite — and is committed.
+**Amended.** The plan below is what was intended; what happened is recorded underneath
+it. Each phase ends green — typecheck, lint, and full test suite — and is committed.
+
+*As specified:*
 
 - **P1 — Engine + vertical slice.** Tooling, harness, runner, editor, progress,
   routing, shell UI, plus category 1 authored end to end (~12 challenges). The app is
@@ -351,13 +370,27 @@ Each phase ends green — typecheck, lint, and full test suite — and is commit
 - **P3 — Categories 5–8** — events, forms, observers, async (~30 challenges).
 - **P4 — Categories 9–13** — storage, web APIs, performance, a11y, and React parity
   with cross-links (~36 challenges).
-
-Running total: 12 + 22 + 30 + 36 = ~100.
 - **P5 — Polish.** Dashboard refinement, a11y audit pass, README.md, CLAUDE.md
   delegating non-Claude-specific detail to AGENTS.md, MIT LICENSE.
 
 Sequencing rationale: if the content format proves wrong, 12 challenges are reworked
 rather than 100.
+
+*As delivered:*
+
+- **P1** — engine plus Selection & Traversal, as specified.
+- **P2** — reconnaissance instead of bulk authoring: one challenge in each empty
+  category, aimed at that category's riskiest engine dependency, to find out which
+  categories the content-correctness suite could validate at all. Its verdicts are
+  `docs/superpowers/specs/2026-08-11-phase-2-findings.md`, and those eleven challenges
+  are why six categories still hold exactly one.
+- **P3** — depth in the categories the findings cleared: creation, attributes, events.
+- **P4** — styles and forms, a one-time Chromium verification pass over all six, and
+  the scope amendment at the top of this document. No P5 was planned separately; the
+  phase plans in `docs/superpowers/plans/` are the record of what each phase did.
+
+Delivering P2 as reconnaissance is what turned the running total from a plan into a
+measurement, and the six shipping categories are the ones that measurement supported.
 
 ## 11. Risks
 
