@@ -100,6 +100,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./listenerIdentity').then((module) => module.listenerIdentity),
   },
   {
+    id: 'events-once-listener',
+    slug: 'once-listener',
+    title: 'The handler that must not run twice',
+    category: 'events',
+    difficulty: 'intermediate',
+    concepts: ['once', 'listener options', 'removeEventListener', 'one-shot handlers', 'double submit'],
+    relatedIds: ['events-listener-identity'],
+    load: () => import('./onceListener').then((module) => module.onceListener),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
