@@ -51,9 +51,11 @@ import type { ChallengeEntry } from '@/types/challenge';
  * (`who-blocks-submission`'s unguarded `validity.valid` walk and `one-invalid-signal`'s ARIA IDL
  * write); `request-submit-gate`'s full-imitation gap passed in both, as documented there.
  * `localStorage` 0 keys -> 0 keys. That run's tab was **backgrounded** throughout, which was
- * argued admissible for this category alone and has since been superseded: `pnpm test:browser`
- * (AGENTS.md §1) re-runs all ten challenges through the same production host in an environment
- * that proves it renders before any result is read, and every reading held. The pass also caught a
+ * argued admissible for this category alone. `pnpm test:browser` (AGENTS.md §1) has since re-run
+ * all ten challenges' solutions and starters through the same production host, in an environment
+ * that proves animation frames are serviced before any result is read -- narrower than "renders";
+ * see AGENTS.md §5 for why headless Chromium cannot be trusted to demonstrate the wider claim. Every
+ * solution and starter reading held. The pass also caught a
  * real defect the content suite structurally cannot see: `request-submit-gate`'s recorder read the
  * event with a bare-global `instanceof`, green under happy-dom's shared class table and failing the
  * challenge's own solutions in Chrome -- fixed to `win.SubmitEvent`, the realm rule's spelling, and
@@ -65,7 +67,9 @@ import type { ChallengeEntry } from '@/types/challenge';
  * challenge here reads focus and none may start to without a headed run to back it.
  *
  * Four new divergences are pinned with positive controls in `src/test/happyDomGaps.test.ts`, each
- * confirmed by that Chrome run and re-confirmed by the browser pass:
+ * confirmed by that Chrome run and since re-measured in a scratch run under
+ * `vitest.browser.config.ts` -- **not** the committed `pnpm test:browser` pass, which runs only the
+ * shipping library's solutions and starters and does not exercise any of these six reads:
  *
  * - **A `<select multiple>` contributes one entry to FormData, not one per selected option.**
  *   happy-dom reads the select's `.value` -- the first selected option -- in both the
@@ -90,12 +94,13 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   value *before* any reset, and no test resets a two-default group.
  *
  * **Two further divergences were found in the review's fix wave, after that Chrome run. Their
- * browser column was the spec's answer and nothing more; the browser pass has since measured both,
- * and the spec's answer is what a browser does.**
+ * browser column was the spec's answer and nothing more; a scratch run under
+ * `vitest.browser.config.ts` has since measured both -- not the committed browser pass, which does
+ * not reach either -- and the spec's answer is what a browser does.**
  *
  * - **`requestSubmit(x)` accepts any element as its submitter.** A browser throws a `TypeError` for
  *   an element that is not a submit button and a `NotFoundError` `DOMException` for one another
- *   form owns (measured in Chromium through the production host: `TypeError` for a `type="button"`
+ *   form owns (measured in that scratch run: `TypeError` for a `type="button"`
  *   button and for a bare `<span>`, `NotFoundError` for a second form's submit button, and the form
  *   submitted exactly once -- by the control that named its own button). happy-dom runs neither
  *   check, and all of those, plus an `<input type="reset">`, submit the form and arrive as
@@ -109,11 +114,12 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   fixture, same order). That pair is the UA/script separator, the other channel that would close
  *   the same gap, so it is not assertable here at all.
  *
- * **Neither measurement closes the gap, and the browser pass proved that too**: `request-submit-gate`'s
- * full imitation was run through the production host in Chromium and **passed there as well**. The
- * discriminators exist in a browser; the challenge's tests cannot use them, because a test that did
- * would fail the reference solution under the engine `pnpm test` runs. The gap is a property of the
- * shared-engine constraint, not of the browser.
+ * **Neither measurement closes the gap, and a further scratch run proved that too**: `request-submit-gate`'s full
+ * imitation was run through the production host in Chromium -- again outside the committed `pnpm test:browser`
+ * pass, which does not exercise wrong-answer variants at all -- and **passed there as well**. The discriminators
+ * exist in a browser; the challenge's tests cannot use them, because a test that did would fail the reference
+ * solution under the engine `pnpm test` runs. The gap is a property of the shared-engine constraint, not of the
+ * browser.
  *
  * Also measured here, in the safe-to-build-on direction (happy-dom side measured; browser side
  * spec'd or recon-covered, as noted):

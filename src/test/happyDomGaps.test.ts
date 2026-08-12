@@ -1005,11 +1005,17 @@ describe('APIs present but not faithful', () => {
  * happy-dom side of every test here was measured through `createMemoryHost`.
  *
  * **The browser side of all six is now measured**, through the production `createIframeHost` in
- * Chromium under `pnpm test:browser` (AGENTS.md §1), in an environment that proved it renders
- * before any reading was taken. Every one agreed with the spec's answer cited per test, so each
- * browser column below is a measurement rather than a derivation. Two of them supersede a smaller
- * claim: the first four were previously measured in a **backgrounded** tab, and the last two --
- * `requestSubmit`'s submitter check and `isTrusted` -- had no browser run at all.
+ * Chromium, in a scratch run under `vitest.browser.config.ts` -- **not** covered by the committed
+ * `pnpm test:browser` pass (AGENTS.md §1), which runs the shipping library's solutions and starters
+ * and touches none of these six behaviours. Re-running `pnpm test:browser` does not re-take these
+ * readings; if one is ever doubted, it has to be re-measured the same way, by hand, in a scratch
+ * file. Each reading is admissible on its own terms regardless: every one of the six is a
+ * synchronous dispatch or an attribute/serialisation read, none awaits a frame, and each sat beside
+ * its in-document control -- none of them depends on the rendering the committed pass's probe
+ * establishes. Every one agreed with the spec's answer cited per test, so each browser column below
+ * is a measurement rather than a derivation. Two of them supersede a smaller claim: the first four
+ * were previously measured in a **backgrounded** tab, and the last two -- `requestSubmit`'s
+ * submitter check and `isTrusted` -- had no browser run at all.
  *
  * The one thing that run could **not** measure is focus: `document.hasFocus()` is false in both the
  * top document and the frame under a headless browser, exactly as it was under the backgrounded

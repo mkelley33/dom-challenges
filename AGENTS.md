@@ -46,9 +46,10 @@ gate people learn to skip, which is worse than one that is honest about when it 
 **Run it deliberately, and these are the occasions:** after authoring or editing challenge content, after touching
 anything in `src/runner/`, and before a release. Those are exactly the changes it can see and `pnpm test` cannot —
 §3's realm rule is the sharpest example, and the bug it caught in `forms/request-submit-gate` was green across all 763
-node tests. Read what it finds as a claim about **Chromium**, headless: it proves it renders before it reads anything
-(see the probe at the top of that file), but `document.hasFocus()` is false throughout, so nothing focus-flavoured can
-be measured there.
+node tests. Read what it finds as a claim about **Chromium**, headless: it proves animation frames are serviced before
+it reads anything (see the probe at the top of that file) — not that anything painted or laid out, which §5 records
+headless Chromium cannot be trusted to demonstrate either way — and `document.hasFocus()` is false throughout, so
+nothing focus-flavoured can be measured there.
 
 ---
 
@@ -204,8 +205,11 @@ you measure there.
   built-in failure, so only a message the challenge set with `setCustomValidity` is assertable; the validity
   pseudo-classes never match at all. Filling out the category found six more, each pinned in
   `src/test/happyDomGaps.test.ts` and detailed in the category index's docblock. **All six are now measured on both
-  sides** — happy-dom through `createMemoryHost`, Chromium through the production iframe host under `pnpm test:browser`
-  (§1), whose environment proves it renders before any reading is taken: **never read a `<select multiple>` through
+  sides** — happy-dom through `createMemoryHost`, Chromium through the production iframe host in a scratch run under
+  `vitest.browser.config.ts`, not the committed `pnpm test:browser` pass (§1), which exercises only the shipping
+  library's solutions and starters and touches none of these six reads; each is a synchronous dispatch or an
+  attribute/serialisation read, so none depends on the committed pass's rendering probe: **never read a
+  `<select multiple>` through
   `FormData`** (one entry here -- the select's `.value` -- versus one per selected option in a browser, so the recon's
   "`FormData` in full" was wider than its measurement; checkbox groups arrive whole and are the multi-value device to
   use), **never read `validity` off a disabled or readonly field** (its flags stay raised here where a browser computes

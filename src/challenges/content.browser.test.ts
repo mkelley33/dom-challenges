@@ -34,8 +34,12 @@ let host: HostHandle;
 
 beforeEach(() => {
   container = document.createElement('div');
-  // Real geometry and a real rendering: AGENTS.md §5 -- a non-rendered subtree services no frames,
-  // which would make every negative in this file meaningless.
+  // Explicit geometry so the iframe's `h-full w-full` layout matches production instead of
+  // collapsing to zero height -- not what makes the probes below meaningful. AGENTS.md §5 records
+  // that headless Chromium services `requestAnimationFrame` even for a genuinely non-rendered
+  // (`display: none`) subtree, so size or visibility here proves nothing about rendering. The
+  // describe block below (`the environment renders`) is what establishes that, and it does so by
+  // mutation, not by geometry.
   container.style.cssText = 'width: 400px; height: 300px;';
   document.body.append(container);
   host = createIframeHost(container);
@@ -55,11 +59,14 @@ afterEach(() => {
  * its assertions after a *timer*, with the learner's paint-dependent work never having happened, and
  * report green. A false positive wearing a passing suite.
  *
- * So the environment has to prove it renders before any result below is admissible, and per
- * AGENTS.md §5 a probe whose answer is "X never happened" needs a positive control in the same
- * document over the same wait. The control here is a microtask queued **in the frame's own realm**,
- * which fires whether or not anything is being painted -- so "control fired, rAF did not" is a
- * non-rendering document, and "neither fired" is a probe that never ran at all.
+ * So the environment has to prove animation frames are serviced before any result below is
+ * admissible -- narrower than "it renders": AGENTS.md §5 records that headless Chromium services
+ * `requestAnimationFrame` even for a subtree it demonstrably is not painting, so this probe cannot
+ * speak to painting or layout, only to whether `tick()`'s frame actually ran rather than falling
+ * through to its timer. Per AGENTS.md §5 a probe whose answer is "X never happened" needs a positive
+ * control in the same document over the same wait. The control here is a microtask queued **in the
+ * frame's own realm**, which fires whether or not a frame is serviced -- so "control fired, rAF did
+ * not" is a frame that was never serviced, and "neither fired" is a probe that never ran at all.
  */
 describe('the environment renders', () => {
   it('services requestAnimationFrame, with a microtask as the control', async () => {
