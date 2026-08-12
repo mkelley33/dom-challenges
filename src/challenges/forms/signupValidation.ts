@@ -1,26 +1,6 @@
 import type { ChallengeContent } from '@/types/challenge';
 
-/**
- * Local rather than in a `support.ts` because this category has one challenge -- a helper shared
- * between two of them earns its own file, one used by a single challenge belongs beside it.
- */
-function requireElement(doc: Document, id: string): HTMLElement {
-  const element = doc.getElementById(id);
-  if (!element) throw new Error(`#${id} is missing from the challenge markup`);
-  return element;
-}
-
-function requireInput(doc: Document, id: string): HTMLInputElement {
-  const input = doc.querySelector<HTMLInputElement>(`input#${id}`);
-  if (!input) throw new Error(`#${id} is missing from the challenge markup, or is not an <input>`);
-  return input;
-}
-
-function requireForm(doc: Document, id: string): HTMLFormElement {
-  const form = doc.querySelector<HTMLFormElement>(`form#${id}`);
-  if (!form) throw new Error(`#${id} is missing from the challenge markup, or is not a <form>`);
-  return form;
-}
+import { requireElement, requireForm, requireInput } from './support';
 
 type WireSignup = (form: HTMLFormElement) => void;
 
