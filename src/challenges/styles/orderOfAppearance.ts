@@ -92,6 +92,18 @@ export const orderOfAppearance: ChallengeContent = {
         // challenge markup" names exactly what remove() did. The rule count then rules out answers
         // that won the tie by deleting the base's competing rule; a value-level rewrite would
         // already have failed the border test above.
+        //
+        // Known accepted gap: this only checks the *base* sheet, not the skin's. An answer that
+        // appends a copy of the skin's rules in a fresh `<style>` at the end of `body` -- leaving
+        // `#skin` in its original, losing position -- passes every test above, including this one:
+        // the copy wins the tie, the original still supplies the badge rule, and `#base` is
+        // untouched. Verified by running that exact code through the harness. Nothing here asserts
+        // that the skin's rules exist in exactly one place, and a test that did would have to
+        // distinguish "duplicated, original left behind" from the second solution's own shape --
+        // build a copy (an adopted `CSSStyleSheet`), then remove the original -- which is the same
+        // "duplicate, then decide what happens to the original" move with a different ending. That
+        // is a real discriminator to write, not an impossible one, but nobody has written it here.
+        // Left as a documented gap, not a test.
         const base = requireStyle(doc, 'base');
         const sheet = base.sheet;
         if (!sheet) throw new Error('style#base has no sheet');

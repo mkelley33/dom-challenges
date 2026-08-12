@@ -79,9 +79,15 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   mechanism was misread twice during measurement -- first as "insertRule at an explicit index
  *   does not apply", then as "adopted sheets freeze at adoption" -- both artefacts of reading
  *   before perturbing. Consequence for authors: **a test may not read an element's computed style
- *   before running submitted code that edits a sheet through the CSSOM** -- every test in this
- *   category reads only after the call under test. DOM-mediated restyles (element
- *   append/move/remove, `textContent` rewrite) do invalidate, in both engines.
+ *   before the *first* call under test that edits a sheet through the CSSOM** -- no test in this
+ *   category does. That leaves room a blanket "reads only after" claim would hide:
+ *   `state-in-a-class`'s tests 3 and 4 read a computed style *between* two calls under test
+ *   (select, read 6px, deselect, read 4px), which is sound only because its shipped solutions edit
+ *   through `classList`/inline styles, never the CSSOM. A CSSOM-editing implementation of
+ *   `setSelected` -- `insertRule`/`deleteRule` per row, a plausible learner shape -- would be
+ *   graded stale by this suite on that second read while passing in Chrome, so that challenge's
+ *   grading is outside what this suite can vouch for against a CSSOM-based answer. DOM-mediated
+ *   restyles (element append/move/remove, `textContent` rewrite) do invalidate, in both engines.
  * - **`insertRule` with the index omitted appends here and prepends in Chrome** (CSSOM defaults
  *   the index to 0; happy-dom returns `length`). So a tie "won" by bare `insertRule` is green in
  *   this suite and silently loses in a real browser -- measured as `specificity-not-order`'s w4,
@@ -102,8 +108,11 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   differently by the two hosts -- correct in Chrome, stale here. Prefer the build-fill-adopt
  *   shape in solutions, and never assert a computed value between two CSSOM edits.
  * - **A border width without a border style reads back as written here and as `0px` in Chrome**
- *   (style `none` computes the width to zero). Every border-width assertion in this category sits
- *   next to an explicit `border-left-style: solid` in the challenge's own CSS.
+ *   (style `none` computes the width to zero). Every *computed* border-width assertion in this
+ *   category sits next to an explicit `border-left-style: solid` in the challenge's own CSS.
+ *   `inline-wins` also asserts `border-left-width`, with no such rule in sight -- safely, because
+ *   it reads `style.getPropertyValue('border-left-width')` off the inline declaration directly,
+ *   never through `getComputedStyle`, so this divergence never enters into it.
  * - **`CSSStyleDeclaration` is not iterable here** -- `[...el.style]` throws where Chrome spreads
  *   to the declared names. Enumerate with `length`/`item(i)` (`inline-wins`' second solution says
  *   why its loop is spelled that way).

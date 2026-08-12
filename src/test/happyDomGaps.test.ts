@@ -463,9 +463,11 @@ describe('APIs present but not faithful', () => {
     // The control: with an explicit border-style, both engines report the written width.
     expect(context.window.getComputedStyle(styled).borderLeftWidth).toBe('4px');
     // The divergence: with no border-style, the used border-style is `none` and Chrome computes
-    // the width to 0px; happy-dom hands the specified value back. A border-width assertion is
-    // portable only when the challenge's own CSS also sets the style, which is why every one in
-    // the styles category does.
+    // the width to 0px; happy-dom hands the specified value back. A *computed* border-width
+    // assertion is portable only when the challenge's own CSS also sets the style, which is why
+    // every computed one in the styles category does. `inline-wins` also asserts border-left-width,
+    // with no such rule -- safely, because it reads the inline declaration directly, never
+    // getComputedStyle, so this divergence does not reach it.
     expect(context.window.getComputedStyle(bare).borderLeftWidth).toBe('4px');
   });
 
