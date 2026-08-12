@@ -22,7 +22,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { challengeModuleKeys, routeBudgets } from './budgets.ts';
+import { challengeModuleKeys, ROUTE_SLACK_BYTES, routeBudgets } from './budgets.ts';
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST_DIR = join(ROOT_DIR, 'dist');
@@ -154,6 +154,8 @@ const lines: string[] = [];
 /** Every script any route pulls in eagerly, pooled so the lazy check can be made once. */
 const eagerScripts = new Set<string>();
 let stylesheetBytes = 0;
+/** What each route has left, kept so the shared pool below can be reported rather than inferred. */
+const headroom: number[] = [];
 
 for (const { route, lazyKey, maxBytes } of routeBudgets()) {
   // A split route whose module is no longer a chunk of its own has been folded into whatever
@@ -170,6 +172,7 @@ for (const { route, lazyKey, maxBytes } of routeBudgets()) {
   for (const script of closure.scripts) eagerScripts.add(script);
   stylesheetBytes = Math.max(stylesheetBytes, totalBytes(closure.stylesheets));
 
+  headroom.push(maxBytes - bytes);
   const share = Math.round((bytes / maxBytes) * 100);
   // The percentage alone became misleading once all three budgets were derived: they now leave the
   // same absolute headroom, so the largest route reads as the closest to trouble purely because its
@@ -188,6 +191,22 @@ process.stdout.write(`${lines.join('\n')}\n\n`);
 // a `<link rel="stylesheet">` is not a module preload -- so it belongs in the report but not in a
 // per-route number that would count it three times.
 process.stdout.write(`  one shared stylesheet: ${format(stylesheetBytes)} B\n\n`);
+
+// The slack is a **shared pool**, and until this line said so nothing reported how far into it the
+// library had got. Every ceiling is the floor, plus 414 B for each challenge module on disk, plus
+// this fixed slack -- so a route's remaining bytes equal the slack exactly when the model is exactly
+// right, and the difference is the whole library's accumulated error in that 414 B. `attributes`'
+// entries measured 454.2 B each and `selection`'s 382.0 B, so the pool moves in both directions and
+// the figure below is where it stands. It is a reading, not a budget: nothing fails on it, because a
+// number that had to be re-baselined every time a category was written would be indistinguishable
+// from someone raising a ceiling to bury a regression (AGENTS.md section 7).
+const lowest = Math.min(...headroom);
+const highest = Math.max(...headroom);
+const spread =
+  lowest === highest ? `${format(lowest)} B left on every route` : `${format(lowest)}-${format(highest)} B left`;
+const drift = lowest - ROUTE_SLACK_BYTES;
+const direction = drift === 0 ? 'exactly as modelled' : `${drift > 0 ? '+' : '-'}${format(Math.abs(drift))} B`;
+process.stdout.write(`  slack pool: ${format(ROUTE_SLACK_BYTES)} B modelled, ${spread}  (${direction})\n\n`);
 
 failures.push(...assertChallengesAreLazy(manifest, eagerScripts));
 

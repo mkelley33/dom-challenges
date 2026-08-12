@@ -118,7 +118,7 @@ const CHALLENGE_INDEX_ENTRY_BYTES = 414;
  * how much unexplained growth to absorb before saying something, and that does not get a larger
  * answer because a route is larger.
  */
-const ROUTE_SLACK_BYTES = 9_500;
+export const ROUTE_SLACK_BYTES = 9_500;
 
 /**
  * What `/category/:categoryId` fetches that `/` does not, measured: `ChallengeList` and the three

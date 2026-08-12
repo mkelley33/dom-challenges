@@ -472,8 +472,15 @@ re-baseline. Do not trim a challenge's metadata to hit the number: the budget ex
 tens of bytes of prose. `scripts/budgets.ts` carries the table.
 
 Deriving moved `/challenge/:slug` down 5,231 B and `/category/:categoryId` up 706 B from the round literals they
-replaced; all three now leave the same 10,217 B of headroom, so `pnpm build` prints remaining bytes as well as a
-percentage — the percentage alone made the largest route look nearest the edge when all three are equidistant.
+replaced, and left all three leaving the **same** headroom — which is the property worth keeping, not the figure. It
+was 10,217 B when that was written and is 9,648 B today, because headroom is a **shared pool** every category draws
+from: a route's remaining bytes equal the 9,500 B slack exactly when the 414 B model is exactly right, and the
+difference is the library's accumulated error in it. `pnpm build` therefore prints remaining bytes as well as a
+percentage — the percentage alone made the largest route look nearest the edge when all three are equidistant — and
+prints the pool's position against the modelled slack on its own line, so the drawdown is a reading on every build
+rather than something discovered when a ceiling is finally crossed. It is deliberately **not** a failure: a number
+that had to be re-baselined whenever a category was written would be indistinguishable from someone raising a ceiling
+to bury a regression.
 
 **`chunkSizeWarningLimit` is raised to 7500 kB, and is not a budget.** Every build warned before that, always about
 the same Monaco workers — chunks no route references and no learner downloads until the editor opens — and a build
