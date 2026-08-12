@@ -70,6 +70,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./capturePhase').then((module) => module.capturePhase),
   },
   {
+    id: 'events-stop-propagation',
+    slug: 'stop-propagation',
+    title: 'Two ways to stop, and what each one stops',
+    category: 'events',
+    difficulty: 'intermediate',
+    concepts: ['stopPropagation', 'stopImmediatePropagation', 'listener order', 'capture phase', 'default action'],
+    relatedIds: ['events-capture-phase'],
+    load: () => import('./stopPropagation').then((module) => module.stopPropagation),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',

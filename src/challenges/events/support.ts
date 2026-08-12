@@ -14,6 +14,20 @@ export function requireElement(doc: Document, id: string): HTMLElement {
 }
 
 /**
+ * The same, for an `<input>`, typed by the selector that found it.
+ *
+ * `querySelector<HTMLInputElement>` with the tag name written into the selector rather than
+ * `getElementById` plus a cast: the generic tells the compiler which element the selector names,
+ * and the `input` in the selector is what makes that claim true at run time too. A cast would say
+ * the same thing to the compiler and check nothing.
+ */
+export function requireInput(doc: Document, id: string): HTMLInputElement {
+  const input = doc.querySelector<HTMLInputElement>(`input#${id}`);
+  if (!input) throw new Error(`#${id} is missing from the challenge markup, or is not an <input>`);
+  return input;
+}
+
+/**
  * The same, for a descendant named by a selector rather than by an id.
  *
  * This category's tests dispatch events at nodes *inside* the thing under test -- the tick inside
