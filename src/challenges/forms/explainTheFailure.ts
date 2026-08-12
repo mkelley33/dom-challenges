@@ -72,6 +72,19 @@ export const explainTheFailure: ChallengeContent = {
       },
     },
     {
+      name: 'a number below min is a range problem as well',
+      run: ({ doc, fire, fn, expect }) => {
+        const guests = requireInput(doc, 'guests');
+        // `min` and `max` read as one idea and are two flags: `rangeUnderflow` and `rangeOverflow`.
+        // Without this test an answer that maps only the overflow half passes everything -- it
+        // reports `"ok"` for a value the browser is already calling out of range, and the field the
+        // prompt describes has both ends. `0` is on the step grid (`step="1"` counts from `min`), so
+        // the only flag raised here is the underflow one.
+        fire.input(guests, '0');
+        expect(fn<Explain>('explain')(guests)).toBe('range');
+      },
+    },
+    {
       name: 'a number off the step grid is a step problem',
       run: ({ doc, fire, fn, expect }) => {
         const guests = requireInput(doc, 'guests');
