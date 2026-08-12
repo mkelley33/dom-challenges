@@ -96,6 +96,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./specificityNotOrder').then((module) => module.specificityNotOrder),
   },
   {
+    id: 'styles-find-the-winner',
+    slug: 'find-the-winner',
+    title: 'Who set this width?',
+    category: 'styles',
+    difficulty: 'expert',
+    concepts: ['cascade', '!important', 'getComputedStyle', 'getPropertyPriority', 'matches'],
+    relatedIds: ['styles-inline-wins', 'styles-specificity-not-order'],
+    load: () => import('./findTheWinner').then((module) => module.findTheWinner),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
