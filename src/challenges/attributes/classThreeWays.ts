@@ -121,11 +121,16 @@ export const classThreeWays: ChallengeContent = {
       name: 'classesOf sees a class list the test wrote through the attribute',
       run: ({ doc, fn, expect }) => {
         const done = requireElement(doc, 'chip-done');
-        done.setAttribute('class', 'chip\n  variant-outline pinned');
+        done.setAttribute('class', ' chip\n  variant-outline pinned ');
 
         // `class`, `className` and `classList` are three views of one attribute, so a write through
         // any of them is visible through all of them -- and every ASCII whitespace character
         // separates tokens, not only the space.
+        //
+        // The leading and trailing spaces are not decoration. Splitting on `/\s+/` handles the run
+        // in the middle and still yields an **empty token** at each end, which a `DOMTokenList`
+        // never produces -- so the split has to be filtered, and without an end-of-string space
+        // nothing here would say so.
         expect(fn<ClassesOf>('classesOf')(done)).toEqual(['chip', 'variant-outline', 'pinned']);
       },
     },
