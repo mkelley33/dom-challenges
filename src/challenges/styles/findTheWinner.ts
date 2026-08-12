@@ -81,6 +81,21 @@ export const findTheWinner: ChallengeContent = {
         expect(fn<WidthSource>('widthSource')(themed)).toBe('inline');
       },
     },
+    {
+      name: 'outranking is not the same fact as being the sale tile',
+      run: ({ doc, fn, expect }) => {
+        // A wrong answer can pass every test above by hardcoding "outranked" as "is .sale" instead
+        // of actually comparing claim to outcome -- .sale is the only source of an outranking
+        // !important rule in the original markup, so the two questions happen to have the same
+        // answer everywhere above. A second !important rule, aimed at a plain tile through an id
+        // selector instead of .sale, breaks that coincidence.
+        const style = doc.createElement('style');
+        style.textContent = '#plain { width: 90px !important; }';
+        doc.head.append(style);
+
+        expect(fn<WidthSource>('widthSource')(requireElement(doc, 'plain'))).toBe('stylesheet');
+      },
+    },
   ],
   solutions: [
     {
