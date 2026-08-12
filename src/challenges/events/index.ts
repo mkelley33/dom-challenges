@@ -10,9 +10,9 @@ import type { ChallengeEntry } from '@/types/challenge';
  * the capture pass reaching ancestors for a `bubbles: false` event, `stopPropagation` versus
  * `stopImmediatePropagation` (including from a capture listener), `preventDefault` with
  * `cancelable`, `defaultPrevented`, `dispatchEvent`'s return value and `passive`, a checkbox's
- * activation behaviour being cancelled, `once` and its re-arming, listener de-duplication by
- * `(type, callback, capture)` and the fact that a duplicate add neither reorders nor updates the
- * options, registration order within one target, capture-registered listeners running before
+ * activation behaviour being cancelled, `once` firing once, re-arming, being per registration and being spent
+ * even when its callback throws, listener de-duplication by `(type, callback, capture)` and the
+ * fact that a duplicate add neither reorders nor updates the options, registration order within one target, capture-registered listeners running before
  * bubble-registered ones *at* the target, `this` being `currentTarget` in a function listener,
  * `handleEvent` object listeners, `CustomEvent.detail` by reference and `bubbles` defaulting to
  * false, synchronous and re-entrant dispatch, the path out to the window, `currentTarget` being
@@ -48,19 +48,34 @@ import type { ChallengeEntry } from '@/types/challenge';
  * | 8 | a same-target listener removed mid-dispatch          | skipped                   | still runs             | safe      |
  * | 9 | `cancelBubble = true` / `returnValue = false`        | honoured                  | ignored                | safe      |
  * |10 | where an `onclick` handler sits in the listener list | at first assignment       | always last            | safe      |
+ * |11 | a `once` listener whose callback re-dispatches        | fires once                | fires twice            | dangerous |
  *
- * (Ten rows, nine divergences: 9 is one behaviour with two spellings.)
+ * Eleven rows. Row 9 is one behaviour with two spellings, so **ten divergences**: five from the
+ * reconnaissance and five found by running this category's wrong answers in both hosts. The probe
+ * round found none of the five on its own -- every one of them surfaced as a variant that graded
+ * differently, which is the argument for running the wrong answers rather than only the probes.
  *
- * **6 is the dangerous one and it cost a test.** `listener-identity` was going to assert that a
- * capture-registered listener survives `removeEventListener(type, fn)`, which is the sharpest
+ * **6 is the dangerous one and it cost a test, in both spellings.** `listener-identity` was going to
+ * assert that a capture-registered listener survives `removeEventListener(type, fn)` -- the sharpest
  * version of that challenge's thesis -- and the buggy answer passes all four tests here while
- * failing all four in Chrome. Nothing in this category asserts on the capture flag at removal; it
- * is taught in that challenge's tradeoffs and in `capture-phase`'s, as prose.
+ * failing all four in Chrome. The reverse pairing (add plain, remove with `true`) diverges
+ * identically and is equally reachable from a teardown. **The thesis is unauthorable; the wrong
+ * answer is not**, and those are different claims: a capture-registered subscription is visible
+ * through *ordering*, which is portable, so `listener-identity`'s fourth test brackets the
+ * submitted subscription with two test-owned listeners and asserts it took its turn. That rejects
+ * a capture-registered `attach` in both engines -- measured: 1/5 here, 5/5 in Chrome, where it was
+ * 0/4 before the test existed. **The reverse pairing has no such signature**: registering plain and
+ * removing with `true` is ordinary in every observable way except the removal, so it is still
+ * accepted here (0/5) and rejected in Chrome (5/5). That one is unclosable on this engine and is
+ * said so in `listener-identity`'s tradeoffs. Nothing here asserts on the flag at removal time.
  *
- * **7 forbids asserting `eventPhase` anywhere.** Only the target's capture-registered listener
- * diverges -- an ancestor reports 1 and 3 in both -- which is exactly the reading a challenge about
- * the three passes would want. No challenge here reads `eventPhase`; the passes are taught with an
- * ordered log instead.
+ * **7 forbids one `eventPhase` read, not all of them.** Only a *capture-registered listener at the
+ * target* diverges; ancestor-capture, target-bubble and ancestor-bubble read 1, 2 and 3 in both, so
+ * `AT_TARGET` is perfectly assertable from a bubble-registered listener on the target. A challenge
+ * about the phase constants is therefore possible -- it just has to avoid the one reading a reader
+ * would most naturally reach for. It is absent because it does not earn a slot next to
+ * `capture-phase`, which teaches the same three passes through an ordered log and has a wrong answer
+ * attached; "unauthorable" would overstate the measurement.
  *
  * **8 rules out asserting a mid-dispatch teardown.** `abort-many` ends a drag from inside a
  * listener, and it never asserts that a *sibling* listener on the same target was skipped, because
@@ -72,6 +87,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  * answer to `prevent-default` in Chrome and fails three of its five tests here. `onclick` answers
  * are rejected by both `once-listener` and `duplicate-listeners` in both engines, by different
  * counts. Nothing here uses either spelling.
+ *
+ * **11 is dangerous and cost `once-listener` a test it should have had.** DOM's "inner invoke"
+ * removes a `once` registration before calling the callback; happy-dom removes it afterwards, so a
+ * callback that re-dispatches its own event fires twice here and once in Chrome. The consequence is
+ * that **"remove yourself *after* calling the callback" -- the hand-rolled shape that challenge's
+ * own alternative solution warns against -- passes all four of its tests**, and cannot be rejected,
+ * because `{ once: true }` would fail the same re-entrancy test on this engine. `abort-many` closed
+ * the identical claim with a re-entrancy test because nothing about `AbortController` diverges
+ * there. `once-listener` says the gap out loud in its prose instead, which is the only honest thing
+ * left to do with it.
  *
  * **Never assert `event.target` across a shadow boundary** (1). `composed-path` is built the other
  * way round instead: the markup carries a `data-action` both inside the root and on the host, so

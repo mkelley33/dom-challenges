@@ -781,4 +781,68 @@ describe('APIs present but not faithful', () => {
     // reject it, by different counts -- which is what makes it safe to leave unasserted.
     expect(log).toEqual(['before', 'after', 'onclick']);
   });
+  it('invokes a once listener before removing its registration, where a browser removes it first', async () => {
+    const context = await hostContext('<button id="target">t</button>');
+    const target = context.document.getElementById('target');
+    if (!target) throw new Error('#target is missing from the fixture');
+
+    // The control: `once` does remove the registration, and does it before the *next* dispatch.
+    // Without this, the reading below could not tell "removed late" from "never removed".
+    let plain = 0;
+    target.addEventListener(
+      'probe',
+      () => {
+        plain += 1;
+      },
+      { once: true },
+    );
+    target.dispatchEvent(new context.window.Event('probe'));
+    target.dispatchEvent(new context.window.Event('probe'));
+    expect(plain).toBe(1);
+
+    const log: string[] = [];
+    let depth = 0;
+    const listener = (): void => {
+      log.push('once');
+      if (depth > 0) return;
+      depth += 1;
+      // A callback that dispatches its own event again is what a real one does by accident: it
+      // changes the DOM, and changing the DOM under a pointer produces more events.
+      target.dispatchEvent(new context.window.Event('reentrant'));
+    };
+    target.addEventListener('reentrant', listener, { once: true });
+    target.dispatchEvent(new context.window.Event('reentrant'));
+
+    // DOM's "inner invoke" removes a `once` listener from the target's list *before* calling it, so
+    // Chrome logs `once` exactly once -- measured through the production `createIframeHost` in a
+    // foregrounded tab with a positive control asserted first, and repeated. Here the removal
+    // happens after the callback returns, so the nested dispatch still finds it.
+    //
+    // Two consequences. `once-listener` cannot assert re-entrancy at all, because its own reference
+    // solution would fail such a test on this engine -- which is why the wrong answer that removes
+    // itself *after* calling the callback passes every test there, and why that is said out loud in
+    // its tradeoffs rather than left implied. And the hand-rolled removal is only equivalent to
+    // `once` in a browser; here `once` is the weaker of the two.
+    expect(log).toEqual(['once', 'once']);
+
+    // The throwing half of the same claim does hold here: a `once` registration is spent even when
+    // its callback throws.
+    let threw = 0;
+    target.addEventListener(
+      'boom',
+      () => {
+        threw += 1;
+        throw new Error('boom');
+      },
+      { once: true },
+    );
+    try {
+      target.dispatchEvent(new context.window.Event('boom'));
+    } catch {
+      // A listener exception is reported rather than propagated in both engines; caught so a
+      // difference there cannot end this test early.
+    }
+    target.dispatchEvent(new context.window.Event('boom'));
+    expect(threw).toBe(1);
+  });
 });

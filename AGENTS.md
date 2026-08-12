@@ -206,13 +206,25 @@ you measure there.
   ended (`[]` in Chrome, stale here), nor a listener attached with an already-aborted `AbortSignal` (never attached in
   Chrome, attached and fired here). `composedPath()` **during** dispatch is portable, contents and order, and so is the
   walk through `parentNode`/`ShadowRoot.host` — but never a `ShadowRoot`'s `nodeName`.
-- **Never assert that the capture flag is part of a registration's identity at removal time.** Chrome matches a removal
-  on `(type, callback, capture)`, so `addEventListener(t, fn, true)` followed by `removeEventListener(t, fn)` removes
-  **nothing**; happy-dom ignores the flag and removes it. This is the dangerous direction — the buggy removal is the one
-  that passes here — and it is not the Events category's problem alone: anything that hands back a teardown can reach
-  for it. It cost `listener-identity` the sharpest test of its own thesis, which is now prose. Everything else about
-  registration identity is portable, including de-duplication by that same triple, the fact that a duplicate add neither
-  reorders the listener nor updates its options, and registration order within one target.
+- **Never assert that the capture flag is part of a registration's identity at removal time, in either direction.**
+  Chrome matches a removal on `(type, callback, capture)`, so `addEventListener(t, fn, true)` +
+  `removeEventListener(t, fn)` removes **nothing**, and neither does `addEventListener(t, fn)` +
+  `removeEventListener(t, fn, true)`; happy-dom ignores the flag and removes it both ways. Measured in both spellings.
+  This is the dangerous direction — the buggy removal is the one that passes here — and it is not the Events category's
+  problem alone: anything that hands back a teardown can reach for it. It cost `listener-identity` the sharpest test of
+  its own thesis. **The thesis is unauthorable; the wrong answer is not.** A listener registered with `capture` is
+  observable through _ordering_ — at the target, capture-registered listeners run before bubble-registered ones, in both
+  engines — so bracketing the submitted subscription with test-owned listeners and asserting the order rejects it
+  portably. That is a weaker claim than the removal, and it is the one an outside observer can make. Everything else
+  about registration identity is portable, including de-duplication by that same triple, the fact that a duplicate add
+  neither reorders the listener nor updates its options, and registration order within one target.
+- **Never assert what a `once` listener does when its own callback re-dispatches the event.** DOM's "inner invoke"
+  removes the registration **before** calling the callback, so Chrome fires it once; happy-dom removes it afterwards, so
+  a re-entrant dispatch finds it still there and it fires twice. Measured in both. The consequence is sharper than it
+  looks: a hand-rolled `removeEventListener` written _after_ the callback is a real bug that **no test on this engine
+  can reject**, because the correct `{ once: true }` answer fails the same test here. Say so in the challenge rather
+  than leaving the gap implied. The rest of `once` is faithful — it fires once, it re-arms, it is per registration, it
+  is spent even when the callback throws, and an ignored duplicate add does not clear it.
 - **Never assert `eventPhase`, and never assert a removal that takes effect mid-dispatch.** At the target, a
   capture-registered listener reports `AT_TARGET` (2) in Chrome and `CAPTURING_PHASE` (1) here — an ancestor reports 1
   and 3 in both, so the single divergent reading is exactly the one a challenge about the three passes would want. Teach
