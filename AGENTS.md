@@ -36,6 +36,20 @@ style in review.
 
 **All four gates green before you claim done:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 
+**`pnpm test:browser` is a fifth check and deliberately not a fifth gate.** It runs every shipping challenge's
+solutions and starter through the production `createIframeHost` in Chromium (`vitest.browser.config.ts`,
+`src/challenges/content.browser.test.ts`) and takes about four seconds — so the reason it stays out of the four is not
+speed. It is that the four gates must run on any machine straight after `pnpm install`, and this one needs a browser
+binary that `pnpm exec playwright install chromium` downloads separately; a gate that fails for a missing download is a
+gate people learn to skip, which is worse than one that is honest about when it runs.
+
+**Run it deliberately, and these are the occasions:** after authoring or editing challenge content, after touching
+anything in `src/runner/`, and before a release. Those are exactly the changes it can see and `pnpm test` cannot —
+§3's realm rule is the sharpest example, and the bug it caught in `forms/request-submit-gate` was green across all 763
+node tests. Read what it finds as a claim about **Chromium**, headless: it proves it renders before it reads anything
+(see the probe at the top of that file), but `document.hasFocus()` is false throughout, so nothing focus-flavoured can
+be measured there.
+
 ---
 
 ## 2. The execution model, and the contract that holds it together
@@ -189,23 +203,22 @@ you measure there.
   condition, so they look like they work here and do nothing in a browser; `validationMessage` is `''` here for every
   built-in failure, so only a message the challenge set with `setCustomValidity` is assertable; the validity
   pseudo-classes never match at all. Filling out the category found six more, each pinned in
-  `src/test/happyDomGaps.test.ts` and detailed in the category index's docblock. Four were then **measured on both
-  sides** — happy-dom through `createMemoryHost`, Chrome through the production iframe host — in a **backgrounded**
-  tab, which is part of the claim and is admissible only because every one of those readings is synchronous dispatch
-  or an attribute read that never awaits a frame: **never read a `<select multiple>` through `FormData`** (one entry
-  here -- the select's `.value` -- versus one per selected option in a browser, so the recon's "`FormData` in full"
-  was wider than its measurement; checkbox groups arrive whole and are the multi-value device to use), **never read
-  `validity` off a disabled or readonly field** (its flags stay raised here where a browser computes them
-  barred-aware -- `willValidate` and `checkValidity()` are the barred-aware reads that agree), **never assert anything
-  about a no-argument `requestSubmit()`'s submitter** (the form element here, `null` in Chrome and per spec), and
-  **never `reset()` a radio group carrying two `defaultChecked`** (both end up checked here, a state a browser cannot
-  represent). Two more were found in the review's fix wave and are **happy-dom-measured with a spec-derived browser
-  column, unmeasured in Chrome**: **never assert that `requestSubmit` refused a submitter argument** (a `type="button"`
-  button, an `<input type="reset">`, a bare `<span>` and another form's submit button are each accepted here and each
-  arrive as `event.submitter`, where the spec throws `TypeError` and `NotFoundError` -- so the check that separates a
-  real `requestSubmit(via)` from a forged `dispatchEvent` cannot be asserted, and `click()` refusing those same inputs
-  here means the two front doors disagree in this engine), and **never assert `isTrusted`** (`undefined` here for both
-  a `requestSubmit` submission and a dispatched event, where the spec makes that pair the UA/script separator). The
+  `src/test/happyDomGaps.test.ts` and detailed in the category index's docblock. **All six are now measured on both
+  sides** — happy-dom through `createMemoryHost`, Chromium through the production iframe host under `pnpm test:browser`
+  (§1), whose environment proves it renders before any reading is taken: **never read a `<select multiple>` through
+  `FormData`** (one entry here -- the select's `.value` -- versus one per selected option in a browser, so the recon's
+  "`FormData` in full" was wider than its measurement; checkbox groups arrive whole and are the multi-value device to
+  use), **never read `validity` off a disabled or readonly field** (its flags stay raised here where a browser computes
+  them barred-aware -- `willValidate` and `checkValidity()` are the barred-aware reads that agree), **never assert
+  anything about a no-argument `requestSubmit()`'s submitter** (the form element here, `null` in a browser and per
+  spec), **never `reset()` a radio group carrying two `defaultChecked`** (both end up checked here; a browser ends with
+  exactly one, the later of the two), **never assert that `requestSubmit` refused a submitter argument** (a
+  `type="button"` button, an `<input type="reset">`, a bare `<span>` and another form's submit button are each accepted
+  here and each arrive as `event.submitter`, where a browser throws `TypeError` for the first three and
+  `NotFoundError` for the foreign one -- so the check that separates a real `requestSubmit(via)` from a forged
+  `dispatchEvent` cannot be asserted, and `click()` refusing those same inputs here means the two front doors disagree
+  in this engine), and **never assert `isTrusted`** (`undefined` here for both a `requestSubmit` submission and a
+  dispatched event, where a browser answers `true` and `false` and that pair is the UA/script separator). The
   rest of the Constraint Validation API is faithful, including `checkValidity`, the `validity` flags on participating
   fields, the `invalid` event, `setCustomValidity`, `willValidate`, `noValidate`, `FormData` otherwise, and
   `requestSubmit` with a named submit button of that form — everything about it except its refusal of any other
@@ -311,6 +324,18 @@ verified across a real realm boundary. Challenges that touch platform integers o
 once against a real iframe before they are trusted. Say which of the two claims you are making; they are not the same
 size.
 
+**`pnpm test:browser` is how that is done** (§1), and it is already discharged for the six shipping categories:
+`selection`, `creation`, `attributes`, `styles`, `events` and `forms` — 68 challenges, 141 solutions and 68 starters —
+were run through the production `createIframeHost` in Chromium, and **every one passed on first contact**. That number
+is the measurement of what the happy-dom-only guarantee was worth here, and it is worth reading with its cause rather
+than as luck: the divergences in this section were found by measuring _before_ authoring, so the pass had little left
+to catch. Read it as evidence for the prohibitions above, not as evidence that a browser check is unnecessary — the one
+defect the browser has ever caught in this project (§3's realm rule, in `forms/request-submit-gate`) was found by
+exactly this kind of run and was invisible to all 763 node tests.
+
+Authoring a challenge in one of those categories therefore adds to a pass that has already been made, and re-running
+it is one command. A category outside the six has never been run this way at all.
+
 ---
 
 ## 4. Progress persistence: writes send a whole record, never a delta
@@ -370,6 +395,16 @@ how long a frame takes. When the preview must step aside — the phone layout pa
 another tab is showing — take it out of flow and move it off-screen (`absolute -left-[200vw]`), so it keeps a real box
 and a real rendering. Whether it is parked is decided by **CSS**, so a broken `matchMedia` cannot move a panel;
 JavaScript only decides the parts CSS cannot express.
+
+**Headless Chromium does not reproduce that, and the trap is aimed at whoever runs `pnpm test:browser` next.** A frame
+built by `createIframeHost` inside a `display: none` container serviced `requestAnimationFrame` in **5 ms** under
+headless Chromium 151, with the subtree demonstrably not rendered — `offsetHeight` 0 on the container, the frame's own
+`innerWidth`/`innerHeight` both 0. Measured once, headless only; it says nothing about headed Chrome and **is not a
+licence to hide the preview**, which the paragraph above still forbids on its own evidence. It is written down because
+it silently defeats the obvious way to check that a rendering probe is load-bearing: setting `display: none` and
+expecting the probe to go red leaves it green, which reads as "my probe is decorative" when it is in fact "my mutation
+did nothing". Mutate the channel instead — `win.requestAnimationFrame = () => 0` turns that probe red, and
+`win.queueMicrotask = () => undefined` turns its control red, which is the pair that shows both halves carry weight.
 
 **Use `inert` on the parked column, not `aria-hidden`.** `aria-hidden` over a live `<iframe>` whose content renders
 real buttons and links leaves those controls in the sequential focus order — a phone learner tabbing past Clear loses
