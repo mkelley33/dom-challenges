@@ -87,16 +87,23 @@ export const capturePhase: ChallengeContent = {
       },
     },
     {
-      name: 'an event that does not bubble is audited too',
+      name: 'an event that does not bubble is audited too, wherever in the page it happens',
       run: ({ doc, win, fn, expect }) => {
         const audited = createRecorder<string>();
         fn<AuditEvents>('auditEvents')(requireElement(doc, 'page'), audited.record);
 
         // `bubbles: false` -- there is no bubbling phase for this event at all, so no listener
-        // above `#save` can ever hear it on the way up. The way down is the only way.
-        requireElement(doc, 'save').dispatchEvent(new win.CustomEvent('widget-toggle', { bubbles: false }));
+        // above the target can ever hear it on the way up. The way down is the only way.
+        const toggle = new win.CustomEvent('widget-toggle', { bubbles: false });
+        requireElement(doc, 'save').dispatchEvent(toggle);
+        // And again from a node with no relationship to the widget. Capturing on `#widget` alone --
+        // scoping the fix to the one component known to stop propagation, and letting everything
+        // else bubble -- is the natural next step from the starter, and it passes every other test
+        // here. It cannot see this one, because the capture pass it registered for is a pass down a
+        // path that does not go through `#widget`.
+        requireElement(doc, 'reset').dispatchEvent(new win.CustomEvent('widget-toggle', { bubbles: false }));
 
-        expect(audited.entries).toEqual(['widget-toggle:save']);
+        expect(audited.entries).toEqual(['widget-toggle:save', 'widget-toggle:reset']);
       },
     },
     {
