@@ -998,3 +998,144 @@ describe('APIs present but not faithful', () => {
     expect(threw).toBe(1);
   });
 });
+
+/**
+ * Found while filling out the forms category (Phase 4), by running its solutions -- not inherited
+ * from Phase 2's reconnaissance, whose "FormData in full" claim the first of these narrows. The
+ * happy-dom side of each was measured here through `createMemoryHost`; the browser side of each is
+ * the spec's answer (cited per test), *not* a fresh Chrome measurement -- the recon's browser run
+ * vouches for the surrounding API surface, and no challenge builds on any behaviour below.
+ */
+describe('what filling out the forms category found', () => {
+  it('gives FormData one entry per select multiple, not one per selected option', async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input type="checkbox" name="topping" value="mushroom" checked>',
+        '  <input type="checkbox" name="topping" value="olive" checked>',
+        '  <select name="day" multiple>',
+        '    <option value="mon" selected>m</option>',
+        '    <option value="wed" selected>w</option>',
+        '  </select>',
+        '</form>',
+      ].join('\n'),
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const select = context.document.querySelector<HTMLSelectElement>('select');
+    if (!form || !select) throw new Error('the fixture is missing its form');
+
+    // The controls: the option state itself is right (both options report selected), and the
+    // entry list does keep repeated names -- the checkbox group arrives whole. So the failure
+    // below is specific to how the select is read, not selection state and not getAll.
+    expect([...select.options].map((option) => option.selected)).toEqual([true, true]);
+    const data = new context.window.FormData(form);
+    expect(data.getAll('topping').map(String)).toEqual(['mushroom', 'olive']);
+
+    // Spec ("constructing the entry list"): one entry per selected option -- ['mon', 'wed'].
+    // happy-dom reads the select's `.value`, which is the *first* selected option, and emits one
+    // entry. Same result when selection is made by property writes. So a multi-select may never
+    // be read through FormData in a challenge: `getAll` over it is correct in a browser and wrong
+    // here. `getall-or-lose-them` uses two checkbox groups for exactly this reason.
+    expect(data.getAll('day').map(String)).toEqual(['mon']);
+  });
+
+  it('reports the form itself as the submitter of a no-argument requestSubmit()', async () => {
+    const context = await hostContext(
+      '<form id="f"><input name="x" value="ok"><button id="go" type="submit">Go</button></form>',
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const go = context.document.querySelector<HTMLButtonElement>('#go');
+    if (!form || !go) throw new Error('the fixture is missing its form');
+
+    const submitters: Array<EventTarget | null> = [];
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitters.push(event instanceof context.window.SubmitEvent ? event.submitter : 'not a SubmitEvent');
+    });
+
+    // The control: with a button named, the event carries that button -- identical to a browser,
+    // and what `request-submit-gate` asserts.
+    form.requestSubmit(go);
+    expect(submitters[0]).toBe(go);
+
+    // Spec: requestSubmit() with no submitter submits "from the form element itself", and the
+    // resulting SubmitEvent's submitter is null -- which is also what fire.submit(form) models.
+    // happy-dom fills in the *form element* instead. The dangerous direction: `submitter !== null`
+    // for a buttonless submit passes here and lies about every browser, so no challenge may
+    // assert anything about a no-argument requestSubmit's submitter.
+    form.requestSubmit();
+    expect(submitters[1]).toBe(form);
+  });
+
+  it('keeps a barred field\'s validity flags raised where a browser computes them barred-aware', async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input id="normal" name="normal" required>',
+        '  <input id="ro" name="ro" required readonly>',
+        '  <input id="dis" name="dis" required disabled>',
+        '</form>',
+      ].join('\n'),
+    );
+    const normal = context.document.querySelector<HTMLInputElement>('#normal');
+    const ro = context.document.querySelector<HTMLInputElement>('#ro');
+    const dis = context.document.querySelector<HTMLInputElement>('#dis');
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    if (!normal || !ro || !dis || !form) throw new Error('the fixture is missing a field');
+
+    // The controls: everything a challenge actually builds on agrees with a browser. willValidate
+    // knows the fields are barred, per-field checkValidity() answers true for them, and the
+    // form-level walk skips them entirely (true here because only barred fields "look" invalid
+    // once #normal is filled).
+    expect([normal.willValidate, ro.willValidate, dis.willValidate]).toEqual([true, false, false]);
+    expect([ro.checkValidity(), dis.checkValidity()]).toEqual([true, true]);
+    normal.value = 'filled';
+    expect(form.checkValidity()).toBe(true);
+
+    // Spec: "suffering from being missing" requires the element to be *mutable*, so a readonly or
+    // disabled required field reports valueMissing false and valid true in a browser. happy-dom
+    // computes the flags with no mutability condition. The consequence for authors: never read
+    // `validity` off a barred field -- an unguarded `!field.validity.valid` audit flags these two
+    // here and passes them in Chrome, the same code with two verdicts. `who-blocks-submission`'s
+    // second solution guards on willValidate first for exactly this reason.
+    expect(ro.validity.valueMissing).toBe(true);
+    expect(ro.validity.valid).toBe(false);
+    expect(dis.validity.valueMissing).toBe(true);
+  });
+
+  it('lets reset() leave two radios checked when two carry defaultChecked', async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input id="light" type="radio" name="theme" value="light">',
+        '  <input id="system" type="radio" name="theme" value="system" checked>',
+        '</form>',
+      ].join('\n'),
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const light = context.document.querySelector<HTMLInputElement>('#light');
+    const system = context.document.querySelector<HTMLInputElement>('#system');
+    if (!form || !light || !system) throw new Error('the fixture is missing a radio');
+
+    // The controls: live exclusivity holds (checking one unchecks the other), and reset() with a
+    // *single* defaultChecked is faithful -- which is all `commit-the-draft` relies on, because a
+    // correct commit never leaves two defaults standing.
+    light.checked = true;
+    expect(system.checked).toBe(false);
+    system.defaultChecked = false;
+    light.defaultChecked = true;
+    form.reset();
+    expect([light.checked, system.checked]).toEqual([true, false]);
+
+    // Now the stale-default state a buggy commit produces: both radios carry defaultChecked.
+    // Spec: reset restores each control and the radio group invariant still applies, so a browser
+    // ends with exactly one checked (the later one, as each restore unchecks the group). happy-dom
+    // restores each radio independently and leaves *both* checked -- an unrepresentable state in a
+    // browser. So no test may run reset() over a group carrying two defaults; the wrong answer is
+    // caught by asserting defaultChecked as a value *before* any reset instead.
+    system.defaultChecked = true;
+    system.checked = false;
+    form.reset();
+    expect([light.checked, system.checked]).toEqual([true, true]);
+  });
+});
