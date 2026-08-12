@@ -36,6 +36,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  */
 export const stylesEntries: ChallengeEntry[] = [
   {
+    id: 'styles-computed-not-inline',
+    slug: 'computed-not-inline',
+    title: 'The width that reads back empty',
+    category: 'styles',
+    difficulty: 'novice',
+    concepts: ['getComputedStyle', 'element.style', 'inline styles', 'classList', 'cascade'],
+    relatedIds: ['attributes-style-attribute'],
+    load: () => import('./computedNotInline').then((module) => module.computedNotInline),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
