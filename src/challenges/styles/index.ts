@@ -106,6 +106,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./findTheWinner').then((module) => module.findTheWinner),
   },
   {
+    id: 'styles-toggle-not-generate',
+    slug: 'toggle-not-generate',
+    title: 'The stylesheet already knows both states',
+    category: 'styles',
+    difficulty: 'advanced',
+    concepts: ['classList', 'cascade', 'runtime CSS', 'styleSheets', 'descendant selectors'],
+    relatedIds: ['styles-state-in-a-class', 'styles-density-token', 'attributes-class-three-ways'],
+    load: () => import('./toggleNotGenerate').then((module) => module.toggleNotGenerate),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
