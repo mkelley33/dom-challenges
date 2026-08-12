@@ -66,6 +66,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./inlineWins').then((module) => module.inlineWins),
   },
   {
+    id: 'styles-shorthand-reset',
+    slug: 'shorthand-reset',
+    title: 'The shorthand that resets what it never mentions',
+    category: 'styles',
+    difficulty: 'intermediate',
+    concepts: ['shorthand properties', 'longhands', 'margin', 'inline styles', 'var()'],
+    relatedIds: ['attributes-style-attribute', 'styles-inline-wins'],
+    load: () => import('./shorthandReset').then((module) => module.shorthandReset),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
