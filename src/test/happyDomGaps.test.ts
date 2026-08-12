@@ -1143,9 +1143,16 @@ describe('what filling out the forms category found', () => {
     // both of those elements here exactly as a browser does -- a type=button does not submit, and a
     // foreign button submits its own form. So `request-submit-gate`'s two reference solutions
     // disagree with each other on these inputs *in this engine*, and no test may use them.
+    //
+    // Control: prove the click channel itself is live, in this document, right before reading the
+    // two refusals -- otherwise "the clicks added nothing" would pass just as well if `click()` were
+    // a no-op here. The form's own submit button still submits it through `click()`.
+    go.click();
+    expect(submitters).toEqual([go, cancel, label, foreign, go]);
+
     cancel.click();
     foreign.click();
-    expect(submitters).toEqual([go, cancel, label, foreign]);
+    expect(submitters).toEqual([go, cancel, label, foreign, go]);
   });
 
   it('leaves isTrusted undefined on a submit event, whichever path produced it', async () => {
