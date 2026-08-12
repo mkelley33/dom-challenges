@@ -90,6 +90,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./preventDefault').then((module) => module.preventDefault),
   },
   {
+    id: 'events-listener-identity',
+    slug: 'listener-identity',
+    title: 'The listener you cannot remove',
+    category: 'events',
+    difficulty: 'intermediate',
+    concepts: ['removeEventListener', 'function identity', 'AbortController', 'signal', 'teardown'],
+    relatedIds: ['events-delegate-one-listener'],
+    load: () => import('./listenerIdentity').then((module) => module.listenerIdentity),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
