@@ -86,6 +86,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./tokenDial').then((module) => module.tokenDial),
   },
   {
+    id: 'styles-specificity-not-order',
+    slug: 'specificity-not-order',
+    title: 'Later is not stronger',
+    category: 'styles',
+    difficulty: 'advanced',
+    concepts: ['specificity', 'source order', 'styleSheets', 'deleteRule', 'selectorText'],
+    relatedIds: ['styles-inline-wins', 'selection-attribute-selectors'],
+    load: () => import('./specificityNotOrder').then((module) => module.specificityNotOrder),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
