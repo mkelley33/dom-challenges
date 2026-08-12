@@ -1002,9 +1002,13 @@ describe('APIs present but not faithful', () => {
 /**
  * Found while filling out the forms category (Phase 4), by running its solutions -- not inherited
  * from Phase 2's reconnaissance, whose "FormData in full" claim the first of these narrows. The
- * happy-dom side of each was measured here through `createMemoryHost`; the browser side of each is
- * the spec's answer (cited per test), *not* a fresh Chrome measurement -- the recon's browser run
- * vouches for the surrounding API surface, and no challenge builds on any behaviour below.
+ * happy-dom side of each was measured here through `createMemoryHost`; the browser side of each
+ * was then measured in real Chrome through the production `createIframeHost` on a Vite-served
+ * page, agreeing with the spec's answer cited per test. That run's tab was backgrounded, which is
+ * admissible for these four and would not be in general: every reading below is synchronous
+ * dispatch or an attribute/serialisation read, none awaits a frame, and each sat beside its
+ * in-document control (AGENTS.md §5). No challenge builds on any behaviour below; the forms
+ * category docblock records what each one cost.
  */
 describe('what filling out the forms category found', () => {
   it('gives FormData one entry per select multiple, not one per selected option', async () => {
@@ -1031,7 +1035,9 @@ describe('what filling out the forms category found', () => {
     const data = new context.window.FormData(form);
     expect(data.getAll('topping').map(String)).toEqual(['mushroom', 'olive']);
 
-    // Spec ("constructing the entry list"): one entry per selected option -- ['mon', 'wed'].
+    // Spec ("constructing the entry list") and measured in Chrome through the production host:
+    // one entry per selected option -- ['mon', 'wed'] here, ['wed', 'fri'] in the property-write
+    // spelling of the same probe.
     // happy-dom reads the select's `.value`, which is the *first* selected option, and emits one
     // entry. Same result when selection is made by property writes. So a multi-select may never
     // be read through FormData in a challenge: `getAll` over it is correct in a browser and wrong
@@ -1061,7 +1067,8 @@ describe('what filling out the forms category found', () => {
     form.requestSubmit(go);
     expect(submitters[0]).toBe(go);
 
-    // Spec: requestSubmit() with no submitter submits "from the form element itself", and the
+    // Spec, and measured in Chrome through the production host (the button for the named call,
+    // null for the bare one): requestSubmit() with no submitter submits "from the form element itself", and the
     // resulting SubmitEvent's submitter is null -- which is also what fire.submit(form) models.
     // happy-dom fills in the *form element* instead. The dangerous direction: `submitter !== null`
     // for a buttonless submit passes here and lies about every browser, so no challenge may
@@ -1095,7 +1102,8 @@ describe('what filling out the forms category found', () => {
     normal.value = 'filled';
     expect(form.checkValidity()).toBe(true);
 
-    // Spec: "suffering from being missing" requires the element to be *mutable*, so a readonly or
+    // Spec, and measured in Chrome through the production host (valueMissing false, valid true
+    // for both barred fields): "suffering from being missing" requires the element to be *mutable*, so a readonly or
     // disabled required field reports valueMissing false and valid true in a browser. happy-dom
     // computes the flags with no mutability condition. The consequence for authors: never read
     // `validity` off a barred field -- an unguarded `!field.validity.valid` audit flags these two
@@ -1131,7 +1139,8 @@ describe('what filling out the forms category found', () => {
     expect([light.checked, system.checked]).toEqual([true, false]);
 
     // Now the stale-default state a buggy commit produces: both radios carry defaultChecked.
-    // Spec: reset restores each control and the radio group invariant still applies, so a browser
+    // Spec, and measured in Chrome through the production host ({light: false, system: true} from
+    // this exact fixture): reset restores each control and the radio group invariant still applies, so a browser
     // ends with exactly one checked (the later one, as each restore unchecks the group). happy-dom
     // restores each radio independently and leaves *both* checked -- an unrepresentable state in a
     // browser. So no test may run reset() over a group carrying two defaults; the wrong answer is

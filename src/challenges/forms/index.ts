@@ -43,10 +43,26 @@ import type { ChallengeEntry } from '@/types/challenge';
  * the moment a button is in it.
  *
  * **Re-measured when the category was filled out** (happy-dom 20.11.2 through `createMemoryHost`;
- * scratch probes, then the wrong-answer runs). Unlike the styles fill-out, there was **no fresh
- * Chrome pass**: every behaviour a challenge builds on sits inside the reconnaissance's
- * browser-verified surface, and each claim below states which side was measured where. Four new
- * divergences are pinned with positive controls in `src/test/happyDomGaps.test.ts`:
+ * scratch probes, then the wrong-answer runs), **and then re-run in real Chrome** through the
+ * production `createIframeHost` on a Vite-served scratch page: 45 runs -- all 20 solutions passing,
+ * all 10 starters running cleanly and failing at least one named assertion, and 15 wrong answers of
+ * which 13 were rejected (failure messages matching the memory host's wherever compared) and two
+ * were accepted exactly as predicted, being the two Chrome-correct spellings this suite rejects
+ * (`who-blocks-submission`'s unguarded `validity.valid` walk and `one-invalid-signal`'s ARIA IDL
+ * write); `request-submit-gate`'s full-imitation gap passed in both, as documented there.
+ * `localStorage` 0 keys -> 0 keys. One caveat, stated rather than hidden: the tab was
+ * **backgrounded** throughout (`visibilityState: 'hidden'`, no frame serviced within 500 ms,
+ * recorded at both ends of the run). That is admissible for exactly this category and would not be
+ * for most: no forms test ever awaits a frame or an observer -- every assertion is synchronous
+ * event dispatch or an attribute/serialisation read -- and every negative's positive control fired
+ * in the same test, same document (AGENTS.md §5). Anything focus-flavoured from that run is
+ * recorded as unreliable, and nothing builds on it. The pass also caught a real defect the content
+ * suite structurally cannot see: `request-submit-gate`'s recorder read the event with a
+ * bare-global `instanceof`, green under happy-dom's shared class table and failing the challenge's
+ * own solutions in Chrome -- fixed to `win.SubmitEvent`, the realm rule's spelling.
+ *
+ * Four new divergences are pinned with positive controls in `src/test/happyDomGaps.test.ts`, each
+ * now confirmed by that Chrome run:
  *
  * - **A `<select multiple>` contributes one entry to FormData, not one per selected option.**
  *   happy-dom reads the select's `.value` -- the first selected option -- in both the
@@ -96,12 +112,13 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   a form whose only "invalid-looking" fields are barred answers true. Matches the spec's
  *   "candidate for constraint validation".
  *
- * **`reportValidity` was probed here and is built on nowhere.** It was not in the reconnaissance
- * pass; the resolution was to measure both hosts before using it, and only the happy-dom half was
- * taken (it exists on form and fields, returns the right booleans, fires `invalid` events). Its
- * value over `checkValidity` -- the browser's own bubbles and focus -- is unassertable in this
- * suite regardless, so it appears in prose only. One-sided reading; do not author against it
- * without the Chrome half.
+ * **`reportValidity` is measured in both hosts now, and is still built on nowhere.** It was not in
+ * the reconnaissance pass; both halves agree on the assertable surface -- it exists on form and
+ * fields, returns the right booleans, fires the same `invalid` events. What Chrome adds is exactly
+ * what this suite cannot assert: a native message for built-in failures (`Please fill out this
+ * field.` where this engine answers `''` -- the recon's second exclusion, reconfirmed) and moving
+ * focus to the first failing field (read under a hidden window, so recorded without weight). Its
+ * value over `checkValidity` being precisely that unassertable UI, it stays prose-only.
  *
  * **Why the category stops at ten.** Reading a form: `formdata-not-a-walk` (the entry list and its
  * exclusions), `getall-or-lose-them` (repeated names), `submitter-in-the-payload` (the submitter's
