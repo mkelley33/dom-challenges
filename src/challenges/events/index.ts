@@ -50,6 +50,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./delegateOneListener').then((module) => module.delegateOneListener),
   },
   {
+    id: 'events-custom-event-detail',
+    slug: 'custom-event-detail',
+    title: 'The event your component fires',
+    category: 'events',
+    difficulty: 'novice',
+    concepts: ['CustomEvent', 'detail', 'bubbles', 'dispatchEvent', 'synchronous dispatch'],
+    relatedIds: ['events-delegate-one-listener'],
+    load: () => import('./customEventDetail').then((module) => module.customEventDetail),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
