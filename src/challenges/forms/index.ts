@@ -39,6 +39,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  */
 export const formsEntries: ChallengeEntry[] = [
   {
+    id: 'forms-explain-the-failure',
+    slug: 'explain-the-failure',
+    title: 'Ask the field why it failed',
+    category: 'forms',
+    difficulty: 'novice',
+    concepts: ['validity', 'valueMissing', 'typeMismatch', 'patternMismatch', 'stepMismatch'],
+    relatedIds: ['forms-signup-validation'],
+    load: () => import('./explainTheFailure').then((module) => module.explainTheFailure),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
