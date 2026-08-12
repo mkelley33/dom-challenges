@@ -585,4 +585,48 @@ describe('APIs present but not faithful', () => {
     expect(context.window.location.origin).toBe('https://challenges.local');
     expect(link.origin).toBe(context.window.location.origin);
   });
+  it('clones an input’s dirty value but not its dirty checkedness, where a browser copies both', async () => {
+    const context = await hostContext(
+      '<form id="draft"><input id="title" value="Quarterly report"><textarea id="notes">Nothing yet.</textarea><input id="public" type="checkbox" checked><input id="pinned" type="checkbox"></form>',
+    );
+    const form = context.document.querySelector<HTMLFormElement>('form#draft');
+    const title = context.document.querySelector<HTMLInputElement>('input#title');
+    const notes = context.document.querySelector<HTMLTextAreaElement>('textarea#notes');
+    const publicBox = context.document.querySelector<HTMLInputElement>('input#public');
+    const pinned = context.document.querySelector<HTMLInputElement>('input#pinned');
+    if (!form || !title || !notes || !publicBox || !pinned) throw new Error('the draft fixture is incomplete');
+
+    title.value = 'Q4 report';
+    notes.value = 'Ship on Friday.';
+    publicBox.checked = false;
+    pinned.checked = true;
+
+    // The clone goes into a holder rather than being asserted onto a narrower type: `cloneNode`
+    // returns `Node`, and `append` takes one, so the holder supplies `querySelector` without any
+    // assertion at all.
+    const holder = context.document.createElement('div');
+    holder.append(form.cloneNode(true));
+    const clonedTitle = holder.querySelector<HTMLInputElement>('input#title');
+    const clonedNotes = holder.querySelector<HTMLTextAreaElement>('textarea#notes');
+    const clonedPublic = holder.querySelector<HTMLInputElement>('input#public');
+    const clonedPinned = holder.querySelector<HTMLInputElement>('input#pinned');
+    if (!clonedTitle || !clonedNotes || !clonedPublic || !clonedPinned) throw new Error('the clone is incomplete');
+
+    // The controls, and they are the sharpest kind available: the *same clone*, made by the *same
+    // call*, carries the dirty value of both text controls. So the checkbox result below is about
+    // checkedness specifically, not about `cloneNode` failing to propagate state at all.
+    expect(clonedTitle.value).toBe('Q4 report');
+    expect(clonedTitle.getAttribute('value')).toBe('Quarterly report');
+    expect(clonedNotes.value).toBe('Ship on Friday.');
+
+    // HTML's cloning steps for `input` propagate value, checkedness **and both dirty flags**, and
+    // Chrome does: measured twice through the production `createIframeHost` in a foregrounded tab
+    // with a positive control, the clone reports `public` unchecked and `pinned` checked. Here both
+    // revert to their content attributes. The direction is safe -- this engine rejects an answer a
+    // browser accepts -- but it is why `attributes/formStateSnapshot.ts` offers "clone the form and
+    // sync the clone" only as prose in its tradeoffs and not as a solution: that solution passes in
+    // a browser and fails the checkbox test here.
+    expect(clonedPublic.checked).toBe(true);
+    expect(clonedPinned.checked).toBe(false);
+  });
 });

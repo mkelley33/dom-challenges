@@ -27,7 +27,7 @@ import type { ChallengeEntry } from '@/types/challenge';
  * wrong solutions, 0 accepted; `localStorage` 0 keys -> 0 keys.** Every failure message matched the
  * memory host's except one, noted below.
  *
- * **Six divergences, five of them forbidding something.** Each was measured in both hosts and each
+ * **Seven divergences, five of them forbidding something.** Each was measured in both hosts and each
  * is pinned with a positive control in `src/test/happyDomGaps.test.ts`.
  *
  * 1. **A resolved URL is unassertable**, and worse than the reconnaissance thought. `a.href`
@@ -64,6 +64,13 @@ import type { ChallengeEntry } from '@/types/challenge';
  *    Re-confirmed here: `ariaExpanded` is `undefined` and reflects nothing in happy-dom, while
  *    Chrome reflects it; `element.role` reads `''` here and `null` there. `enumeratedState.ts` uses
  *    `setAttribute` and discusses the properties only as a portability note.
+ * 7. **`cloneNode` copies an input's dirty value but not its dirty checkedness.** HTML's cloning
+ *    steps propagate value, checkedness and both dirty flags, and Chrome does all three; here the
+ *    text controls carry their dirty value onto the clone while the checkboxes revert to their
+ *    content attributes. Measured twice through the production host, with the dirty value on the
+ *    *same clone* as the control. Safe direction, and it has one consequence: the "clone the form
+ *    and sync the clone" advice in `formStateSnapshot.ts`'s tradeoffs is correct in a browser and
+ *    would fail that challenge's checkbox test here, which is why it is prose and not a solution.
  *
  * One wrong answer is rejected by both engines for *different* reasons, which is worth knowing
  * before someone "simplifies" a test: `Object.assign(button, preset)` copies nothing in Chrome
