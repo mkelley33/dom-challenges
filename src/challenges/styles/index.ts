@@ -46,6 +46,16 @@ export const stylesEntries: ChallengeEntry[] = [
     load: () => import('./computedNotInline').then((module) => module.computedNotInline),
   },
   {
+    id: 'styles-state-in-a-class',
+    slug: 'state-in-a-class',
+    title: 'Selected is a state, not a paint job',
+    category: 'styles',
+    difficulty: 'novice',
+    concepts: ['classList', 'toggle force', 'cascade', 'removeProperty', 'inline styles'],
+    relatedIds: ['attributes-class-three-ways', 'styles-computed-not-inline'],
+    load: () => import('./stateInAClass').then((module) => module.stateInAClass),
+  },
+  {
     id: 'styles-density-token',
     slug: 'density-token',
     title: 'One value, every row that inherits it',
