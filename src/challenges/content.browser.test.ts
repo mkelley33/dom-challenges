@@ -93,15 +93,15 @@ describe('the environment renders', () => {
       framesSeen += 1;
     });
 
-    const startedAt = performance.now();
     await createTick(ctx.window)();
-    const elapsedMs = performance.now() - startedAt;
 
+    // `framesSeen` is the whole claim: it can only be 1 if the frame registered above actually ran,
+    // which only happens on tick()'s frame exit, never its FRAME_FALLBACK_MS timer exit. An elapsed-
+    // time corroboration (`< 250`) was tried here and dropped -- on a contended machine two honestly
+    // chained rAF hops can exceed 250ms, which would turn this probe red under a message ("took the
+    // fallback exit") that is false for a frame that was, in fact, serviced. A counter cannot produce
+    // that false read.
     expect(framesSeen, 'tick() returned without a frame having been serviced').toBe(1);
-    // Corroborating, not the claim: two chained hops escaping the timer cost ~500ms, a real pair of
-    // frames a fraction of that. Generous enough not to fail a slow first frame (measured tail
-    // ~94ms) and still nowhere near a single escape.
-    expect(elapsedMs, 'tick() took the fallback exit').toBeLessThan(250);
   });
 });
 
@@ -114,7 +114,11 @@ describe('every shipping challenge, in Chromium', () => {
     expect([...new Set(shippingChallenges.map((challenge) => challenge.category))].toSorted()).toEqual(
       [...SHIPPING_CATEGORIES].toSorted(),
     );
-    expect(shippingChallenges.map((challenge) => challenge.slug)).toEqual(shippingEntries.map((entry) => entry.slug));
+    // A literal, not a comparison against a value built from the same filter: `shippingChallenges`
+    // is derived from `shippingEntries` by construction, so comparing the two back to each other
+    // passes even if every category but one lost every entry but one. Bump this when authoring adds
+    // or removes a challenge in a shipping category.
+    expect(shippingChallenges).toHaveLength(68);
   });
 
   describe.each(shippingChallenges.map((challenge) => [challenge.slug, challenge] as const))(
