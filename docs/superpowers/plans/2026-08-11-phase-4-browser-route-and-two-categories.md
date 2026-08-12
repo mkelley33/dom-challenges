@@ -32,6 +32,12 @@ than at 100.
 **The cost, stated plainly:** the app ends this phase with six complete categories instead of nine. If the priority is a
 learner-facing library rather than a trustworthy one, Tasks 1–3 are the ones to cut, and Tasks 4–5 stand alone.
 
+**And that argument is checkable before it is paid for.** If the §3 authoring rules are already holding, the route finds
+nothing over the existing library and belongs behind the content categories rather than in front of them. Task 1 Step 7
+runs the eighteen challenges where it would pay off if it pays off anywhere, and Step 8 states the decision rule ahead of
+the result: two or more genuine failures builds the route, zero or one skips Tasks 2–3 and reverts this phase to the
+findings document's original order. The spike is a day; the route is a phase. Buy the day first.
+
 ## Global Constraints
 
 `AGENTS.md` binds in full. The ones this phase will collide with:
@@ -180,7 +186,32 @@ channel's delivery mask another's silence, which is the exact confusion the cont
       headless driver renders" with what was measured. If headless does **not** render, write what headed costs and
       **stop — escalate before Task 2.**
 
-- [ ] **Step 7: Commit.** `test(runner): measure headless delivery of frames and observer entries`
+- [ ] **Step 7: Probe the high-risk subset, and let it decide whether Tasks 2–3 happen at all.** Building the whole
+      route and _then_ discovering it finds nothing is the expensive order. Run the existing challenges most likely to
+      diverge — the ones `AGENTS.md` §3 says "must be run once against a real iframe before they are trusted", plus the
+      ones sitting directly on a measured divergence — through `createIframeHost` in Chromium, using a hand-written
+      throwaway file rather than the Task 2 extraction:
+
+      `contains-and-position`, `tree-walker`, `template-content`, `shadow-boundary`, `composed-path`, `svg-namespace`,
+      `remove-while-iterating`, `style-attribute`, `density-token`, `layout-thrash`, `frame-batch`, `mutation-batch`,
+      `roving-tabindex`, `signup-validation`, `copy-handler`, `once-listener`, `listener-identity`, `capture-phase`.
+
+      Every solution and every starter, same assertions as the content suite. These eighteen are where the route pays
+      off if it pays off anywhere; the remaining thirty-eight rest on structure, text and counts, which the matchers
+      were already verified against across a real realm boundary.
+
+- [ ] **Step 8: Apply the decision rule, written before the run rather than after it.**
+
+      - **Two or more genuine failures** — a challenge wrong in Chrome, not a probe wrong about Chrome — the §3 rules
+        are not holding on their own. Build the route: proceed to Tasks 2–3, then 4–5.
+      - **Zero or one** — the rules are holding, and the route's value over the existing library is measured at
+        approximately nothing. **Skip Tasks 2 and 3.** Keep the spike's config and probe file committed, so the route is
+        a day's work whenever a category needs it, and spend this phase on `styles`, `async` and `forms` instead —
+        positions 4, 5 and 6 of the findings order, which is what that document recommended in the first place.
+
+      Record the count and the verdict either way. A rule that only fires in one direction is not a rule.
+
+- [ ] **Step 9: Commit.** `test(runner): measure headless delivery of frames and observer entries`
 
 ---
 
