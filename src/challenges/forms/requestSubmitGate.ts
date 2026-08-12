@@ -13,13 +13,23 @@ interface RecordedSubmit {
  * Records every submit event the form produces, cancelling each so nothing tries to navigate.
  * The count is the assertion surface: "refused" must be a zero read off a listener that provably
  * fires when submission succeeds, in the same document (AGENTS.md §5's positive-control rule).
+ *
+ * **`win.SubmitEvent`, never the bare global** (AGENTS.md §3's realm rule). This helper is authored
+ * in the app's realm and the event is built in the host's -- the submitted `send()` runs inside the
+ * frame, so `requestSubmit` and the event it fires are the frame's. A bare `SubmitEvent` resolves
+ * the app's constructor, which in a browser is a different function object from the frame's
+ * (`frameWin.X !== window.X`, verified in real Chrome, AGENTS.md §3): the ternary would take its
+ * `null` arm and fail the reference solution with `Expected null to be <button id="go">`. happy-dom
+ * shares one class table across its windows, so the content suite passes either spelling and cannot
+ * see the difference -- `src/runner/context.test.ts` pins the same hazard from the engine side.
+ * Quoted solution strings are exempt because they run in the host's realm already.
  */
-function watchSubmits(form: HTMLFormElement): RecordedSubmit[] {
+function watchSubmits(win: Window & typeof globalThis, form: HTMLFormElement): RecordedSubmit[] {
   const seen: RecordedSubmit[] = [];
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     seen.push({
-      submitter: event instanceof SubmitEvent ? event.submitter : null,
+      submitter: event instanceof win.SubmitEvent ? event.submitter : null,
       cancelable: event.cancelable,
     });
   });
@@ -62,10 +72,10 @@ export const requestSubmitGate: ChallengeContent = {
   tests: [
     {
       name: 'an invalid form is refused; the same call succeeds once it is valid',
-      run: ({ doc, fire, fn, expect }) => {
+      run: ({ doc, fire, fn, expect, win }) => {
         const form = requireForm(doc, 'comment');
         const send = fn<Send>('send');
-        const seen = watchSubmits(form);
+        const seen = watchSubmits(win, form);
 
         send(form, requireButton(doc, 'go'));
         // Zero -- from a listener the second half of this test proves is live. A submission that
@@ -80,10 +90,10 @@ export const requestSubmitGate: ChallengeContent = {
     },
     {
       name: 'the submission names the button it went through',
-      run: ({ doc, fire, fn, expect }) => {
+      run: ({ doc, fire, fn, expect, win }) => {
         const form = requireForm(doc, 'comment');
         const go = requireButton(doc, 'go');
-        const seen = watchSubmits(form);
+        const seen = watchSubmits(win, form);
 
         fire.input(requireInput(doc, 'email'), 'ada@example.com');
         fire.input(requireInput(doc, 'body'), 'Shipping it.');
@@ -100,10 +110,10 @@ export const requestSubmitGate: ChallengeContent = {
     },
     {
       name: 'novalidate is the form’s decision, and your function respects it',
-      run: ({ doc, fn, expect }) => {
+      run: ({ doc, fn, expect, win }) => {
         const form = requireForm(doc, 'comment');
         const send = fn<Send>('send');
-        const seen = watchSubmits(form);
+        const seen = watchSubmits(win, form);
 
         // Both fields empty. Refused while the form validates...
         send(form, requireButton(doc, 'go'));
