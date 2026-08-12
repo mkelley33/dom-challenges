@@ -103,7 +103,7 @@ export const explainTheFailure: ChallengeContent = {
         "  if (validity.patternMismatch) return 'pattern';",
         "  if (validity.rangeOverflow || validity.rangeUnderflow) return 'range';",
         "  if (validity.stepMismatch) return 'step';",
-        '  return \'ok\';',
+        "  return 'ok';",
         '}',
         '',
       ].join('\n'),
@@ -148,7 +148,7 @@ export const explainTheFailure: ChallengeContent = {
     {
       label: 'Make the priority order a table',
       code: [
-        "const kinds: Array<[keyof ValidityState, string]> = [",
+        'const kinds: Array<[keyof ValidityState, string]> = [',
         "  ['valueMissing', 'missing'],",
         "  ['typeMismatch', 'type'],",
         "  ['patternMismatch', 'pattern'],",
@@ -184,7 +184,7 @@ export const explainTheFailure: ChallengeContent = {
         'platform type, but nothing checks the table is *complete*. The chain has the same gap. If a',
         'flag is missing from both, that failure reads as `"ok"` -- which is why the fallback answer',
         'deserves a thought: this version answers `"ok"` for any problem it has no row for, and a',
-        'stricter one would return `field.validity.valid ? \'ok\' : \'other\'` so an unmapped failure',
+        "stricter one would return `field.validity.valid ? 'ok' : 'other'` so an unmapped failure",
         'at least does not read as success.',
       ].join('\n'),
     },

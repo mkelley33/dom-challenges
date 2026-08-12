@@ -1067,7 +1067,7 @@ describe('what filling out the forms category found', () => {
     expect(submitters[1]).toBe(form);
   });
 
-  it('keeps a barred field\'s validity flags raised where a browser computes them barred-aware', async () => {
+  it("keeps a barred field's validity flags raised where a browser computes them barred-aware", async () => {
     const context = await hostContext(
       [
         '<form id="f">',

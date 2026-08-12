@@ -194,7 +194,7 @@ export const submitterInThePayload: ChallengeContent = {
         '    event.preventDefault();',
         '    const data = new FormData(form);',
         '    const submitter = event instanceof SubmitEvent ? event.submitter : null;',
-        '    if (submitter instanceof HTMLButtonElement && submitter.name !== \'\') {',
+        "    if (submitter instanceof HTMLButtonElement && submitter.name !== '') {",
         '      data.append(submitter.name, submitter.value);',
         '    }',
         '',

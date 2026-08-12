@@ -147,7 +147,7 @@ export const formdataNotAWalk: ChallengeContent = {
         '  const result: Record<string, string> = {};',
         '  for (const element of form.elements) {',
         '    if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) continue;',
-        '    if (element.disabled || element.name === \'\') continue;',
+        "    if (element.disabled || element.name === '') continue;",
         "    if (element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) {",
         '      if (!element.checked) continue;',
         '    }',
