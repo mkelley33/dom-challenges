@@ -36,6 +36,39 @@ function watchSubmits(win: Window & typeof globalThis, form: HTMLFormElement): R
   return seen;
 }
 
+/**
+ * **What these tests reject, and the one imitation they cannot -- said out loud rather than left
+ * implied** (AGENTS.md §3's precedent, the `{ once: true }` re-entrancy hole).
+ *
+ * Rejected, each run through the memory host as the exact code a learner would write:
+ * `form.submit()` (`Expected [] to have length 1` -- the listener never runs); a bare
+ * `dispatchEvent(new SubmitEvent(...))`, which is the starter (`Expected [{…}] to have length 0` --
+ * it fires on an invalid form); and a `checkValidity()`-gated dispatch (`Expected [] to have length
+ * 1` -- `novalidate` is the form's decision, not the sender's).
+ *
+ * **Not rejected: a gate that reads `form.noValidate || form.checkValidity()` and then dispatches a
+ * forged `SubmitEvent` passes all three tests.** That is a real hole in this challenge, and the
+ * reasons are measured rather than assumed:
+ *
+ * - The spec's own discriminator is the submitter check -- `requestSubmit` throws `TypeError` for
+ *   an element that is not a submit button and a `NotFoundError` `DOMException` for one another
+ *   form owns, where a forged dispatch carries anything it is handed. **happy-dom runs neither
+ *   check**: a `type="button"` button, an `<input type="reset">`, a bare `<span>` and another
+ *   form's submit button each submit the form and arrive as `event.submitter` (measured here;
+ *   pinned in `src/test/happyDomGaps.test.ts`). A test asserting the refusal would fail the
+ *   reference solution in this engine -- and `click()`, the second solution, refuses those inputs
+ *   here as a browser does, so the two front doors do not even agree on them.
+ * - `isTrusted`, which in a browser separates a UA-fired submit event from a dispatched one, is
+ *   `undefined` on every event this engine produces (measured, pinned).
+ * - `requestSubmit` on an invalid form fires the same per-field `invalid` events `checkValidity()`
+ *   fires (measured), so that channel does not separate them either.
+ * - The difference that is left -- that `requestSubmit` really submits and a forged event does not
+ *   -- is unobservable in a suite that must cancel every submission to keep the frame still.
+ *
+ * So the challenge teaches the distinction and grades the two *naturally written* imitations. A
+ * learner who reimplements the gate exactly, `noValidate` included, is not caught; the first
+ * solution's prose is where they are told why the reimplementation is still the wrong answer.
+ */
 export const requestSubmitGate: ChallengeContent = {
   prompt: [
     'A comment box whose **Send** is driven from code — a keyboard shortcut handler will call the',
@@ -170,8 +203,12 @@ export const requestSubmitGate: ChallengeContent = {
         '- `requestSubmit()` with **no** argument is also real, but different: no submitter, so no',
         '  button pair in the payload and `event.submitter` is null. Name the button when the',
         '  scenario has one.',
-        '- It is strict about its argument: a `via` that is not a submit button owned by this form',
-        '  throws a `TypeError`/`NotFoundError` rather than guessing.',
+        '- It is strict about its argument, which is the part an imitation cannot copy: per spec a',
+        '  `via` that is not a submit button throws a `TypeError`, and one owned by a *different*',
+        '  form throws a `NotFoundError` — where a hand-dispatched event carries whatever it is',
+        '  handed. Take that as the spec’s guarantee and the browser’s, not as something these',
+        '  tests hold you to: the engine behind this page’s test run does not implement either',
+        '  check (measured), so nothing here can assert the refusal.',
         '- In a real page, letting the event go uncancelled navigates. That is the point -- but a',
         '  code path that *never* wants navigation (this app’s preview included) pairs it with a',
         '  listener that calls `preventDefault()` and does the work itself.',

@@ -1002,13 +1002,21 @@ describe('APIs present but not faithful', () => {
 /**
  * Found while filling out the forms category (Phase 4), by running its solutions -- not inherited
  * from Phase 2's reconnaissance, whose "FormData in full" claim the first of these narrows. The
- * happy-dom side of each was measured here through `createMemoryHost`; the browser side of each
- * was then measured in real Chrome through the production `createIframeHost` on a Vite-served
- * page, agreeing with the spec's answer cited per test. That run's tab was backgrounded, which is
- * admissible for these four and would not be in general: every reading below is synchronous
- * dispatch or an attribute/serialisation read, none awaits a frame, and each sat beside its
- * in-document control (AGENTS.md §5). No challenge builds on any behaviour below; the forms
- * category docblock records what each one cost.
+ * happy-dom side of every test here was measured through `createMemoryHost`.
+ *
+ * **The browser side is not one claim but two, and the difference is the claim size.** Four of
+ * these -- the multi-select entry list, the no-argument `requestSubmit` submitter, the barred
+ * field's raised flags, and the two-default `reset()` -- were then measured in real Chrome through
+ * the production `createIframeHost` on a Vite-served page, agreeing with the spec's answer cited
+ * per test. That run's tab was backgrounded, which is admissible for those four and would not be in
+ * general: each of their readings is synchronous dispatch or an attribute/serialisation read, none
+ * awaits a frame, and each sat beside its in-document control (AGENTS.md §5). The two the review's
+ * fix wave added -- `requestSubmit`'s absent submitter check and the absent `isTrusted` -- have
+ * **no Chrome measurement at all**: their browser column is the spec's, cited per test, and should
+ * not be repeated as a measurement.
+ *
+ * No challenge builds on any behaviour below; the forms category docblock records what each one
+ * cost.
  */
 describe('what filling out the forms category found', () => {
   it('gives FormData one entry per select multiple, not one per selected option', async () => {
@@ -1075,6 +1083,89 @@ describe('what filling out the forms category found', () => {
     // assert anything about a no-argument requestSubmit's submitter.
     form.requestSubmit();
     expect(submitters[1]).toBe(form);
+  });
+
+  it("accepts any element as requestSubmit()'s submitter, where a browser rejects it", async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input id="text" name="text" value="ok">',
+        '  <button id="go" type="submit">Go</button>',
+        '  <button id="cancel" type="button">Cancel</button>',
+        '  <span id="label">x</span>',
+        '</form>',
+        '<form id="other"><button id="foreign" type="submit">Other</button></form>',
+      ].join('\n'),
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const other = context.document.querySelector<HTMLFormElement>('#other');
+    const go = context.document.querySelector<HTMLButtonElement>('#go');
+    const cancel = context.document.querySelector<HTMLButtonElement>('#cancel');
+    const label = context.document.querySelector<HTMLElement>('#label');
+    const foreign = context.document.querySelector<HTMLButtonElement>('#foreign');
+    if (!form || !other || !go || !cancel || !label || !foreign) throw new Error('the fixture is missing a control');
+
+    const submitters: Array<EventTarget | string | null> = [];
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitters.push(event instanceof context.window.SubmitEvent ? event.submitter : 'not a SubmitEvent');
+    });
+    // The second form is only ever a source of foreign buttons; its own submissions are cancelled
+    // so nothing here depends on what this engine does with an uncancelled one.
+    other.addEventListener('submit', (event) => {
+      event.preventDefault();
+    });
+
+    // The control, in this document at this moment: the form's own submit button submits it. So
+    // every reading below is "this call was accepted", never "this form never submits at all".
+    form.requestSubmit(go);
+    expect(submitters).toEqual([go]);
+
+    // Spec: requestSubmit throws a TypeError when the submitter is not a submit button, and a
+    // "NotFoundError" DOMException when it is not owned by this form -- the check that makes
+    // `requestSubmit(via)` refuse arguments a forged `dispatchEvent` would happily carry. happy-dom
+    // runs neither test: a type=button button, a plain span and another form's submit button are
+    // each accepted, and each submits #f naming the element it was handed.
+    form.requestSubmit(cancel);
+    form.requestSubmit(label);
+    form.requestSubmit(foreign);
+    expect(submitters).toEqual([go, cancel, label, foreign]);
+
+    // The other half of why this is unauthorable rather than merely unmeasured: `click()` refuses
+    // both of those elements here exactly as a browser does -- a type=button does not submit, and a
+    // foreign button submits its own form. So `request-submit-gate`'s two reference solutions
+    // disagree with each other on these inputs *in this engine*, and no test may use them.
+    cancel.click();
+    foreign.click();
+    expect(submitters).toEqual([go, cancel, label, foreign]);
+  });
+
+  it('leaves isTrusted undefined on a submit event, whichever path produced it', async () => {
+    const context = await hostContext(
+      '<form id="f"><input name="x" value="ok"><button id="go" type="submit">Go</button></form>',
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const go = context.document.querySelector<HTMLButtonElement>('#go');
+    if (!form || !go) throw new Error('the fixture is missing its form');
+
+    const seen: Array<{ trusted: unknown; type: string }> = [];
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      seen.push({ trusted: event.isTrusted, type: typeof event.isTrusted });
+    });
+
+    // The control and the measurement are the same two calls: both events must arrive, or
+    // "isTrusted was not a boolean" would just be "no event was read".
+    form.requestSubmit(go);
+    form.dispatchEvent(new context.window.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: go }));
+    expect(seen).toHaveLength(2);
+
+    // Spec: an event fired by the user agent -- which is what `requestSubmit` does -- is trusted,
+    // and `dispatchEvent` sets isTrusted false. That pair is the one channel that would tell a real
+    // `requestSubmit(via)` from a hand-dispatched imitation of it. happy-dom implements neither
+    // side: the flag is absent from both, so `request-submit-gate` cannot reject the full
+    // imitation. Browser column spec-derived, not a Chrome run.
+    expect(seen.map((entry) => entry.type)).toEqual(['undefined', 'undefined']);
   });
 
   it("keeps a barred field's validity flags raised where a browser computes them barred-aware", async () => {

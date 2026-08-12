@@ -86,6 +86,23 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   `commit-the-draft` catches the leave-the-old-default bug by asserting `defaultChecked` as a
  *   value *before* any reset, and no test resets a two-default group.
  *
+ * **Two further divergences were found in the review's fix wave, after that Chrome run, and are
+ * pinned beside the four with the same in-document controls -- but their browser column is the
+ * spec's answer and nothing more: happy-dom-measured here, unmeasured in Chrome.**
+ *
+ * - **`requestSubmit(x)` accepts any element as its submitter.** The spec throws a `TypeError` for
+ *   an element that is not a submit button and a `NotFoundError` `DOMException` for one another
+ *   form owns; happy-dom runs neither check, and a `type="button"` button, an `<input
+ *   type="reset">`, a bare `<span>` and a second form's submit button each submit the form and
+ *   arrive as `event.submitter`. **No test may assert that a bad submitter was refused** -- and
+ *   that refusal is precisely what would separate a real `requestSubmit(via)` from a forged
+ *   `dispatchEvent`, which is why `request-submit-gate`'s residual gap stays open (its docblock
+ *   says so out loud). `click()` does refuse those inputs here, so the category's two front doors
+ *   disagree on them in this engine and no test may use them either way.
+ * - **`isTrusted` is `undefined` on every submit event**, whether `requestSubmit` produced it or
+ *   `dispatchEvent` did. In the spec that pair is the UA/script separator -- the other channel
+ *   that would close the same gap -- so it is not assertable here at all.
+ *
  * Also measured here, in the safe-to-build-on direction (happy-dom side measured; browser side
  * spec'd or recon-covered, as noted):
  *
