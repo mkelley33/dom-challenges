@@ -50,19 +50,22 @@ import type { ChallengeEntry } from '@/types/challenge';
  * were accepted exactly as predicted, being the two Chrome-correct spellings this suite rejects
  * (`who-blocks-submission`'s unguarded `validity.valid` walk and `one-invalid-signal`'s ARIA IDL
  * write); `request-submit-gate`'s full-imitation gap passed in both, as documented there.
- * `localStorage` 0 keys -> 0 keys. One caveat, stated rather than hidden: the tab was
- * **backgrounded** throughout (`visibilityState: 'hidden'`, no frame serviced within 500 ms,
- * recorded at both ends of the run). That is admissible for exactly this category and would not be
- * for most: no forms test ever awaits a frame or an observer -- every assertion is synchronous
- * event dispatch or an attribute/serialisation read -- and every negative's positive control fired
- * in the same test, same document (AGENTS.md §5). Anything focus-flavoured from that run is
- * recorded as unreliable, and nothing builds on it. The pass also caught a real defect the content
- * suite structurally cannot see: `request-submit-gate`'s recorder read the event with a
- * bare-global `instanceof`, green under happy-dom's shared class table and failing the challenge's
- * own solutions in Chrome -- fixed to `win.SubmitEvent`, the realm rule's spelling.
+ * `localStorage` 0 keys -> 0 keys. That run's tab was **backgrounded** throughout, which was
+ * argued admissible for this category alone and has since been superseded: `pnpm test:browser`
+ * (AGENTS.md §1) re-runs all ten challenges through the same production host in an environment
+ * that proves it renders before any result is read, and every reading held. The pass also caught a
+ * real defect the content suite structurally cannot see: `request-submit-gate`'s recorder read the
+ * event with a bare-global `instanceof`, green under happy-dom's shared class table and failing the
+ * challenge's own solutions in Chrome -- fixed to `win.SubmitEvent`, the realm rule's spelling, and
+ * the fix confirmed by re-running the bug through the browser pass, where it fails with
+ * `Expected null to be <button id="go">` while `pnpm test` stays entirely green.
+ *
+ * **Focus is the one thing neither run could measure** -- `document.hasFocus()` is false in the top
+ * document and the frame alike under a headless browser, as it was under the backgrounded tab. No
+ * challenge here reads focus and none may start to without a headed run to back it.
  *
  * Four new divergences are pinned with positive controls in `src/test/happyDomGaps.test.ts`, each
- * now confirmed by that Chrome run:
+ * confirmed by that Chrome run and re-confirmed by the browser pass:
  *
  * - **A `<select multiple>` contributes one entry to FormData, not one per selected option.**
  *   happy-dom reads the select's `.value` -- the first selected option -- in both the
@@ -86,22 +89,31 @@ import type { ChallengeEntry } from '@/types/challenge';
  *   `commit-the-draft` catches the leave-the-old-default bug by asserting `defaultChecked` as a
  *   value *before* any reset, and no test resets a two-default group.
  *
- * **Two further divergences were found in the review's fix wave, after that Chrome run, and are
- * pinned beside the four with the same in-document controls -- but their browser column is the
- * spec's answer and nothing more: happy-dom-measured here, unmeasured in Chrome.**
+ * **Two further divergences were found in the review's fix wave, after that Chrome run. Their
+ * browser column was the spec's answer and nothing more; the browser pass has since measured both,
+ * and the spec's answer is what a browser does.**
  *
- * - **`requestSubmit(x)` accepts any element as its submitter.** The spec throws a `TypeError` for
+ * - **`requestSubmit(x)` accepts any element as its submitter.** A browser throws a `TypeError` for
  *   an element that is not a submit button and a `NotFoundError` `DOMException` for one another
- *   form owns; happy-dom runs neither check, and a `type="button"` button, an `<input
- *   type="reset">`, a bare `<span>` and a second form's submit button each submit the form and
- *   arrive as `event.submitter`. **No test may assert that a bad submitter was refused** -- and
- *   that refusal is precisely what would separate a real `requestSubmit(via)` from a forged
- *   `dispatchEvent`, which is why `request-submit-gate`'s residual gap stays open (its docblock
- *   says so out loud). `click()` does refuse those inputs here, so the category's two front doors
- *   disagree on them in this engine and no test may use them either way.
+ *   form owns (measured in Chromium through the production host: `TypeError` for a `type="button"`
+ *   button and for a bare `<span>`, `NotFoundError` for a second form's submit button, and the form
+ *   submitted exactly once -- by the control that named its own button). happy-dom runs neither
+ *   check, and all of those, plus an `<input type="reset">`, submit the form and arrive as
+ *   `event.submitter`. **No test may assert that a bad submitter was refused** -- and that refusal
+ *   is precisely what would separate a real `requestSubmit(via)` from a forged `dispatchEvent`,
+ *   which is why `request-submit-gate`'s residual gap stays open (its docblock says so out loud).
+ *   `click()` does refuse those inputs here, so the category's two front doors disagree on them in
+ *   this engine and no test may use them either way.
  * - **`isTrusted` is `undefined` on every submit event**, whether `requestSubmit` produced it or
- *   `dispatchEvent` did. In the spec that pair is the UA/script separator -- the other channel
- *   that would close the same gap -- so it is not assertable here at all.
+ *   `dispatchEvent` did -- where a browser answers `true` and `false` respectively (measured, same
+ *   fixture, same order). That pair is the UA/script separator, the other channel that would close
+ *   the same gap, so it is not assertable here at all.
+ *
+ * **Neither measurement closes the gap, and the browser pass proved that too**: `request-submit-gate`'s
+ * full imitation was run through the production host in Chromium and **passed there as well**. The
+ * discriminators exist in a browser; the challenge's tests cannot use them, because a test that did
+ * would fail the reference solution under the engine `pnpm test` runs. The gap is a property of the
+ * shared-engine constraint, not of the browser.
  *
  * Also measured here, in the safe-to-build-on direction (happy-dom side measured; browser side
  * spec'd or recon-covered, as noted):
@@ -131,11 +143,16 @@ import type { ChallengeEntry } from '@/types/challenge';
  *
  * **`reportValidity` is measured in both hosts now, and is still built on nowhere.** It was not in
  * the reconnaissance pass; both halves agree on the assertable surface -- it exists on form and
- * fields, returns the right booleans, fires the same `invalid` events. What Chrome adds is exactly
- * what this suite cannot assert: a native message for built-in failures (`Please fill out this
- * field.` where this engine answers `''` -- the recon's second exclusion, reconfirmed) and moving
- * focus to the first failing field (read under a hidden window, so recorded without weight). Its
- * value over `checkValidity` being precisely that unassertable UI, it stays prose-only.
+ * fields, returns the right booleans, fires the same `invalid` events. Re-measured in Chromium
+ * through the production host: `form.reportValidity()` and `need.reportValidity()` both false with
+ * a `required` field empty, true once filled, `invalid` fired at `#need` for each call and at
+ * `#custom` after `setCustomValidity('nope')`, whose message round-trips. What a browser adds is
+ * exactly what this suite cannot assert: a native message for built-in failures (`Please fill out
+ * this field.` where this engine answers `''` -- the recon's second exclusion, reconfirmed by
+ * measurement) and moving focus to the first failing field, which **no run of this project has ever
+ * been able to read** -- both the backgrounded tab and the headless pass report
+ * `document.hasFocus(): false`. Its value over `checkValidity` being precisely that unassertable
+ * UI, it stays prose-only.
  *
  * **Why the category stops at ten.** Reading a form: `formdata-not-a-walk` (the entry list and its
  * exclusions), `getall-or-lose-them` (repeated names), `submitter-in-the-payload` (the submitter's

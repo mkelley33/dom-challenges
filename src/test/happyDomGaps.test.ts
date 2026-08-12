@@ -1004,16 +1004,16 @@ describe('APIs present but not faithful', () => {
  * from Phase 2's reconnaissance, whose "FormData in full" claim the first of these narrows. The
  * happy-dom side of every test here was measured through `createMemoryHost`.
  *
- * **The browser side is not one claim but two, and the difference is the claim size.** Four of
- * these -- the multi-select entry list, the no-argument `requestSubmit` submitter, the barred
- * field's raised flags, and the two-default `reset()` -- were then measured in real Chrome through
- * the production `createIframeHost` on a Vite-served page, agreeing with the spec's answer cited
- * per test. That run's tab was backgrounded, which is admissible for those four and would not be in
- * general: each of their readings is synchronous dispatch or an attribute/serialisation read, none
- * awaits a frame, and each sat beside its in-document control (AGENTS.md §5). The two the review's
- * fix wave added -- `requestSubmit`'s absent submitter check and the absent `isTrusted` -- have
- * **no Chrome measurement at all**: their browser column is the spec's, cited per test, and should
- * not be repeated as a measurement.
+ * **The browser side of all six is now measured**, through the production `createIframeHost` in
+ * Chromium under `pnpm test:browser` (AGENTS.md §1), in an environment that proved it renders
+ * before any reading was taken. Every one agreed with the spec's answer cited per test, so each
+ * browser column below is a measurement rather than a derivation. Two of them supersede a smaller
+ * claim: the first four were previously measured in a **backgrounded** tab, and the last two --
+ * `requestSubmit`'s submitter check and `isTrusted` -- had no browser run at all.
+ *
+ * The one thing that run could **not** measure is focus: `document.hasFocus()` is false in both the
+ * top document and the frame under a headless browser, exactly as it was under the backgrounded
+ * tab. Nothing below reads focus, and nothing here may start to.
  *
  * No challenge builds on any behaviour below; the forms category docblock records what each one
  * cost.
@@ -1121,7 +1121,9 @@ describe('what filling out the forms category found', () => {
     form.requestSubmit(go);
     expect(submitters).toEqual([go]);
 
-    // Spec: requestSubmit throws a TypeError when the submitter is not a submit button, and a
+    // Spec, and measured in Chromium through the production host (TypeError for the type=button
+    // and the span, NotFoundError for the foreign button, and #f submitted exactly once -- by the
+    // control): requestSubmit throws a TypeError when the submitter is not a submit button, and a
     // "NotFoundError" DOMException when it is not owned by this form -- the check that makes
     // `requestSubmit(via)` refuse arguments a forged `dispatchEvent` would happily carry. happy-dom
     // runs neither test: a type=button button, a plain span and another form's submit button are
@@ -1160,11 +1162,13 @@ describe('what filling out the forms category found', () => {
     form.dispatchEvent(new context.window.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: go }));
     expect(seen).toHaveLength(2);
 
-    // Spec: an event fired by the user agent -- which is what `requestSubmit` does -- is trusted,
-    // and `dispatchEvent` sets isTrusted false. That pair is the one channel that would tell a real
-    // `requestSubmit(via)` from a hand-dispatched imitation of it. happy-dom implements neither
-    // side: the flag is absent from both, so `request-submit-gate` cannot reject the full
-    // imitation. Browser column spec-derived, not a Chrome run.
+    // Spec, and measured in Chromium through the production host (true then false, in this order,
+    // from this exact fixture): an event fired by the user agent -- which is what `requestSubmit`
+    // does -- is trusted, and `dispatchEvent` sets isTrusted false. That pair is the one channel
+    // that would tell a real `requestSubmit(via)` from a hand-dispatched imitation of it. happy-dom
+    // implements neither side: the flag is absent from both, so `request-submit-gate` cannot reject
+    // the full imitation -- confirmed by running that imitation through the production host in
+    // Chromium, where it also passes, because the challenge's tests cannot assert either channel.
     expect(seen.map((entry) => entry.type)).toEqual(['undefined', 'undefined']);
   });
 
