@@ -358,6 +358,156 @@ describe('APIs present but not faithful', () => {
     expect(context.window.getComputedStyle(child).outlineColor).toBe('');
   });
 
+  it('lets a CSSOM sheet edit go stale for an element already read, where a browser recomputes', async () => {
+    const context = await hostContext(
+      [
+        '<style>',
+        '  .a { padding-left: 4px; }',
+        '  .a.big { padding-left: 20px; }',
+        '</style>',
+        '<div class="a" id="a">a</div><ul id="list"></ul>',
+      ].join('\n'),
+    );
+    const el = context.document.getElementById('a');
+    const sheet = context.document.styleSheets[0];
+    if (!el || sheet === undefined) throw new Error('the fixture is missing an element or its sheet');
+
+    // The control, first half: on an element's *first* computed read, a rule inserted through the
+    // CSSOM is honoured -- the cascade itself is not broken, only its invalidation.
+    sheet.insertRule('.a { padding-left: 9px; }', sheet.cssRules.length);
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('9px');
+
+    // The divergence: the element has now been read once, and from here on `insertRule` and
+    // `deleteRule` no longer reach it. Chrome recomputes on every read; happy-dom serves the
+    // cached answer until a DOM mutation touches the element. This is why no challenge test in
+    // the styles category reads an element's computed style before running the code under test.
+    sheet.insertRule('.a { padding-left: 12px; }', sheet.cssRules.length);
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('9px');
+
+    // The control, second half: a DOM mutation invalidates the cache and the pending edit lands,
+    // which is what separates "stale cache" from "the insert never happened".
+    el.classList.add('poke');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('12px');
+
+    // And the index default diverges on its own: CSSOM says an omitted index means 0 (prepend);
+    // happy-dom appends and returns the end index. A tie "won" by bare insertRule is therefore
+    // green here and silently loses in Chrome, where the prepended rule sits *earlier* in source
+    // order. Measured in both engines through this exact shape.
+    const index = sheet.insertRule('.a { padding-left: 30px; }');
+    expect(index).toBe(sheet.cssRules.length - 1);
+  });
+
+  it('never lets a rule edit, a disabled flag, or a post-adoption change reach the cascade', async () => {
+    const context = await hostContext(
+      ['<style>', '  .a { padding-left: 4px; }', '</style>', '<div class="a" id="a">a</div><ul id="list"></ul>'].join(
+        '\n',
+      ),
+    );
+    const el = context.document.getElementById('a');
+    const sheet = context.document.styleSheets[0];
+    const styleRule = sheet?.cssRules[0];
+    if (!el || !styleRule || !(styleRule instanceof context.window.CSSStyleRule)) {
+      throw new Error('the fixture is missing an element or its rule');
+    }
+
+    // Editing a parsed rule's declaration updates the rule object and its serialisation...
+    styleRule.style.setProperty('padding-left', '9px');
+    expect(styleRule.style.paddingLeft).toBe('9px');
+    expect(styleRule.cssText).toBe('.a { padding-left: 9px; }');
+    // ...and no element ever restyles, even after a DOM mutation flushes the computed cache.
+    // Chrome restyles immediately, so the browser-correct "edit the rule in place" answer cannot
+    // be a verified solution in this suite.
+    el.classList.add('poke');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('4px');
+
+    // `disabled`, in both spellings, is ignored here and honoured in Chrome (where the padding
+    // would fall back to the UA default). The class perturbations keep the cached answer honest.
+    sheet.disabled = true;
+    el.classList.add('poke2');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('4px');
+    sheet.disabled = false;
+
+    // Adopted sheets, by contrast, share the *staleness* divergence rather than this blindness:
+    // a constructed sheet filled before adoption applies and wins the tie against a markup sheet
+    // (Chrome agrees), and post-adoption changes -- `replaceSync`, even un-adoption -- are
+    // honoured, but only on a computation something in the DOM triggers. Without the perturbation
+    // between them, the second read below reports 15px: measured, and originally misread as
+    // "frozen at adoption" until a perturbed re-run separated the cache from the semantics.
+    const constructed = new context.window.CSSStyleSheet();
+    constructed.replaceSync('.a { padding-left: 15px; }');
+    context.document.adoptedStyleSheets = [...context.document.adoptedStyleSheets, constructed];
+    el.classList.add('poke3');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('15px');
+    constructed.replaceSync('.a { padding-left: 25px; }');
+    el.classList.add('poke4');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('25px');
+    context.document.adoptedStyleSheets = [];
+    el.classList.add('poke5');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('4px');
+  });
+
+  it('reports a border width whose missing border-style would zero it in a browser', async () => {
+    const context = await hostContext(
+      [
+        '<style>',
+        '  .bare { border-left-width: 4px; }',
+        '  .styled { border-left-style: solid; border-left-width: 4px; }',
+        '</style>',
+        '<div class="bare" id="bare">b</div><div class="styled" id="styled">s</div><ul id="list"></ul>',
+      ].join('\n'),
+    );
+    const bare = context.document.getElementById('bare');
+    const styled = context.document.getElementById('styled');
+    if (!bare || !styled) throw new Error('the fixture is missing an element');
+
+    // The control: with an explicit border-style, both engines report the written width.
+    expect(context.window.getComputedStyle(styled).borderLeftWidth).toBe('4px');
+    // The divergence: with no border-style, the used border-style is `none` and Chrome computes
+    // the width to 0px; happy-dom hands the specified value back. A border-width assertion is
+    // portable only when the challenge's own CSS also sets the style, which is why every one in
+    // the styles category does.
+    expect(context.window.getComputedStyle(bare).borderLeftWidth).toBe('4px');
+  });
+
+  it('expands inline shorthands faithfully but is not iterable and computes no logical properties', async () => {
+    const context = await hostContext('<div id="target">target</div><ul id="list"></ul>');
+    const el = context.document.getElementById('target');
+    if (!el) throw new Error('#target is missing from the fixture');
+
+    // The control: the inline declaration model itself matches Chrome declaration for declaration
+    // -- the shorthand expands to four longhands, resets the unmentioned ones, normalises the
+    // unitless zero, and serialises identically.
+    el.style.marginLeft = '3px';
+    el.style.margin = '8px 0';
+    expect(el.style.length).toBe(4);
+    expect(el.style.marginLeft).toBe('0px');
+    // Compared as a sorted projection: the *members* are measured identical in both engines; their
+    // enumeration order after a longhand-then-shorthand write was not measured in Chrome, so it is
+    // deliberately not pinned.
+    const names = Array.from({ length: el.style.length }, (_, index) => el.style.item(index));
+    expect(names.toSorted()).toEqual(['margin-bottom', 'margin-left', 'margin-right', 'margin-top']);
+    expect(el.getAttribute('style')).toBe('margin: 8px 0px;');
+
+    // Divergence one: Chrome's CSSStyleDeclaration is iterable (`[...el.style]` lists the four
+    // names); happy-dom's has no Symbol.iterator, so solutions enumerate with length/item.
+    expect(Symbol.iterator in el.style).toBe(false);
+
+    // Divergence two: a logical shorthand is stored and serialised but computes nothing, where
+    // Chrome moves both vertical margins. The browser-correct `margin-block` answer to
+    // shorthand-reset fails this suite for exactly this reason.
+    el.style.setProperty('margin-block', '5px');
+    expect(el.style.getPropertyValue('margin-block')).toBe('5px');
+    expect(context.window.getComputedStyle(el).marginTop).toBe('8px');
+
+    // Divergence three: repeat getComputedStyle calls hand back the same object here and a fresh
+    // one in Chrome -- identity across calls is not assertable. Liveness, the thing worth
+    // asserting, agrees in both engines and is the control for this read.
+    const held = context.window.getComputedStyle(el);
+    el.style.marginTop = '11px';
+    expect(held.marginTop).toBe('11px');
+    expect(context.window.getComputedStyle(el)).toBe(held);
+  });
+
   it('queues one childList record per child of an inserted fragment, where a browser queues one', async () => {
     const context = await hostContext('<ul id="list"></ul>');
     const list = context.document.getElementById('list');
