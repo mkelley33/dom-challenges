@@ -49,6 +49,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./explainTheFailure').then((module) => module.explainTheFailure),
   },
   {
+    id: 'forms-formdata-not-a-walk',
+    slug: 'formdata-not-a-walk',
+    title: 'Read the form the way a submission would',
+    category: 'forms',
+    difficulty: 'novice',
+    concepts: ['FormData', 'form.elements', 'disabled', 'checkboxes', 'select'],
+    relatedIds: ['attributes-boolean-attributes'],
+    load: () => import('./formdataNotAWalk').then((module) => module.formdataNotAWalk),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
