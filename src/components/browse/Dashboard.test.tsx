@@ -207,7 +207,14 @@ describe('Dashboard', () => {
     // rows snapshotted before this wait would agree with a dashboard that never reads them --
     // which only holds because the first tier is one of the two the fixture solves in. Pinned,
     // because a fixture that stopped solving there would turn the wait below into a no-op.
-    expect(solvedInTier('novice'), 'the first tier must hold one of the solved fixtures').toBe(1);
+    //
+    // Non-zero rather than exactly one, which is the invariant the wait actually needs: how many
+    // of the fixture's two solves land in the *first* tier is a fact about which difficulty each
+    // category's easiest challenge happens to carry, and that moves every time content is
+    // authored. It read `toBe(1)` until both fixtures landed in `novice` together, which failed
+    // loudly while nothing about the wait had stopped working. Line 250 below already states the
+    // same gate this way.
+    expect(solvedInTier('novice'), 'the first tier must hold one of the solved fixtures').toBeGreaterThan(0);
     await waitFor(() => {
       expect(difficultyRows()[0]).toContain(tierText('novice'));
     });
