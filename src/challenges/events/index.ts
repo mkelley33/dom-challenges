@@ -110,6 +110,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./onceListener').then((module) => module.onceListener),
   },
   {
+    id: 'events-duplicate-listeners',
+    slug: 'duplicate-listeners',
+    title: 'Register it three times, run it once',
+    category: 'events',
+    difficulty: 'advanced',
+    concepts: ['addEventListener', 'listener de-duplication', 'listener order', 'function identity', 'WeakMap'],
+    relatedIds: ['events-listener-identity', 'events-once-listener'],
+    load: () => import('./duplicateListeners').then((module) => module.duplicateListeners),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
