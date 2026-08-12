@@ -123,14 +123,15 @@ export const formStateSnapshot: ChallengeContent = {
       },
     },
     {
-      name: 'taking the snapshot changes nothing the user can see',
+      name: 'taking the snapshot leaves the fields on screen, and leaves them in the form',
       run: ({ doc, fn, fire, expect }) => {
+        const form = requireElement(doc, 'draft');
         const title = requireInput(doc, 'title');
         const publicBox = requireInput(doc, 'public');
         fire.input(title, 'Q4 report');
         publicBox.checked = false;
 
-        fn<Snapshot>('snapshot')(requireElement(doc, 'draft'));
+        fn<Snapshot>('snapshot')(form);
 
         // Syncing the attributes to the properties is allowed -- it is what "save" means. Syncing the
         // properties to the attributes is not: `field.value = field.getAttribute('value')` would put
@@ -138,6 +139,19 @@ export const formStateSnapshot: ChallengeContent = {
         expect(title.value).toBe('Q4 report');
         expect(publicBox.checked).toBe(false);
         expect(doc.querySelectorAll('#draft input')).toHaveLength(3);
+
+        // The values above survive a `form.innerHTML = form.innerHTML` round trip, because a
+        // *detached* input keeps its value and its checkedness -- so a solution that reparses the
+        // form passes every assertion above while replacing every control on screen, destroying
+        // focus, the caret and every listener. These two are what see it, and they are asked as
+        // "where is the node I am holding" so the failure reads `Expected null to be <form
+        // id="draft">` rather than telling a learner an input is not itself.
+        //
+        // The checkbox is asked through `closest` rather than `parentElement`: it sits inside a
+        // `<label>`, and a rebuilt form leaves it parented to the *old* label, which is detached.
+        // Walking up to the form the test is holding is what makes that visible.
+        expect(title.parentElement).toBe(form);
+        expect(publicBox.closest('form')).toBe(form);
       },
     },
   ],
