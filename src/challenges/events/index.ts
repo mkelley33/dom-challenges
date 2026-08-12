@@ -80,6 +80,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./stopPropagation').then((module) => module.stopPropagation),
   },
   {
+    id: 'events-prevent-default',
+    slug: 'prevent-default',
+    title: 'The cancel that does nothing',
+    category: 'events',
+    difficulty: 'intermediate',
+    concepts: ['preventDefault', 'cancelable', 'defaultPrevented', 'passive listeners', 'dispatchEvent'],
+    relatedIds: ['events-stop-propagation'],
+    load: () => import('./preventDefault').then((module) => module.preventDefault),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
