@@ -553,6 +553,15 @@ So: run the specific code a learner would write, one variant at a time, and reco
 produces. Where a challenge's thesis is "operation X preserves the rest of the document", **at least one test must
 assert on the nodes the wrong answer would have replaced** — held by reference before the call.
 
+**The same defect applies to your own measurements, and that form is harder to see.** Three of the four defects found
+in the `events` review were one mistake in different clothes: a narrow thing was measured, and a wider claim was
+written from it that was never tested. `eventPhase` diverges _only_ for a capture-registered listener at the target —
+recorded as "`eventPhase` is unauthorable". `{ once: true }` was measured re-arming correctly — recorded as "full
+fidelity", when its removal does not precede the callback here as it does per spec. And "the thesis is unauthorable"
+was carried across to "the wrong answer is unrejectable", which are different claims — the answer turned out to be
+rejectable by a test that watches listener _order_ instead. When you write down what a measurement means, check that
+the sentence is not wider than the thing you ran.
+
 **And the count in the paragraph above was itself wrong, in the same way.** It originally read "five of the six
 challenges around it already did; the one that did not is the one that shipped a hole" — a generalisation from one
 sweep, written by the same hand, inside the rule against generalising from one run. A reviewer then ran the variants
