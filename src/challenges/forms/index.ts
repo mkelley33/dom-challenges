@@ -109,6 +109,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./submitterInThePayload').then((module) => module.submitterInThePayload),
   },
   {
+    id: 'forms-request-submit-gate',
+    slug: 'request-submit-gate',
+    title: 'Submit through the front door',
+    category: 'forms',
+    difficulty: 'advanced',
+    concepts: ['requestSubmit', 'form.submit', 'constraint validation', 'SubmitEvent', 'novalidate'],
+    relatedIds: ['forms-submitter-in-the-payload', 'forms-who-blocks-submission'],
+    load: () => import('./requestSubmitGate').then((module) => module.requestSubmitGate),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
