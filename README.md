@@ -153,7 +153,8 @@ To add one:
 3. Run `pnpm test`.
 4. Run `pnpm test:browser` (`AGENTS.md` §1) — the happy-dom suite in step 3 proves the new challenge is
    self-consistent, not that it runs in a real browser, and `AGENTS.md` §3 documents divergences between the two
-   engines that only a Chromium run can catch.
+   engines that only a Chromium run can catch. In one of the six shipping categories, this step also fails until you
+   bump the literal count `content.browser.test.ts` pins for that pass.
 
 The index is what the dashboard and the category listing read, and the `import()` is what keeps a challenge's content
 off every page but its own — `pnpm build` fails if a challenge module ever stops being fetched on demand. Registration

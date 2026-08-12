@@ -98,7 +98,9 @@ Consequences worth knowing before you touch the runner:
 
 A challenge is two files' worth of edit: a module exporting a `ChallengeContent` — prompt, `html`, `starterCode`,
 `tests`, `solutions` — and an entry in its category's `index.ts` carrying the metadata and the `import()` that fetches
-it. The metadata lives only in the index and the content lives only in the module, so neither can drift from the other.
+it. In one of the six shipping categories (`selection`, `creation`, `attributes`, `styles`, `events`, `forms`) it is
+three: `content.browser.test.ts` pins the shipping count and fails loudly until it is bumped. The metadata lives only
+in the index and the content lives only in the module, so neither can drift from the other.
 **Never statically import a challenge module**; §10 explains what that costs and what fails when you do. A helper
 shared between a category's challenges goes in that category's `support.ts`, which is the one other filename the build
 check treats as not-a-challenge.
@@ -207,26 +209,25 @@ you measure there.
   `src/test/happyDomGaps.test.ts` and detailed in the category index's docblock. **All six are now measured on both
   sides** — happy-dom through `createMemoryHost`, Chromium through the production iframe host in a scratch run under
   `vitest.browser.config.ts`, not the committed `pnpm test:browser` pass (§1), which exercises only the shipping
-  library's solutions and starters and touches none of these six reads; each is a synchronous dispatch or an
+  library's solutions and starters and touches none of these six reads. Each is a synchronous dispatch or an
   attribute/serialisation read, so none depends on the committed pass's rendering probe: **never read a
-  `<select multiple>` through
-  `FormData`** (one entry here -- the select's `.value` -- versus one per selected option in a browser, so the recon's
-  "`FormData` in full" was wider than its measurement; checkbox groups arrive whole and are the multi-value device to
-  use), **never read `validity` off a disabled or readonly field** (its flags stay raised here where a browser computes
-  them barred-aware -- `willValidate` and `checkValidity()` are the barred-aware reads that agree), **never assert
-  anything about a no-argument `requestSubmit()`'s submitter** (the form element here, `null` in a browser and per
-  spec), **never `reset()` a radio group carrying two `defaultChecked`** (both end up checked here; a browser ends with
-  exactly one, the later of the two), **never assert that `requestSubmit` refused a submitter argument** (a
-  `type="button"` button, an `<input type="reset">`, a bare `<span>` and another form's submit button are each accepted
-  here and each arrive as `event.submitter`, where a browser throws `TypeError` for the first three and
-  `NotFoundError` for the foreign one -- so the check that separates a real `requestSubmit(via)` from a forged
-  `dispatchEvent` cannot be asserted, and `click()` refusing those same inputs here means the two front doors disagree
-  in this engine), and **never assert `isTrusted`** (`undefined` here for both a `requestSubmit` submission and a
-  dispatched event, where a browser answers `true` and `false` and that pair is the UA/script separator). The
-  rest of the Constraint Validation API is faithful, including `checkValidity`, the `validity` flags on participating
-  fields, the `invalid` event, `setCustomValidity`, `willValidate`, `noValidate`, `FormData` otherwise, and
-  `requestSubmit` with a named submit button of that form — everything about it except its refusal of any other
-  argument.
+  `<select multiple>` through `FormData`** (one entry here -- the select's `.value` -- versus one per selected option
+  in a browser, so the recon's "`FormData` in full" was wider than its measurement; checkbox groups arrive whole and
+  are the multi-value device to use), **never read `validity` off a disabled or readonly field** (its flags stay
+  raised here where a browser computes them barred-aware -- `willValidate` and `checkValidity()` are the barred-aware
+  reads that agree), **never assert anything about a no-argument `requestSubmit()`'s submitter** (the form element
+  here, `null` in a browser and per spec), **never `reset()` a radio group carrying two `defaultChecked`** (both end
+  up checked here; a browser ends with exactly one, the later of the two), **never assert that `requestSubmit`
+  refused a submitter argument** (a `type="button"` button, an `<input type="reset">`, a bare `<span>` and another
+  form's submit button are each accepted here and each arrive as `event.submitter`, where a browser throws
+  `TypeError` for the first three and `NotFoundError` for the foreign one -- so the check that separates a real
+  `requestSubmit(via)` from a forged `dispatchEvent` cannot be asserted, and `click()` refusing those same inputs
+  here means the two front doors disagree in this engine), and **never assert `isTrusted`** (`undefined` here for
+  both a `requestSubmit` submission and a dispatched event, where a browser answers `true` and `false` and that pair
+  is the UA/script separator). The rest of the Constraint Validation API is faithful, including `checkValidity`, the
+  `validity` flags on participating fields, the `invalid` event, `setCustomValidity`, `willValidate`, `noValidate`,
+  `FormData` otherwise, and `requestSubmit` with a named submit button of that form — everything about it except its
+  refusal of any other argument.
 - **Never write ARIA state through the IDL properties.** happy-dom implements the `ARIAMixin` (`ariaExpanded`,
   `ariaSelected`, `ariaChecked`, …) as plain JavaScript properties that reflect **nothing**, so a solution written that
   way is right in a browser and invisible to every attribute selector in the suite. Use `setAttribute`/`getAttribute`.
