@@ -69,6 +69,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./stickyCustomError').then((module) => module.stickyCustomError),
   },
   {
+    id: 'forms-getall-or-lose-them',
+    slug: 'getall-or-lose-them',
+    title: 'One name, several answers',
+    category: 'forms',
+    difficulty: 'intermediate',
+    concepts: ['FormData.getAll', 'entry list', 'checkbox groups', 'Object.fromEntries', 'document order'],
+    relatedIds: ['forms-formdata-not-a-walk'],
+    load: () => import('./getallOrLoseThem').then((module) => module.getallOrLoseThem),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
