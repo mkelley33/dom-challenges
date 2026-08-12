@@ -120,6 +120,16 @@ export const eventsEntries: ChallengeEntry[] = [
     load: () => import('./duplicateListeners').then((module) => module.duplicateListeners),
   },
   {
+    id: 'events-abort-many',
+    slug: 'abort-many',
+    title: 'One signal, every listener',
+    category: 'events',
+    difficulty: 'advanced',
+    concepts: ['AbortController', 'signal', 'teardown', 'pointer events', 'document listeners'],
+    relatedIds: ['events-listener-identity', 'events-once-listener'],
+    load: () => import('./abortMany').then((module) => module.abortMany),
+  },
+  {
     id: 'events-composed-path',
     slug: 'composed-path',
     title: 'The click the page is not allowed to see',
