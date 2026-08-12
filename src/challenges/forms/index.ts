@@ -99,6 +99,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./whoBlocksSubmission').then((module) => module.whoBlocksSubmission),
   },
   {
+    id: 'forms-submitter-in-the-payload',
+    slug: 'submitter-in-the-payload',
+    title: 'The button the payload forgot',
+    category: 'forms',
+    difficulty: 'advanced',
+    concepts: ['SubmitEvent.submitter', 'FormData(form, submitter)', 'submit buttons', 'preventDefault'],
+    relatedIds: ['forms-getall-or-lose-them', 'forms-formdata-not-a-walk', 'forms-signup-validation'],
+    load: () => import('./submitterInThePayload').then((module) => module.submitterInThePayload),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
