@@ -206,6 +206,27 @@ you measure there.
   ended (`[]` in Chrome, stale here), nor a listener attached with an already-aborted `AbortSignal` (never attached in
   Chrome, attached and fired here). `composedPath()` **during** dispatch is portable, contents and order, and so is the
   walk through `parentNode`/`ShadowRoot.host` — but never a `ShadowRoot`'s `nodeName`.
+- **Never assert that the capture flag is part of a registration's identity at removal time.** Chrome matches a removal
+  on `(type, callback, capture)`, so `addEventListener(t, fn, true)` followed by `removeEventListener(t, fn)` removes
+  **nothing**; happy-dom ignores the flag and removes it. This is the dangerous direction — the buggy removal is the one
+  that passes here — and it is not the Events category's problem alone: anything that hands back a teardown can reach
+  for it. It cost `listener-identity` the sharpest test of its own thesis, which is now prose. Everything else about
+  registration identity is portable, including de-duplication by that same triple, the fact that a duplicate add neither
+  reorders the listener nor updates its options, and registration order within one target.
+- **Never assert `eventPhase`, and never assert a removal that takes effect mid-dispatch.** At the target, a
+  capture-registered listener reports `AT_TARGET` (2) in Chrome and `CAPTURING_PHASE` (1) here — an ancestor reports 1
+  and 3 in both, so the single divergent reading is exactly the one a challenge about the three passes would want. Teach
+  the passes with an ordered log instead. Separately, a listener removed **during** a dispatch — by `removeEventListener`
+  from a preceding listener on that target, or by `AbortController.abort()` from inside one — is skipped in Chrome and
+  still runs here, because happy-dom invokes the copy of the list it took when the event arrived. Removing a listener on
+  an object the event has **not reached yet** is honoured in both, and so is the mirror fact that a listener _added_ to
+  such an object does run — that pair is portable, and it is what `events/outsideClick.ts` is built on.
+- **Never build on the legacy `cancelBubble`/`returnValue` setters, or on where an `onclick` handler sits in the
+  listener list.** happy-dom ignores `event.cancelBubble = true` and `event.returnValue = false`, which Chrome honours
+  as `stopPropagation()` and `preventDefault()`; and happy-dom runs an `onclick` handler after every
+  `addEventListener` listener, where Chrome registers it at the position it was first assigned. All three are the safe
+  direction — this engine rejects answers a browser accepts — but a learner writing legacy code is graded differently by
+  the two hosts, so no test may depend on any of them.
 - **Never assert a resolved URL, and never compare anything to the frame's `location`.** `a.href` and
   `img.src` resolve against the document's base, which is `https://challenges.local/` here and the
   **app's current route** in the `about:srcdoc` frame. Worse, that frame's **`location.origin` is the

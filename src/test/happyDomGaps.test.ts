@@ -629,4 +629,156 @@ describe('APIs present but not faithful', () => {
     expect(clonedPublic.checked).toBe(true);
     expect(clonedPinned.checked).toBe(false);
   });
+  it('ignores the capture flag when removing a listener, where a browser treats it as part of the identity', async () => {
+    const context = await hostContext('<div id="outer"><button id="target">t</button></div>');
+    const outer = context.document.getElementById('outer');
+    const target = context.document.getElementById('target');
+    if (!outer || !target) throw new Error('the fixture is incomplete');
+
+    let captured = 0;
+    const listener = (): void => {
+      captured += 1;
+    };
+    outer.addEventListener('click', listener, true);
+
+    // The control, and it has to come first: a capture listener that never fired at all would make
+    // the reading below indistinguishable from "the removal worked".
+    target.click();
+    const control = captured;
+
+    // Chrome identifies a registration by (type, callback, capture), so this removal matches
+    // nothing and the listener keeps firing -- measured through the production `createIframeHost`,
+    // where `listener-identity`'s "remove with the wrong capture flag" answer fails all four tests
+    // and passes all four here. Nothing in that challenge asserts on the flag for this reason.
+    outer.removeEventListener('click', listener);
+    target.click();
+
+    expect(control).toBe(1);
+    expect(captured).toBe(1);
+  });
+
+  it('reports CAPTURING_PHASE at the target for a capture-registered listener, where a browser reports AT_TARGET', async () => {
+    const context = await hostContext('<div id="outer"><button id="target">t</button></div>');
+    const outer = context.document.getElementById('outer');
+    const target = context.document.getElementById('target');
+    if (!outer || !target) throw new Error('the fixture is incomplete');
+
+    const phases: number[] = [];
+    outer.addEventListener('click', (event) => phases.push(event.eventPhase), true);
+    target.addEventListener('click', (event) => phases.push(event.eventPhase), true);
+    target.addEventListener('click', (event) => phases.push(event.eventPhase));
+    outer.addEventListener('click', (event) => phases.push(event.eventPhase));
+
+    target.click();
+
+    // The first and last entries are the controls: the ancestor's two passes report 1 and 3 in both
+    // engines, so only the middle pair is in question. Chrome reports `2,2` there -- both listeners
+    // on the target are at the target, whichever phase they registered for. Measured. No challenge
+    // asserts `eventPhase` at all.
+    expect(phases).toEqual([1, 1, 2, 3]);
+  });
+
+  it('goes on invoking a listener removed mid-dispatch from the target it is on, where a browser skips it', async () => {
+    const context = await hostContext('<button id="target">t</button>');
+    const target = context.document.getElementById('target');
+    if (!target) throw new Error('#target is missing from the fixture');
+
+    const log: string[] = [];
+    const second = (): void => {
+      log.push('second');
+    };
+    const first = (): void => {
+      log.push('first');
+      target.removeEventListener('click', second);
+    };
+    target.addEventListener('click', first);
+    target.addEventListener('click', second);
+    target.click();
+
+    // The control: the same removal, aimed at an *ancestor* the event has not reached yet, is
+    // honoured in both engines -- so this is about the copied listener list of the object being
+    // dispatched at, not about `removeEventListener` failing.
+    const outerLog: string[] = [];
+    const ancestor = context.document.body;
+    const doomed = (): void => {
+      outerLog.push('ancestor');
+    };
+    ancestor.addEventListener('click', doomed);
+    target.addEventListener('click', () => ancestor.removeEventListener('click', doomed));
+    target.click();
+
+    expect(outerLog).toEqual([]);
+    // The removal *did* take effect -- `second` is gone by the second dispatch in both engines.
+    // What differs is the dispatch it happened in: Chrome checks each listener's removed flag as it
+    // walks its copy of the list and skips it, logging `first, first`. happy-dom runs the copy it
+    // took. `AbortController.abort()` called from inside a listener behaves the same way, which is
+    // why `abort-many` never asserts on either.
+    expect(log).toEqual(['first', 'second', 'first']);
+  });
+
+  it('ignores the legacy cancelBubble and returnValue setters, where a browser honours both', async () => {
+    const context = await hostContext('<div id="outer"><button id="target">t</button></div>');
+    const outer = context.document.getElementById('outer');
+    const target = context.document.getElementById('target');
+    if (!outer || !target) throw new Error('the fixture is incomplete');
+
+    const log: string[] = [];
+    outer.addEventListener('click', () => log.push('ancestor'));
+    target.addEventListener('click', (event) => {
+      log.push('target');
+      Reflect.set(event, 'cancelBubble', true);
+    });
+
+    // The control: the modern spelling stops propagation here, so the reading below is about the
+    // legacy alias and not about propagation being broken.
+    const controlLog: string[] = [];
+    const controlOuter = context.document.body;
+    controlOuter.addEventListener('click', () => controlLog.push('body'));
+    target.addEventListener('click', (event) => event.stopPropagation(), { once: true });
+    target.click();
+    expect(controlLog).toEqual([]);
+
+    log.length = 0;
+    target.click();
+
+    const cancelable = new context.window.Event('probe', { cancelable: true });
+    target.addEventListener('probe', (event) => Reflect.set(event, 'returnValue', false), { once: true });
+    const returned = target.dispatchEvent(cancelable);
+
+    // Chrome: `cancelBubble = true` is `stopPropagation()`, so the ancestor does not run; and
+    // `returnValue = false` is `preventDefault()`, so `defaultPrevented` is true and `dispatchEvent`
+    // returns false. Both are safe directions for the suite -- it rejects answers a browser accepts
+    // -- but a learner writing either is graded differently by the two hosts, so nothing here uses
+    // them and `prevent-default`'s "legacy returnValue" answer passes in Chrome and fails here.
+    expect(log).toEqual(['target', 'ancestor']);
+    expect(cancelable.defaultPrevented).toBe(false);
+    expect(returned).toBe(true);
+  });
+
+  it('runs an onclick handler after every addEventListener listener, whatever order they were set in', async () => {
+    const context = await hostContext('<button id="target">t</button>');
+    const target = context.document.getElementById('target');
+    if (!target) throw new Error('#target is missing from the fixture');
+
+    const log: string[] = [];
+    target.addEventListener('click', () => log.push('before'));
+    // Assigned through `Reflect.set` rather than written as `target.onclick = ...`, which
+    // `unicorn/prefer-add-event-listener` rejects -- rightly, everywhere except here, where the
+    // handler slot *is* the subject. Reaching for a scoped override in `.oxlintrc.json` would turn
+    // the rule off for this whole file and every gap added to it later; this is one expression, and
+    // it says what it is doing.
+    Reflect.set(target, 'onclick', () => log.push('onclick'));
+    target.addEventListener('click', () => log.push('after'));
+
+    target.click();
+
+    // The control is the log holding all three: every handler fired, so this is about their order
+    // and not about `onclick` being ignored.
+    expect(log).toHaveLength(3);
+    // Chrome registers the `onclick` slot in the listener list at the point it is first assigned,
+    // so it logs `before, onclick, after`. Measured through the production `createIframeHost`,
+    // where `once-listener`'s `onclick` answer fails one test and here it fails two. Both engines
+    // reject it, by different counts -- which is what makes it safe to leave unasserted.
+    expect(log).toEqual(['before', 'after', 'onclick']);
+  });
 });
