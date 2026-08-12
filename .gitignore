@@ -9,6 +9,13 @@
 /coverage
 /.vitest-reports
 test-results.xml
+# artefacts of the Chromium verification pass (`pnpm test:browser`): Vitest writes a screenshot and
+# an attachment per failing browser test, and Playwright writes the last two if it is ever run
+# directly. All four are per-run diagnostics, never inputs to anything.
+/.vitest-attachments
+__screenshots__/
+/playwright-report/
+/test-results/
 # Temporary TypeScript config files generated during testing (e.g., tsconfig.abc123xyz.json)
 tsconfig.*.json
 !tsconfig.app.json

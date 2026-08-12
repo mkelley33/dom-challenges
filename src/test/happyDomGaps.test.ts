@@ -358,6 +358,158 @@ describe('APIs present but not faithful', () => {
     expect(context.window.getComputedStyle(child).outlineColor).toBe('');
   });
 
+  it('lets a CSSOM sheet edit go stale for an element already read, where a browser recomputes', async () => {
+    const context = await hostContext(
+      [
+        '<style>',
+        '  .a { padding-left: 4px; }',
+        '  .a.big { padding-left: 20px; }',
+        '</style>',
+        '<div class="a" id="a">a</div><ul id="list"></ul>',
+      ].join('\n'),
+    );
+    const el = context.document.getElementById('a');
+    const sheet = context.document.styleSheets[0];
+    if (!el || sheet === undefined) throw new Error('the fixture is missing an element or its sheet');
+
+    // The control, first half: on an element's *first* computed read, a rule inserted through the
+    // CSSOM is honoured -- the cascade itself is not broken, only its invalidation.
+    sheet.insertRule('.a { padding-left: 9px; }', sheet.cssRules.length);
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('9px');
+
+    // The divergence: the element has now been read once, and from here on `insertRule` and
+    // `deleteRule` no longer reach it. Chrome recomputes on every read; happy-dom serves the
+    // cached answer until a DOM mutation touches the element. This is why no challenge test in
+    // the styles category reads an element's computed style before running the code under test.
+    sheet.insertRule('.a { padding-left: 12px; }', sheet.cssRules.length);
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('9px');
+
+    // The control, second half: a DOM mutation invalidates the cache and the pending edit lands,
+    // which is what separates "stale cache" from "the insert never happened".
+    el.classList.add('poke');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('12px');
+
+    // And the index default diverges on its own: CSSOM says an omitted index means 0 (prepend);
+    // happy-dom appends and returns the end index. A tie "won" by bare insertRule is therefore
+    // green here and silently loses in Chrome, where the prepended rule sits *earlier* in source
+    // order. Measured in both engines through this exact shape.
+    const index = sheet.insertRule('.a { padding-left: 30px; }');
+    expect(index).toBe(sheet.cssRules.length - 1);
+  });
+
+  it('never lets a rule edit, a disabled flag, or a post-adoption change reach the cascade', async () => {
+    const context = await hostContext(
+      ['<style>', '  .a { padding-left: 4px; }', '</style>', '<div class="a" id="a">a</div><ul id="list"></ul>'].join(
+        '\n',
+      ),
+    );
+    const el = context.document.getElementById('a');
+    const sheet = context.document.styleSheets[0];
+    const styleRule = sheet?.cssRules[0];
+    if (!el || !styleRule || !(styleRule instanceof context.window.CSSStyleRule)) {
+      throw new Error('the fixture is missing an element or its rule');
+    }
+
+    // Editing a parsed rule's declaration updates the rule object and its serialisation...
+    styleRule.style.setProperty('padding-left', '9px');
+    expect(styleRule.style.paddingLeft).toBe('9px');
+    expect(styleRule.cssText).toBe('.a { padding-left: 9px; }');
+    // ...and no element ever restyles, even after a DOM mutation flushes the computed cache.
+    // Chrome restyles immediately, so the browser-correct "edit the rule in place" answer cannot
+    // be a verified solution in this suite.
+    el.classList.add('poke');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('4px');
+
+    // `disabled`, in both spellings, is ignored here and honoured in Chrome (where the padding
+    // would fall back to the UA default). The class perturbations keep the cached answer honest.
+    sheet.disabled = true;
+    el.classList.add('poke2');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('4px');
+    sheet.disabled = false;
+
+    // Adopted sheets, by contrast, share the *staleness* divergence rather than this blindness:
+    // a constructed sheet filled before adoption applies and wins the tie against a markup sheet
+    // (Chrome agrees), and post-adoption changes -- `replaceSync`, even un-adoption -- are
+    // honoured, but only on a computation something in the DOM triggers. Without the perturbation
+    // between them, the second read below reports 15px: measured, and originally misread as
+    // "frozen at adoption" until a perturbed re-run separated the cache from the semantics.
+    const constructed = new context.window.CSSStyleSheet();
+    constructed.replaceSync('.a { padding-left: 15px; }');
+    context.document.adoptedStyleSheets = [...context.document.adoptedStyleSheets, constructed];
+    el.classList.add('poke3');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('15px');
+    constructed.replaceSync('.a { padding-left: 25px; }');
+    el.classList.add('poke4');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('25px');
+    context.document.adoptedStyleSheets = [];
+    el.classList.add('poke5');
+    expect(context.window.getComputedStyle(el).paddingLeft).toBe('4px');
+  });
+
+  it('reports a border width whose missing border-style would zero it in a browser', async () => {
+    const context = await hostContext(
+      [
+        '<style>',
+        '  .bare { border-left-width: 4px; }',
+        '  .styled { border-left-style: solid; border-left-width: 4px; }',
+        '</style>',
+        '<div class="bare" id="bare">b</div><div class="styled" id="styled">s</div><ul id="list"></ul>',
+      ].join('\n'),
+    );
+    const bare = context.document.getElementById('bare');
+    const styled = context.document.getElementById('styled');
+    if (!bare || !styled) throw new Error('the fixture is missing an element');
+
+    // The control: with an explicit border-style, both engines report the written width.
+    expect(context.window.getComputedStyle(styled).borderLeftWidth).toBe('4px');
+    // The divergence: with no border-style, the used border-style is `none` and Chrome computes
+    // the width to 0px; happy-dom hands the specified value back. A *computed* border-width
+    // assertion is portable only when the challenge's own CSS also sets the style, which is why
+    // every computed one in the styles category does. `inline-wins` also asserts border-left-width,
+    // with no such rule -- safely, because it reads the inline declaration directly, never
+    // getComputedStyle, so this divergence does not reach it.
+    expect(context.window.getComputedStyle(bare).borderLeftWidth).toBe('4px');
+  });
+
+  it('expands inline shorthands faithfully but is not iterable and computes no logical properties', async () => {
+    const context = await hostContext('<div id="target">target</div><ul id="list"></ul>');
+    const el = context.document.getElementById('target');
+    if (!el) throw new Error('#target is missing from the fixture');
+
+    // The control: the inline declaration model itself matches Chrome declaration for declaration
+    // -- the shorthand expands to four longhands, resets the unmentioned ones, normalises the
+    // unitless zero, and serialises identically.
+    el.style.marginLeft = '3px';
+    el.style.margin = '8px 0';
+    expect(el.style.length).toBe(4);
+    expect(el.style.marginLeft).toBe('0px');
+    // Compared as a sorted projection: the *members* are measured identical in both engines; their
+    // enumeration order after a longhand-then-shorthand write was not measured in Chrome, so it is
+    // deliberately not pinned.
+    const names = Array.from({ length: el.style.length }, (_, index) => el.style.item(index));
+    expect(names.toSorted()).toEqual(['margin-bottom', 'margin-left', 'margin-right', 'margin-top']);
+    expect(el.getAttribute('style')).toBe('margin: 8px 0px;');
+
+    // Divergence one: Chrome's CSSStyleDeclaration is iterable (`[...el.style]` lists the four
+    // names); happy-dom's has no Symbol.iterator, so solutions enumerate with length/item.
+    expect(Symbol.iterator in el.style).toBe(false);
+
+    // Divergence two: a logical shorthand is stored and serialised but computes nothing, where
+    // Chrome moves both vertical margins. The browser-correct `margin-block` answer to
+    // shorthand-reset fails this suite for exactly this reason.
+    el.style.setProperty('margin-block', '5px');
+    expect(el.style.getPropertyValue('margin-block')).toBe('5px');
+    expect(context.window.getComputedStyle(el).marginTop).toBe('8px');
+
+    // Divergence three: repeat getComputedStyle calls hand back the same object here and a fresh
+    // one in Chrome -- identity across calls is not assertable. Liveness, the thing worth
+    // asserting, agrees in both engines and is the control for this read.
+    const held = context.window.getComputedStyle(el);
+    el.style.marginTop = '11px';
+    expect(held.marginTop).toBe('11px');
+    expect(context.window.getComputedStyle(el)).toBe(held);
+  });
+
   it('queues one childList record per child of an inserted fragment, where a browser queues one', async () => {
     const context = await hostContext('<ul id="list"></ul>');
     const list = context.document.getElementById('list');
@@ -844,5 +996,266 @@ describe('APIs present but not faithful', () => {
     }
     target.dispatchEvent(new context.window.Event('boom'));
     expect(threw).toBe(1);
+  });
+});
+
+/**
+ * Found while filling out the forms category (Phase 4), by running its solutions -- not inherited
+ * from Phase 2's reconnaissance, whose "FormData in full" claim the first of these narrows. The
+ * happy-dom side of every test here was measured through `createMemoryHost`.
+ *
+ * **The browser side of all six is now measured**, through the production `createIframeHost` in
+ * Chromium, in a scratch run under `vitest.browser.config.ts` -- **not** covered by the committed
+ * `pnpm test:browser` pass (AGENTS.md §1), which runs the shipping library's solutions and starters
+ * and touches none of these six behaviours. Re-running `pnpm test:browser` does not re-take these
+ * readings; if one is ever doubted, it has to be re-measured the same way, by hand, in a scratch
+ * file. Each reading is admissible on its own terms regardless: every one of the six is a
+ * synchronous dispatch or an attribute/serialisation read, none awaits a frame, and each sat beside
+ * its in-document control -- none of them depends on the rendering the committed pass's probe
+ * establishes. Every one agreed with the spec's answer cited per test, so each browser column below
+ * is a measurement rather than a derivation. Two of them supersede a smaller claim: the first four
+ * were previously measured in a **backgrounded** tab, and the last two -- `requestSubmit`'s
+ * submitter check and `isTrusted` -- had no browser run at all.
+ *
+ * The one thing that run could **not** measure is focus: `document.hasFocus()` is false in both the
+ * top document and the frame under a headless browser, exactly as it was under the backgrounded
+ * tab. Nothing below reads focus, and nothing here may start to.
+ *
+ * No challenge builds on any behaviour below; the forms category docblock records what each one
+ * cost.
+ */
+describe('what filling out the forms category found', () => {
+  it('gives FormData one entry per select multiple, not one per selected option', async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input type="checkbox" name="topping" value="mushroom" checked>',
+        '  <input type="checkbox" name="topping" value="olive" checked>',
+        '  <select name="day" multiple>',
+        '    <option value="mon" selected>m</option>',
+        '    <option value="wed" selected>w</option>',
+        '  </select>',
+        '</form>',
+      ].join('\n'),
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const select = context.document.querySelector<HTMLSelectElement>('select');
+    if (!form || !select) throw new Error('the fixture is missing its form');
+
+    // The controls: the option state itself is right (both options report selected), and the
+    // entry list does keep repeated names -- the checkbox group arrives whole. So the failure
+    // below is specific to how the select is read, not selection state and not getAll.
+    expect([...select.options].map((option) => option.selected)).toEqual([true, true]);
+    const data = new context.window.FormData(form);
+    expect(data.getAll('topping').map(String)).toEqual(['mushroom', 'olive']);
+
+    // Spec ("constructing the entry list") and measured in Chrome through the production host:
+    // one entry per selected option -- ['mon', 'wed'] here, ['wed', 'fri'] in the property-write
+    // spelling of the same probe.
+    // happy-dom reads the select's `.value`, which is the *first* selected option, and emits one
+    // entry. Same result when selection is made by property writes. So a multi-select may never
+    // be read through FormData in a challenge: `getAll` over it is correct in a browser and wrong
+    // here. `getall-or-lose-them` uses two checkbox groups for exactly this reason.
+    expect(data.getAll('day').map(String)).toEqual(['mon']);
+  });
+
+  it('reports the form itself as the submitter of a no-argument requestSubmit()', async () => {
+    const context = await hostContext(
+      '<form id="f"><input name="x" value="ok"><button id="go" type="submit">Go</button></form>',
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const go = context.document.querySelector<HTMLButtonElement>('#go');
+    if (!form || !go) throw new Error('the fixture is missing its form');
+
+    // The string arm is a legible sentinel: if the engine ever stops dispatching SubmitEvents at
+    // all, the identity assertions below fail printing it, rather than conflating "not a
+    // SubmitEvent" with "a SubmitEvent whose submitter was null".
+    const submitters: Array<EventTarget | string | null> = [];
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitters.push(event instanceof context.window.SubmitEvent ? event.submitter : 'not a SubmitEvent');
+    });
+
+    // The control: with a button named, the event carries that button -- identical to a browser,
+    // and what `request-submit-gate` asserts.
+    form.requestSubmit(go);
+    expect(submitters[0]).toBe(go);
+
+    // Spec, and measured in Chrome through the production host (the button for the named call,
+    // null for the bare one): requestSubmit() with no submitter submits "from the form element itself", and the
+    // resulting SubmitEvent's submitter is null -- which is also what fire.submit(form) models.
+    // happy-dom fills in the *form element* instead. The dangerous direction: `submitter !== null`
+    // for a buttonless submit passes here and lies about every browser, so no challenge may
+    // assert anything about a no-argument requestSubmit's submitter.
+    form.requestSubmit();
+    expect(submitters[1]).toBe(form);
+  });
+
+  it("accepts any element as requestSubmit()'s submitter, where a browser rejects it", async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input id="text" name="text" value="ok">',
+        '  <button id="go" type="submit">Go</button>',
+        '  <button id="cancel" type="button">Cancel</button>',
+        '  <span id="label">x</span>',
+        '</form>',
+        '<form id="other"><button id="foreign" type="submit">Other</button></form>',
+      ].join('\n'),
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const other = context.document.querySelector<HTMLFormElement>('#other');
+    const go = context.document.querySelector<HTMLButtonElement>('#go');
+    const cancel = context.document.querySelector<HTMLButtonElement>('#cancel');
+    const label = context.document.querySelector<HTMLElement>('#label');
+    const foreign = context.document.querySelector<HTMLButtonElement>('#foreign');
+    if (!form || !other || !go || !cancel || !label || !foreign) throw new Error('the fixture is missing a control');
+
+    const submitters: Array<EventTarget | string | null> = [];
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitters.push(event instanceof context.window.SubmitEvent ? event.submitter : 'not a SubmitEvent');
+    });
+    // The second form is only ever a source of foreign buttons; its own submissions are cancelled
+    // so nothing here depends on what this engine does with an uncancelled one.
+    other.addEventListener('submit', (event) => {
+      event.preventDefault();
+    });
+
+    // The control, in this document at this moment: the form's own submit button submits it. So
+    // every reading below is "this call was accepted", never "this form never submits at all".
+    form.requestSubmit(go);
+    expect(submitters).toEqual([go]);
+
+    // Spec, and measured in Chromium through the production host (TypeError for the type=button
+    // and the span, NotFoundError for the foreign button, and #f submitted exactly once -- by the
+    // control): requestSubmit throws a TypeError when the submitter is not a submit button, and a
+    // "NotFoundError" DOMException when it is not owned by this form -- the check that makes
+    // `requestSubmit(via)` refuse arguments a forged `dispatchEvent` would happily carry. happy-dom
+    // runs neither test: a type=button button, a plain span and another form's submit button are
+    // each accepted, and each submits #f naming the element it was handed.
+    form.requestSubmit(cancel);
+    form.requestSubmit(label);
+    form.requestSubmit(foreign);
+    expect(submitters).toEqual([go, cancel, label, foreign]);
+
+    // The other half of why this is unauthorable rather than merely unmeasured: `click()` refuses
+    // both of those elements here exactly as a browser does -- a type=button does not submit, and a
+    // foreign button submits its own form. So `request-submit-gate`'s two reference solutions
+    // disagree with each other on these inputs *in this engine*, and no test may use them.
+    //
+    // Control: prove the click channel itself is live, in this document, right before reading the
+    // two refusals -- otherwise "the clicks added nothing" would pass just as well if `click()` were
+    // a no-op here. The form's own submit button still submits it through `click()`.
+    go.click();
+    expect(submitters).toEqual([go, cancel, label, foreign, go]);
+
+    cancel.click();
+    foreign.click();
+    expect(submitters).toEqual([go, cancel, label, foreign, go]);
+  });
+
+  it('leaves isTrusted undefined on a submit event, whichever path produced it', async () => {
+    const context = await hostContext(
+      '<form id="f"><input name="x" value="ok"><button id="go" type="submit">Go</button></form>',
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const go = context.document.querySelector<HTMLButtonElement>('#go');
+    if (!form || !go) throw new Error('the fixture is missing its form');
+
+    const seen: Array<{ trusted: unknown; type: string }> = [];
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      seen.push({ trusted: event.isTrusted, type: typeof event.isTrusted });
+    });
+
+    // The control and the measurement are the same two calls: both events must arrive, or
+    // "isTrusted was not a boolean" would just be "no event was read".
+    form.requestSubmit(go);
+    form.dispatchEvent(new context.window.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: go }));
+    expect(seen).toHaveLength(2);
+
+    // Spec, and measured in Chromium through the production host (true then false, in this order,
+    // from this exact fixture): an event fired by the user agent -- which is what `requestSubmit`
+    // does -- is trusted, and `dispatchEvent` sets isTrusted false. That pair is the one channel
+    // that would tell a real `requestSubmit(via)` from a hand-dispatched imitation of it. happy-dom
+    // implements neither side: the flag is absent from both, so `request-submit-gate` cannot reject
+    // the full imitation -- confirmed by running that imitation through the production host in
+    // Chromium, where it also passes, because the challenge's tests cannot assert either channel.
+    expect(seen.map((entry) => entry.type)).toEqual(['undefined', 'undefined']);
+  });
+
+  it("keeps a barred field's validity flags raised where a browser computes them barred-aware", async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input id="normal" name="normal" required>',
+        '  <input id="ro" name="ro" required readonly>',
+        '  <input id="dis" name="dis" required disabled>',
+        '</form>',
+      ].join('\n'),
+    );
+    const normal = context.document.querySelector<HTMLInputElement>('#normal');
+    const ro = context.document.querySelector<HTMLInputElement>('#ro');
+    const dis = context.document.querySelector<HTMLInputElement>('#dis');
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    if (!normal || !ro || !dis || !form) throw new Error('the fixture is missing a field');
+
+    // The controls: everything a challenge actually builds on agrees with a browser. willValidate
+    // knows the fields are barred, per-field checkValidity() answers true for them, and the
+    // form-level walk skips them entirely (true here because only barred fields "look" invalid
+    // once #normal is filled).
+    expect([normal.willValidate, ro.willValidate, dis.willValidate]).toEqual([true, false, false]);
+    expect([ro.checkValidity(), dis.checkValidity()]).toEqual([true, true]);
+    normal.value = 'filled';
+    expect(form.checkValidity()).toBe(true);
+
+    // Spec, and measured in Chrome through the production host (valueMissing false, valid true
+    // for both barred fields): "suffering from being missing" requires the element to be *mutable*, so a readonly or
+    // disabled required field reports valueMissing false and valid true in a browser. happy-dom
+    // computes the flags with no mutability condition. The consequence for authors: never read
+    // `validity` off a barred field -- an unguarded `!field.validity.valid` audit flags these two
+    // here and passes them in Chrome, the same code with two verdicts. `who-blocks-submission`'s
+    // second solution guards on willValidate first for exactly this reason.
+    expect(ro.validity.valueMissing).toBe(true);
+    expect(ro.validity.valid).toBe(false);
+    expect(dis.validity.valueMissing).toBe(true);
+  });
+
+  it('lets reset() leave two radios checked when two carry defaultChecked', async () => {
+    const context = await hostContext(
+      [
+        '<form id="f">',
+        '  <input id="light" type="radio" name="theme" value="light">',
+        '  <input id="system" type="radio" name="theme" value="system" checked>',
+        '</form>',
+      ].join('\n'),
+    );
+    const form = context.document.querySelector<HTMLFormElement>('#f');
+    const light = context.document.querySelector<HTMLInputElement>('#light');
+    const system = context.document.querySelector<HTMLInputElement>('#system');
+    if (!form || !light || !system) throw new Error('the fixture is missing a radio');
+
+    // The controls: live exclusivity holds (checking one unchecks the other), and reset() with a
+    // *single* defaultChecked is faithful -- which is all `commit-the-draft` relies on, because a
+    // correct commit never leaves two defaults standing.
+    light.checked = true;
+    expect(system.checked).toBe(false);
+    system.defaultChecked = false;
+    light.defaultChecked = true;
+    form.reset();
+    expect([light.checked, system.checked]).toEqual([true, false]);
+
+    // Now the stale-default state a buggy commit produces: both radios carry defaultChecked.
+    // Spec, and measured in Chrome through the production host ({light: false, system: true} from
+    // this exact fixture): reset restores each control and the radio group invariant still applies, so a browser
+    // ends with exactly one checked (the later one, as each restore unchecks the group). happy-dom
+    // restores each radio independently and leaves *both* checked -- an unrepresentable state in a
+    // browser. So no test may run reset() over a group carrying two defaults; the wrong answer is
+    // caught by asserting defaultChecked as a value *before* any reset instead.
+    system.defaultChecked = true;
+    system.checked = false;
+    form.reset();
+    expect([light.checked, system.checked]).toEqual([true, true]);
   });
 });

@@ -4,17 +4,27 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as RegistryModule from '@/challenges/registry';
-import { CATEGORY_META, challengeIndex, DIFFICULTIES, DIFFICULTY_LABELS } from '@/challenges/registry';
+import {
+  CATEGORY_META,
+  DIFFICULTIES,
+  DIFFICULTY_LABELS,
+  SHIPPING_CATEGORY_IDS,
+  shippingEntries,
+} from '@/challenges/registry';
 import type { ChallengeEntry, Difficulty } from '@/types/challenge';
 import type { ProgressRecord } from '@/types/progress';
 
 import { Dashboard } from './Dashboard';
 
 /**
- * The real registry currently holds one category, which would leave every per-category count equal
- * to the overall count -- a dashboard that put the global figures on every card would pass. Two
- * challenges in a second category are appended so the two can disagree, and the registry's own
- * entries and metadata are kept so the wiring under test is still the real one.
+ * Two extra challenges in a second populated category, so that no single number can stand in for
+ * every count on the page. The registry's own entries and metadata are kept, so the wiring under
+ * test is still the real one.
+ *
+ * `shippingEntries` is overridden alongside `challengeIndex` because it is derived from it inside
+ * the module: the dashboard reads the shipping list, so a mock that extended the index alone would
+ * leave these fixtures invisible to the component under test -- and every count below would still
+ * agree with itself, having been derived from the same untouched list.
  *
  * Built inside the factory rather than referenced from the file body: `vi.mock` is hoisted above
  * every import, so a module-level fixture would still be in its temporal dead zone here.
@@ -37,7 +47,11 @@ vi.mock('@/challenges/registry', async (importOriginal) => {
     },
   }));
 
-  return { ...actual, challengeIndex: [...actual.challengeIndex, ...extra] };
+  return {
+    ...actual,
+    challengeIndex: [...actual.challengeIndex, ...extra],
+    shippingEntries: [...actual.shippingEntries, ...extra],
+  };
 });
 
 function makeRecord(challengeId: string, overrides: Partial<ProgressRecord> = {}): ProgressRecord {
@@ -56,17 +70,17 @@ function makeRecord(challengeId: string, overrides: Partial<ProgressRecord> = {}
 
 /** The registry is the dashboard's own input, so the fixtures point at whatever is really in it. */
 function challengeAt(index: number): ChallengeEntry {
-  const challenge = challengeIndex[index];
+  const challenge = shippingEntries[index];
   if (!challenge) throw new Error(`the registry has no challenge at index ${index}`);
   return challenge;
 }
 
 function countIn(category: ChallengeEntry['category']): number {
-  return challengeIndex.filter((challenge) => challenge.category === category).length;
+  return shippingEntries.filter((challenge) => challenge.category === category).length;
 }
 
 function firstIn(category: ChallengeEntry['category']): ChallengeEntry {
-  const challenge = challengeIndex.find((entry) => entry.category === category);
+  const challenge = shippingEntries.find((entry) => entry.category === category);
   if (!challenge) throw new Error(`the registry has no ${category} challenge`);
   return challenge;
 }
@@ -96,11 +110,11 @@ const SOLVED_IDS = new Set([SOLVED_IN_SELECTION.id, SOLVED_IN_EVENTS.id]);
 const GATED_TIER: Difficulty = SOLVED_IN_EVENTS.difficulty;
 
 function totalInTier(level: Difficulty): number {
-  return challengeIndex.filter((challenge) => challenge.difficulty === level).length;
+  return shippingEntries.filter((challenge) => challenge.difficulty === level).length;
 }
 
 function solvedInTier(level: Difficulty): number {
-  return challengeIndex.filter((challenge) => challenge.difficulty === level && SOLVED_IDS.has(challenge.id)).length;
+  return shippingEntries.filter((challenge) => challenge.difficulty === level && SOLVED_IDS.has(challenge.id)).length;
 }
 
 /**
@@ -175,7 +189,7 @@ describe('Dashboard', () => {
     });
     // A bar carrying a percentage with no maximum tells a screen reader "40%" and nothing about
     // how many challenges that is; the pair is what makes the figure readable.
-    expect(bar).toHaveAttribute('aria-valuemax', String(challengeIndex.length));
+    expect(bar).toHaveAttribute('aria-valuemax', String(shippingEntries.length));
   });
 
   it('links to each category and counts the solves inside that category, not overall', async () => {
@@ -194,7 +208,26 @@ describe('Dashboard', () => {
       expect(selection).toHaveTextContent(`1 of ${countIn('selection')} solved`);
     });
     expect(events).toHaveTextContent(`1 of ${countIn('events')} solved`);
-    expect(selection).not.toHaveTextContent(`of ${challengeIndex.length} solved`);
+    expect(selection).not.toHaveTextContent(`of ${shippingEntries.length} solved`);
+  });
+
+  it('offers exactly the categories that ship, so every card is one a learner can finish', async () => {
+    renderDashboard();
+
+    await screen.findByRole('heading', { level: 1, name: /your progress/i });
+    const hrefs = screen.getAllByRole('link').map((link) => link.getAttribute('href'));
+
+    // Compared wholesale, in order, rather than checked for membership: an assertion that the six
+    // shipping cards are present passes on a page that also advertises the seven that are not, and
+    // that page is the one this task exists to remove. Derived from the flag rather than written
+    // out, because *which* categories ship is pinned as a literal in `registry.test.ts` -- pinning
+    // it twice would make flipping one on an edit in two files and tell nobody anything new.
+    expect(hrefs).toEqual(SHIPPING_CATEGORY_IDS.map((id) => `/category/${id}`));
+
+    // Named, so the failure says which promise came back rather than printing two lists of paths.
+    // `a11y` holds exactly one reconnaissance challenge, which is the shape of the whole problem.
+    expect(screen.queryByText(CATEGORY_META.a11y.title)).not.toBeInTheDocument();
+    expect(screen.queryByText(CATEGORY_META.react.title)).not.toBeInTheDocument();
   });
 
   it('breaks the totals down by difficulty, ascending, not in alphabetical order', async () => {
@@ -239,7 +272,7 @@ describe('Dashboard', () => {
     expect(advanced).toContain(tierText('advanced'));
     expect(expert).toContain(tierText('expert'));
 
-    const overall = `${SOLVED_IDS.size} of ${challengeIndex.length} solved`;
+    const overall = `${SOLVED_IDS.size} of ${shippingEntries.length} solved`;
     for (const row of [novice, intermediate, advanced, expert]) {
       expect(row, `a tier row is showing the overall figure: ${overall}`).not.toContain(overall);
     }
@@ -287,14 +320,6 @@ describe('Dashboard', () => {
         };
       }),
     );
-  });
-
-  it('says a category with nothing written yet has no challenges rather than showing 0 of 0', async () => {
-    renderDashboard();
-
-    const link = await screen.findByRole('link', { name: new RegExp(CATEGORY_META.react.title, 'i') });
-    expect(link).toHaveTextContent(/no challenges yet/i);
-    expect(link).not.toHaveTextContent(/0 of 0/);
   });
 
   it('surfaces the revealed count so the completion figure is not read as all earned', async () => {

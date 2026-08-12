@@ -4,11 +4,15 @@ import type { ChallengeMeta } from '@/types/challenge';
 
 import {
   CATEGORY_IDS,
+  CATEGORY_META,
   challengeIndex,
   DIFFICULTIES,
   entriesInCategory,
   entryById,
   entryBySlug,
+  SHIPPING_CATEGORY_IDS,
+  shippingCategoryIds,
+  shippingEntries,
   validateRegistry,
 } from './registry';
 
@@ -48,6 +52,34 @@ describe('validateRegistry', () => {
   it('does not report relatedIds that resolve to a real challenge in the same list', () => {
     const problems = validateRegistry([stub({ id: 'a', slug: 'a', relatedIds: ['b'] }), stub({ id: 'b', slug: 'b' })]);
     expect(problems).toEqual([]);
+  });
+});
+
+/**
+ * The flag's semantics, exercised against a copy of the real metadata rather than a hand-built
+ * fixture: a stub record would have to restate all thirteen categories and would stop describing
+ * the real one the moment a category was added.
+ */
+describe('shippingCategoryIds', () => {
+  it('omits a category that does not say it ships', () => {
+    // The default is what this task exists to establish. A new category is a half-finished one for
+    // as long as it takes to author it, and the failure worth preventing is that state appearing on
+    // the dashboard by default -- so absence of the flag means hidden, and shipping is opt-in.
+    const noneShip = { ...CATEGORY_META, selection: { title: 'Selection', blurb: 'Anything.' } };
+    expect(shippingCategoryIds(noneShip)).not.toContain('selection');
+  });
+
+  it('includes a category the moment it is flipped on', () => {
+    // The other direction, which is what makes the assertion above about the flag rather than about
+    // a hardcoded list: nothing but `shipping` distinguishes these two records.
+    const a11yShips = { ...CATEGORY_META, a11y: { ...CATEGORY_META.a11y, shipping: true } };
+    expect(shippingCategoryIds(a11yShips)).toContain('a11y');
+    expect(shippingCategoryIds(CATEGORY_META)).not.toContain('a11y');
+  });
+
+  it('reads the flag rather than the presence of the key', () => {
+    const explicitlyOff = { ...CATEGORY_META, forms: { ...CATEGORY_META.forms, shipping: false } };
+    expect(shippingCategoryIds(explicitlyOff)).not.toContain('forms');
   });
 });
 
@@ -100,6 +132,53 @@ describe('the real registry', () => {
     // assertion still fails for a filter that ignores its argument and hands back everything.
     expect(selection.length).toBe(challengeIndex.filter((c) => c.category === 'selection').length);
     expect(entriesInCategory('react').length).toBe(challengeIndex.filter((c) => c.category === 'react').length);
+  });
+
+  it('ships exactly the six categories the owner decided ship', () => {
+    // A literal, and deliberately a change-detector. Which categories ship is an owner decision
+    // (`AGENTS.md` §9, §10), not something to be re-derived: the flag defaults to off, so flipping
+    // one on is a one-word edit in `CATEGORY_META` that nothing else in the app would notice --
+    // the dashboard would simply start advertising a category with one challenge in it, which is
+    // the exact state this list exists to prevent. Editing this line is how that decision gets
+    // made deliberately.
+    expect(SHIPPING_CATEGORY_IDS).toEqual(['selection', 'creation', 'attributes', 'styles', 'events', 'forms']);
+  });
+
+  it('has challenges in every category it ships', () => {
+    // The failure this catches is a category flipped on before its content exists: a card on the
+    // dashboard reading "No challenges yet", which is the half-finished-category state again.
+    // Collected rather than asserted per category so a failure names all of them at once.
+    expect(SHIPPING_CATEGORY_IDS.filter((category) => entriesInCategory(category).length === 0)).toEqual([]);
+  });
+
+  it('lists the challenges of the shipping categories, and only those', () => {
+    // Both directions. `every` alone is vacuously true on an empty list and the count alone passes
+    // for any list of the right length, so neither is worth writing without the other.
+    expect(shippingEntries.every((entry) => SHIPPING_CATEGORY_IDS.includes(entry.category))).toBe(true);
+    expect(shippingEntries.length).toBe(
+      challengeIndex.filter((entry) => SHIPPING_CATEGORY_IDS.includes(entry.category)).length,
+    );
+    expect(shippingEntries.length).toBeGreaterThan(0);
+    // A filter that ignored the flag and returned the whole index would pass every assertion above.
+    expect(shippingEntries.length).toBeLessThan(challengeIndex.length);
+  });
+
+  it('keeps every unshipped category in the index, so a direct link still resolves', () => {
+    // Hiding is a browse-layer decision and nothing else: the six reconnaissance challenges are
+    // still registered, still opened by `content.test.ts`, and still reachable by URL. Naming them
+    // means deleting one fails here rather than quietly shrinking the library -- which is what
+    // `AGENTS.md` §10 relies on when it says the content suite opening every challenge is what
+    // keeps the index honest.
+    const hidden = new Set(CATEGORY_IDS.filter((category) => !SHIPPING_CATEGORY_IDS.includes(category)));
+    const hiddenSlugs = challengeIndex
+      .filter((entry) => hidden.has(entry.category))
+      .map((entry) => entry.slug)
+      .toSorted();
+
+    expect(hiddenSlugs).toEqual(
+      ['roving-tabindex', 'frame-batch', 'mutation-batch', 'layout-thrash', 'filter-state', 'copy-handler'].toSorted(),
+    );
+    for (const slug of hiddenSlugs) expect(entryBySlug(slug)).toBeDefined();
   });
 
   it('lists every category from easiest to hardest', () => {

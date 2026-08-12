@@ -1,14 +1,6 @@
 import type { ChallengeContent } from '@/types/challenge';
 
-/**
- * Local rather than in a `support.ts` because this category has one challenge -- a helper shared
- * between two of them earns its own file, one used by a single challenge belongs beside it.
- */
-function requireElement(doc: Document, id: string): HTMLElement {
-  const element = doc.getElementById(id);
-  if (!element) throw new Error(`#${id} is missing from the challenge markup`);
-  return element;
-}
+import { requireElement } from './support';
 
 /** A `.row` the test builds itself, so "did this element exist when you ran?" is a real question. */
 function appendRow(doc: Document, panel: HTMLElement, id: string): HTMLElement {

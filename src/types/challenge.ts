@@ -48,7 +48,7 @@ export interface TestContext {
    * This is how a challenge test reaches the value the prompt asked the learner to export --
    * typically a function, though `fn` is generic over any export shape. The alternative --
    * asserting a type onto `exports` in the challenge file -- is an unsafe assertion repeated in
-   * every one of ~100 challenge modules; here the one unavoidable assertion lives in the harness,
+   * every challenge module in the library; here the one unavoidable assertion lives in the harness,
    * at the seam that already owns the boundary with the submitted code.
    *
    * Checks presence, not shape. Throws with a message naming the missing export when the code

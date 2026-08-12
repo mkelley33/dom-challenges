@@ -10,8 +10,15 @@ reveal the reference solutions; when you solve it unaided, the same solutions un
 Most challenges carry more than one accepted solution, each with an explanation and a tradeoff analysis, so the app
 teaches _when_ to reach for a technique rather than only _how_.
 
-This is Phase 1: the engine plus one category authored end to end — **Selection & Traversal**, 13 challenges from
-novice to expert. Twelve further categories are specified in §5 of the design doc under `docs/superpowers/specs/`.
+**Six categories ship**, each one authored end to end and verified in a real browser: Selection & Traversal;
+Create, Insert & Remove; Attributes, Properties & Data; Classes, Styles & CSSOM; Events; and Forms & Validation.
+Every one of them is finishable — the dashboard's progress bar measures you against what is actually there.
+
+The design doc under `docs/superpowers/specs/` specifies seven further categories. They are **not** shipping: six of
+them hold a single reconnaissance challenge each, written to find out what the engine could carry rather than to be
+practised, and the seventh (React) has no content at all. Those categories are hidden from browsing by the `shipping`
+flag in `CATEGORY_META` (`src/challenges/registry.ts`) rather than deleted — their challenges are still registered,
+still covered by the test suites, and still reachable by direct URL.
 
 ## Requirements
 
@@ -52,24 +59,26 @@ you can still write and run code — but nothing is recorded as solved, and ther
 
 ## Scripts
 
-| Script            | What it does                                                                   |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `pnpm dev`        | Vite dev server + json-server together                                         |
-| `pnpm api`        | json-server alone, on port 4000                                                |
-| `pnpm seed`       | Generates `server/db.json` (Faker, fixed seed — reproducible; resets progress) |
-| `pnpm test`       | Full Vitest suite, once                                                        |
-| `pnpm test:watch` | Vitest in watch mode                                                           |
-| `pnpm typecheck`  | `tsc --build` over both projects: `src/`, and `server/` + `scripts/`           |
-| `pnpm lint`       | oxlint, including the type-aware rules                                         |
-| `pnpm build`      | Typechecks, builds into `dist/`, then checks the route budgets                 |
-| `pnpm budget`     | Route-level eager bytes against their budgets, over the existing `dist/`       |
-| `pnpm preview`    | Serves the built `dist/` locally                                               |
-| `pnpm format`     | Prettier over the repo                                                         |
+| Script              | What it does                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`          | Vite dev server + json-server together                                                                      |
+| `pnpm api`          | json-server alone, on port 4000                                                                             |
+| `pnpm seed`         | Generates `server/db.json` (Faker, fixed seed — reproducible; resets progress)                              |
+| `pnpm test`         | Full Vitest suite, once                                                                                     |
+| `pnpm test:watch`   | Vitest in watch mode                                                                                        |
+| `pnpm test:browser` | Every shipping challenge's solutions and starter through a real headless Chromium (see [Testing](#testing)) |
+| `pnpm typecheck`    | `tsc --build` over both projects: `src/`, and `server/` + `scripts/`                                        |
+| `pnpm lint`         | oxlint, including the type-aware rules                                                                      |
+| `pnpm build`        | Typechecks, builds into `dist/`, then checks the route budgets                                              |
+| `pnpm budget`       | Route-level eager bytes against their budgets, over the existing `dist/`                                    |
+| `pnpm preview`      | Serves the built `dist/` locally                                                                            |
+| `pnpm format`       | Prettier over the repo                                                                                      |
 
 ## Using the app
 
-**Dashboard (`/`)** — overall solved count, a bar per difficulty tier, and a card per category. Categories with no
-challenges yet say so rather than rendering an empty progress bar.
+**Dashboard (`/`)** — overall solved count, a bar per difficulty tier, and a card per shipping category. Every figure
+on the page is measured against the challenges those cards lead to, so the bar can actually reach the end; the
+categories that do not ship are neither listed nor counted.
 
 **Category (`/category/:categoryId`)** — the challenges in one category, easiest first, with a search box, a difficulty
 filter, and a "hide solved" switch.
@@ -98,7 +107,8 @@ split. Progress — attempts, solved and revealed state — is saved to json-ser
 src/
   runner/        the execution engine: transpile, assertions, harness, iframe host
   challenges/    the metadata index, the on-demand loader, and the content modules
-    selection/   Selection & Traversal — one file per challenge, plus the index that registers them
+    <category>/  one directory per category — one file per challenge, plus the index that registers
+                 them and records what its authors measured about the two engines
   components/
     browse/      dashboard, category list, filter bar
     challenge/   the challenge workspace: prompt, editor, preview, results, solutions
@@ -120,24 +130,35 @@ TypeScript modules where they are typechecked, unit-tested and reviewable in a d
 
 ## Adding a challenge
 
-A challenge is one module exporting one `Challenge` object:
+A challenge is two files' worth of edit, split so the browsing pages never have to load the expensive half
+(`AGENTS.md` §3, §10):
 
 ```ts
-export interface Challenge {
+// The category's index.ts holds one of these per challenge, inline, next to a `load()` that fetches
+// the rest. Cheap, and what `/` and the category listing read and search.
+export interface ChallengeMeta {
   id: string; // globally unique, conventionally `<category>-<slug>`
   slug: string; // the URL segment, globally unique
   title: string;
   category: CategoryId;
   difficulty: 'novice' | 'intermediate' | 'advanced' | 'expert';
+  concepts: string[];
+  relatedIds: string[]; // must resolve to real challenge ids
+}
+
+// The challenge's own module exports one of these. Expensive, and loaded only by the challenge route,
+// only for the one challenge it is showing.
+export interface ChallengeContent {
   prompt: string; // markdown, shown to the learner
   html: string; // the starting DOM, parsed into the frame before every test
   starterCode: string; // what the editor opens with; must fail at least one test
   tests: ChallengeTest[]; // hidden from the learner; each gets a fresh document
   solutions: Solution[]; // label + code + explanation + tradeoffs
-  concepts: string[];
-  relatedIds: string[]; // must resolve to real challenge ids
 }
 ```
+
+`ChallengeMeta` and `ChallengeContent` are never authored together: there is no `Challenge` object to write by hand.
+`loadChallenge` joins the two at runtime for the route that needs both.
 
 Each test receives a `TestContext`: `doc` and `win` (the frame's document and window), `expect`, `exports` and
 `fn<T>(name)` for reading a named export off the submitted code, `tick()` for waiting a frame, and `fire` for
@@ -150,6 +171,16 @@ To add one:
 2. Add an entry to that category's `index.ts`: the metadata (`id`, `slug`, `title`, `category`, `difficulty`,
    `concepts`, `relatedIds`) and `load: () => import('./<name>').then((module) => module.<name>)`.
 3. Run `pnpm test`.
+4. Run `pnpm test:browser` (`AGENTS.md` §1) — the happy-dom suite in step 3 proves the new challenge is
+   self-consistent, not that it runs in a real browser, and `AGENTS.md` §3 documents divergences between the two
+   engines that only a Chromium run can catch. In one of the six shipping categories, this step also fails until you
+   bump the literal count `content.browser.test.ts` pins for that pass.
+
+Authoring in a category that does not ship adds a challenge nobody can browse to. A category is offered only when its
+entry in `CATEGORY_META` says `shipping: true`, and the default is off deliberately: a category is half-finished for as
+long as it takes to author, and a half-finished category on the dashboard is a promise the app cannot keep. Turning one
+on is a one-word edit plus the literal in `src/challenges/registry.test.ts`, which is there so the decision is made
+rather than drifted into.
 
 The index is what the dashboard and the category listing read, and the `import()` is what keeps a challenge's content
 off every page but its own — `pnpm build` fails if a challenge module ever stops being fetched on demand. Registration
@@ -184,6 +215,18 @@ itself — an entry carries metadata and a loader and no challenge content, whic
 
 Under Vitest the harness runs against happy-dom; in the browser it runs against a real iframe. The engine is the same
 code either way — that is the point of the host contract described in `AGENTS.md`.
+
+```bash
+pnpm test:browser
+```
+
+A second, deliberately separate suite: `src/challenges/content.browser.test.ts` runs every shipping challenge's
+solutions and starter through the production `createIframeHost`, in a real headless Chromium via
+`vitest.browser.config.ts`. It proves the content the happy-dom suite above only proves self-consistent actually runs
+in a browser — `AGENTS.md` §3 lists a dozen places the two engines disagree, several in the direction where the wrong
+answer is the one `pnpm test` accepts. It needs `pnpm exec playwright install chromium` once, is not part of
+`pnpm test` or the four gates (`AGENTS.md` §1 says why), and is run deliberately — see the authoring recipe above
+and `AGENTS.md` §1 for the occasions.
 
 ## Known limitations
 

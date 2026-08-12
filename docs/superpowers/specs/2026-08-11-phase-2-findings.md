@@ -4,6 +4,11 @@ Date: 2026-08-11
 Status: Deliverable of Phase 2 — decides Phase 3's category order
 Branch: `feat/phase-2-recon`
 
+> **Superseded on scope, not on measurement (2026-08-12).** The "~100 challenges" this document measures against was
+> retired by the Phase 4 owner decision: six categories ship, and the seven below that do not are hidden from browsing
+> rather than deleted. Every measurement, verdict and subset boundary here still stands and is still the map if the
+> scope ever widens — read the counts and the target as the state on the date above.
+
 Evidence: eleven reconnaissance challenges, one per previously-empty category, each aimed at that category's _riskiest_
 engine dependency rather than its most representative one. The full measurement log is
 `.superpowers/sdd/task-3-report.md`; the reversible negatives are pinned by `src/test/happyDomGaps.test.ts`; the

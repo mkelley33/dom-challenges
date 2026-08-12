@@ -1,7 +1,13 @@
 import { useId, useMemo } from 'react';
 import { Link } from 'react-router';
 
-import { CATEGORY_IDS, CATEGORY_META, challengeIndex, DIFFICULTIES, DIFFICULTY_LABELS } from '@/challenges/registry';
+import {
+  CATEGORY_META,
+  DIFFICULTIES,
+  DIFFICULTY_LABELS,
+  SHIPPING_CATEGORY_IDS,
+  shippingEntries,
+} from '@/challenges/registry';
 import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
 import { useProgressQuery } from '@/hooks/useProgress';
 import { summarise } from '@/lib/progressSummary';
@@ -11,7 +17,12 @@ export function Dashboard() {
   const { data } = useProgressQuery();
   // `data` is a fresh array on every refetch, so memoising on it is what keeps the fold from
   // re-running for renders the records did not change in.
-  const summary = useMemo(() => summarise(challengeIndex, data ?? []), [data]);
+  //
+  // Measured against `shippingEntries`, not the whole index: every figure on this page is a
+  // fraction of something a learner is being invited to finish, and counting challenges no card
+  // links to is a bar that cannot fill. The challenges of an unshipped category are still
+  // registered and still reachable by URL -- they are simply not part of what this page promises.
+  const summary = useMemo(() => summarise(shippingEntries, data ?? []), [data]);
 
   return (
     <div className="p-8">
@@ -87,7 +98,10 @@ export function Dashboard() {
       </section>
 
       <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {CATEGORY_IDS.map((categoryId) => {
+        {/* The categories that ship, in declaration order -- not every category the union names.
+            Six of the others hold a single reconnaissance challenge each, and a card advertising
+            one of those is an invitation to a category nobody can finish. See AGENTS.md §10. */}
+        {SHIPPING_CATEGORY_IDS.map((categoryId) => {
           const meta = CATEGORY_META[categoryId];
           const bucket = summary.byCategory[categoryId];
 
@@ -100,8 +114,12 @@ export function Dashboard() {
                 <span className="font-medium">{meta.title}</span>
                 <p className="mt-1 text-sm text-muted">{meta.blurb}</p>
                 <p className="mt-2 text-sm text-muted">
-                  {/* Most categories have no challenges written yet, and "0 of 0 solved" reads as
-                      a broken counter rather than as an empty shelf. */}
+                  {/* Unreachable through the real registry today -- every shipping category has
+                      content (registry.test.ts). It guards a category flipped on (`shipping: true`)
+                      before its first challenge is authored, so "0 of 0 solved" never reads as a
+                      broken counter instead of an empty shelf. Covered by
+                      Dashboard.emptyRegistry.test.tsx, the file for states the real registry cannot
+                      reach. See AGENTS.md §10. */}
                   {bucket.total === 0 ? 'No challenges yet' : `${bucket.solved} of ${bucket.total} solved`}
                 </p>
               </Link>
