@@ -41,6 +41,11 @@ import type { ChallengeEntry } from '@/types/challenge';
  * then the traps; several of the traps are pinned from the engine side in
  * `src/test/happyDomGaps.test.ts`.
  *
+ * **The composed challenges have since been run through the app's own host**, which is the claim
+ * size the primitives above did not have: `pnpm test:browser` (AGENTS.md §1) runs every solution
+ * and every starter in this category through `createIframeHost` in Chromium, `order-of-appearance`'s
+ * adopted-sheet solution and both sheet-walking solutions included. All passed, first contact.
+ *
  * **Portable, and load-bearing for these challenges:**
  *
  * - **Ties break on order of appearance, identically**: across two `<style>` elements, within one
@@ -91,9 +96,10 @@ import type { ChallengeEntry } from '@/types/challenge';
  * - **`insertRule` with the index omitted appends here and prepends in Chrome** (CSSOM defaults
  *   the index to 0; happy-dom returns `length`). So a tie "won" by bare `insertRule` is green in
  *   this suite and silently loses in a real browser -- measured as `specificity-not-order`'s w4,
- *   which passes here and fails in Chrome. Never author a tie that `insertRule` must win; append a
- *   `<style>` element, or pass `sheet.cssRules.length` explicitly and treat the index as the
- *   lesson (`specificity-not-order`'s first solution teaches it in prose).
+ *   which passes here and, run through `createIframeHost` in Chromium, fails two of that
+ *   challenge's four tests with `Expected "18px" to be "6px"`. Never author a tie that `insertRule`
+ *   must win; append a `<style>` element, or pass `sheet.cssRules.length` explicitly and treat the
+ *   index as the lesson (`specificity-not-order`'s first solution teaches it in prose).
  * - **Editing an existing rule's declaration never reaches the cascade here.**
  *   `rule.style.setProperty(...)` updates `rule.style` and `rule.cssText` and no element ever
  *   restyles, even after unrelated invalidation; Chrome restyles immediately. The Chrome-correct

@@ -97,7 +97,9 @@ export const orderOfAppearance: ChallengeContent = {
         // appends a copy of the skin's rules in a fresh `<style>` at the end of `body` -- leaving
         // `#skin` in its original, losing position -- passes every test above, including this one:
         // the copy wins the tie, the original still supplies the badge rule, and `#base` is
-        // untouched. Verified by running that exact code through the harness. Nothing here asserts
+        // untouched. Verified by running that exact code through the harness -- and through
+        // `createIframeHost` in Chromium, where it passes too, so this is a gap in the tests rather
+        // than an artefact of the engine they usually run on. Nothing here asserts
         // that the skin's rules exist in exactly one place, and a test that did would have to
         // distinguish "duplicated, original left behind" from the second solution's own shape --
         // build a copy (an adopted `CSSStyleSheet`), then remove the original -- which is the same
