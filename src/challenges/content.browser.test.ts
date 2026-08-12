@@ -38,8 +38,9 @@ beforeEach(() => {
   // collapsing to zero height -- not what makes the probes below meaningful. AGENTS.md §5 records
   // that headless Chromium services `requestAnimationFrame` even for a genuinely non-rendered
   // (`display: none`) subtree, so size or visibility here proves nothing about rendering. The
-  // describe block below (`the environment renders`) is what establishes that, and it does so by
-  // mutation, not by geometry.
+  // describe block below (`the environment services animation frames`) is what establishes whether
+  // frames are serviced here; that its two assertions are load-bearing was checked by mutation
+  // testing, recorded in commit 58c506d's message and the task report, not in this file.
   container.style.cssText = 'width: 400px; height: 300px;';
   document.body.append(container);
   host = createIframeHost(container);
@@ -68,7 +69,7 @@ afterEach(() => {
  * frame's own realm**, which fires whether or not a frame is serviced -- so "control fired, rAF did
  * not" is a frame that was never serviced, and "neither fired" is a probe that never ran at all.
  */
-describe('the environment renders', () => {
+describe('the environment services animation frames', () => {
   it('services requestAnimationFrame, with a microtask as the control', async () => {
     const ctx = await host.reset('<div id="probe">probe</div>');
     const log: string[] = [];
@@ -81,7 +82,7 @@ describe('the environment renders', () => {
       setTimeout(resolve, 2000);
     });
     expect(log, 'neither channel fired: this probe never ran').toContain('microtask');
-    expect(log, 'control fired but rAF did not: the frame is not being rendered').toContain('raf');
+    expect(log, 'control fired but rAF did not: no frame was serviced in this document').toContain('raf');
   });
 
   it('resolves tick() through a real frame rather than through the fallback timer', async () => {
