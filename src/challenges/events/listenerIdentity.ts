@@ -14,7 +14,9 @@ export const listenerIdentity: ChallengeContent = {
     '- two `attach` calls mean two calls to their callbacks per click, **even when both were handed',
     '  the same function**;',
     '- a teardown undoes exactly the subscription it came from and nothing else;',
-    '- calling a teardown twice is harmless.',
+    '- calling a teardown twice is harmless;',
+    '- a subscription takes its turn — it runs after listeners the caller registered before it, and',
+    '  before ones registered after.',
     '',
     'The tests do all the clicking, and they call the teardowns. The starter looks symmetrical and',
     'removes nothing at all — which is the single most common way to leak a listener.',
@@ -97,6 +99,26 @@ export const listenerIdentity: ChallengeContent = {
       },
     },
     {
+      name: 'a subscription takes its turn in the button’s listener list',
+      run: ({ doc, fire, fn, expect }) => {
+        const save = requireElement(doc, 'save');
+        const log = createRecorder<string>();
+
+        // The learner's subscription is bracketed by two the test owns, so the log says exactly
+        // where it landed in the list.
+        save.addEventListener('click', () => log.record('before'));
+        const detach = fn<Attach>('attach')(save, () => log.record('subscription'));
+        save.addEventListener('click', () => log.record('after'));
+
+        fire.click(save);
+        expect(log.entries).toEqual(['before', 'subscription', 'after']);
+
+        detach();
+        fire.click(save);
+        expect(log.entries).toEqual(['before', 'subscription', 'after', 'before', 'after']);
+      },
+    },
+    {
       name: 'a teardown called twice changes nothing',
       run: ({ doc, fire, fn, expect }) => {
         const save = requireElement(doc, 'save');
@@ -168,9 +190,18 @@ export const listenerIdentity: ChallengeContent = {
         'calls that must all agree with their `addEventListener` calls on type, reference **and**',
         'capture flag.',
         '',
-        'That last one is worth calling out: `addEventListener(type, fn, true)` and',
-        '`removeEventListener(type, fn)` do not match, because the capture flag is part of the',
-        'registration’s identity. The removal does nothing, silently, exactly like the starter.',
+        'That last one is worth calling out, and it bites in both directions:',
+        '`addEventListener(type, fn, true)` paired with `removeEventListener(type, fn)` does not',
+        'match, and neither does `addEventListener(type, fn)` paired with',
+        '`removeEventListener(type, fn, true)`. The flag is part of the registration’s identity, so',
+        'either mismatch removes nothing, silently, exactly like the starter.',
+        '',
+        'A subscription that registers in the capture phase is caught by the ordering test above',
+        'rather than by its teardown — it would run *before* listeners the caller registered first.',
+        'That is a different property from the removal, and it is the one an outside observer can',
+        'actually see. The other pairing — register plain, remove with `true` — has no such',
+        'signature: it behaves correctly in every way a test can watch, right up until the teardown',
+        'quietly does nothing. Nothing on this page can reject it, and your browser will.',
         '',
         'There is a shape that passes every test in this challenge and should not be trusted:',
         '',
