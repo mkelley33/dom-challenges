@@ -79,6 +79,16 @@ export const formsEntries: ChallengeEntry[] = [
     load: () => import('./getallOrLoseThem').then((module) => module.getallOrLoseThem),
   },
   {
+    id: 'forms-commit-the-draft',
+    slug: 'commit-the-draft',
+    title: 'Make today the new default',
+    category: 'forms',
+    difficulty: 'intermediate',
+    concepts: ['defaultValue', 'defaultChecked', 'form.reset', 'dirty value flag', 'radio groups'],
+    relatedIds: ['attributes-dirty-value', 'attributes-form-state-snapshot'],
+    load: () => import('./commitTheDraft').then((module) => module.commitTheDraft),
+  },
+  {
     id: 'forms-signup-validation',
     slug: 'signup-validation',
     title: 'Validate on submit, and say which field',
