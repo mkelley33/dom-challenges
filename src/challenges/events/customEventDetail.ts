@@ -125,16 +125,29 @@ export const customEventDetail: ChallengeContent = {
 
         const detail: RatingDetail = { value: 2, source: 'keyboard' };
         fn<SetRating>('setRating')(strip, detail);
-        detail.source = 'edited after the dispatch';
 
         // Asked as "does the listener's detail show my edit" rather than as "is that object this
         // one". Both are the same claim, and only this one fails legibly: `toBe` between two
         // objects that compare equal prints `Expected {...} to be {...}`, which reads as a thing
         // not being itself. This prints the stale value the listener actually kept.
-        expect(detailField(heard.entries[0]?.detail, 'source')).toBe('edited after the dispatch');
-        // The strict backstop, reached only once the mutation has already proved the two are the
-        // same object. `toEqual` could never say this: it compares own keys, and a spread copy has
-        // exactly the same ones.
+        //
+        // The write is attempted rather than assumed, because `Object.freeze(detail)` before
+        // dispatching is a correct answer -- this challenge's own tradeoffs recommend it -- and it
+        // makes the write throw. A throw here is not a failure; it is proof of the very thing being
+        // asked, since the only object the submitted code could have frozen is the one it was
+        // handed. A frozen *copy* leaves the caller's object writable, so that answer still gets
+        // the legible message.
+        let edited = false;
+        try {
+          detail.source = 'edited after the dispatch';
+          edited = true;
+        } catch {
+          edited = false;
+        }
+        if (edited) expect(detailField(heard.entries[0]?.detail, 'source')).toBe('edited after the dispatch');
+
+        // Always runs, so nothing above can make this test vacuous. `toEqual` could never say this:
+        // it compares own keys, and a spread copy has exactly the same ones.
         expect(heard.entries[0]?.detail).toBe(detail);
       },
     },
